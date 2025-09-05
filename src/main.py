@@ -1,5 +1,5 @@
 """
-DeepwikiAgent - A tool for generating comprehensive documentation from Python codebases.
+CodeWiki - A tool for generating comprehensive documentation from Python codebases.
 
 This module orchestrates the documentation generation process by:
 1. Analyzing code dependencies

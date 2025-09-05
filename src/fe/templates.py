@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-HTML templates for the DeepwikiAgent web application.
+HTML templates for the CodeWiki web application.
 """
 
 # Web interface HTML template
@@ -10,7 +10,7 @@ WEB_INTERFACE_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DeepwikiAgent - GitHub Repository Documentation Generator</title>
+    <title>CodeWiki - GitHub Repository Documentation Generator</title>
     <style>
         :root {
             --primary-color: #2563eb;
@@ -207,7 +207,7 @@ WEB_INTERFACE_TEMPLATE = """
 <body>
     <div class="container">
         <div class="header">
-            <h1>📚 DeepwikiAgent</h1>
+            <h1>📚 CodeWiki</h1>
             <p>Generate comprehensive documentation for any GitHub repository</p>
         </div>
         

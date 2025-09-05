@@ -1,8 +1,8 @@
 from pydantic_ai import RunContext, Tool
-from .deps import DeepwikiAgentDeps
+from .deps import CodeWikiDeps
 
 
-async def read_code_components(ctx: RunContext[DeepwikiAgentDeps], component_ids: list[str]) -> str:
+async def read_code_components(ctx: RunContext[CodeWikiDeps], component_ids: list[str]) -> str:
     """Read the code of a given component id
 
     Args:

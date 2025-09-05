@@ -1,14 +1,12 @@
 version: '3.8'
 
 services:
-
-  # DeepwikiAgent Web Application
-  deepwiki-agent:
-    image: deepwiki-agent:0.0.1
+  codewiki:
+    image: codewiki:0.0.1
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: deepwiki-agent
+    container_name: codewiki
     ports:
       - "${APP_PORT:-8000}:8000"
     environment:
@@ -35,4 +33,4 @@ services:
 networks:
   net:
     external: true
-    name: deepwiki-agent-network
+    name: codewiki-network

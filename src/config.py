@@ -23,7 +23,7 @@ LLM_API_KEY = os.getenv('LLM_API_KEY', 'sk-1234')
 
 @dataclass
 class Config:
-    """Configuration class for DeepwikiAgent."""
+    """Configuration class for CodeWiki."""
     repo_path: str
     output_dir: str
     dependency_graph_dir: str

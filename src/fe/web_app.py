@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DeepwikiAgent Web Application
+CodeWiki Web Application
 
 A web interface for users to submit GitHub repositories for documentation generation.
 Features:
@@ -23,7 +23,7 @@ from .config import WebAppConfig
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="DeepwikiAgent", 
+    title="CodeWiki", 
     description="Generate comprehensive documentation for any GitHub repository"
 )
 
@@ -78,7 +78,7 @@ def main():
     import uvicorn
     
     parser = argparse.ArgumentParser(
-        description="DeepwikiAgent Web Application - Generate documentation for GitHub repositories"
+        description="CodeWiki Web Application - Generate documentation for GitHub repositories"
     )
     parser.add_argument(
         "--host",
@@ -111,7 +111,7 @@ def main():
     # Start background worker
     background_worker.start()
     
-    print(f"🚀 DeepwikiAgent Web Application starting...")
+    print(f"🚀 CodeWiki Web Application starting...")
     print(f"🌐 Server running at: http://{args.host}:{args.port}")
     print(f"📁 Cache directory: {WebAppConfig.get_absolute_path(WebAppConfig.CACHE_DIR)}")
     print(f"🗂️  Temp directory: {WebAppConfig.get_absolute_path(WebAppConfig.TEMP_DIR)}")

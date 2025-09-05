@@ -15,7 +15,7 @@ except Exception as e:
     logger.warning(f"Failed to configure logfire: {e}")
 
 # Local imports
-from agent_tools.deps import DeepwikiAgentDeps
+from agent_tools.deps import CodeWikiDeps
 from agent_tools.read_code_components import read_code_components_tool
 from agent_tools.str_replace_editor import str_replace_editor_tool
 from agent_tools.generate_sub_module_documentations import generate_sub_module_documentation_tool
@@ -48,7 +48,7 @@ class AgentOrchestrator:
             return Agent(
                 fallback_models,
                 name=module_name,
-                deps_type=DeepwikiAgentDeps,
+                deps_type=CodeWikiDeps,
                 tools=[
                     read_code_components_tool, 
                     str_replace_editor_tool, 
@@ -60,7 +60,7 @@ class AgentOrchestrator:
             return Agent(
                 fallback_models,
                 name=module_name,
-                deps_type=DeepwikiAgentDeps,
+                deps_type=CodeWikiDeps,
                 tools=[read_code_components_tool, str_replace_editor_tool],
                 system_prompt=LEAF_SYSTEM_PROMPT.format(module_name=module_name),
             )
@@ -78,7 +78,7 @@ class AgentOrchestrator:
         agent = self.create_agent(module_name, components, core_component_ids)
         
         # Create dependencies
-        deps = DeepwikiAgentDeps(
+        deps = CodeWikiDeps(
             absolute_docs_path=working_dir,
             absolute_repo_path=str(os.path.abspath(self.config.repo_path)),
             registry={},

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from dependency_analyzer.models.core import Node
 
 @dataclass
-class DeepwikiAgentDeps:
+class CodeWikiDeps:
     absolute_docs_path: str
     absolute_repo_path: str
     registry: dict

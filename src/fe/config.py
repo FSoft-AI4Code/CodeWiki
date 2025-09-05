@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Configuration settings for the DeepwikiAgent web application.
+Configuration settings for the CodeWiki web application.
 """
 
 import os

@@ -16,7 +16,7 @@ from typing import List, Optional, Tuple, Literal
 import io
 
 from pydantic_ai import RunContext, Tool
-from .deps import DeepwikiAgentDeps
+from .deps import CodeWikiDeps
 from utils import validate_mermaid_diagrams
 
 
@@ -702,7 +702,7 @@ class EditTool:
         return f"Here's the result of running `cat -n` on {file_descriptor}:\n" + file_content + "\n"
 
 async def str_replace_editor(
-    ctx: RunContext[DeepwikiAgentDeps],
+    ctx: RunContext[CodeWikiDeps],
     working_dir: Literal["repo", "docs"],
     command: Literal["view", "create", "str_replace", "insert", "undo_edit"],
     path: str,

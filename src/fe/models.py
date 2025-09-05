@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Data models and classes for the DeepwikiAgent web application.
+Data models and classes for the CodeWiki web application.
 """
 
 from datetime import datetime

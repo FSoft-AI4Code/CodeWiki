@@ -1,13 +1,13 @@
-# DeepwikiAgent Docker Setup
+# CodeWiki Docker Setup
 
-This document explains how to run DeepwikiAgent using Docker and Docker Compose.
+This document explains how to run CodeWiki using Docker and Docker Compose.
 
 ## Quick Start
 
 1. **Clone the repository** (if not already done):
    ```bash
    git clone <repository-url>
-   cd DeepwikiAgent
+   cd CodeWiki
    ```
 
 2. **Set up environment variables**:
@@ -18,7 +18,7 @@ This document explains how to run DeepwikiAgent using Docker and Docker Compose.
 
 3. **Create network**
    ```bash
-   docker network create deepwiki-agent-network
+   docker network create codewiki-network
    ```
 
 3. **Start the services**:

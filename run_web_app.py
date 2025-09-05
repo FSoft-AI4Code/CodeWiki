@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Startup script for DeepwikiAgent Web Application
+Startup script for CodeWiki Web Application
 """
 
 import os

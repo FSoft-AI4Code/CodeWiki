@@ -1,7 +1,7 @@
 from pydantic_ai import RunContext, Tool, Agent
 import json
 
-from .deps import DeepwikiAgentDeps
+from .deps import CodeWikiDeps
 from .read_code_components import read_code_components_tool
 from .str_replace_editor import str_replace_editor_tool
 from llm_services import fallback_models
@@ -13,7 +13,7 @@ from config import MAX_TOKEN_PER_LEAF_MODULE
 
 
 async def generate_sub_module_documentation(
-    ctx: RunContext[DeepwikiAgentDeps],
+    ctx: RunContext[CodeWikiDeps],
     sub_module_specs: dict[str, list[str]]
 ) -> str:
     """Generate detailed description of a given sub-module specs to the sub-agents
@@ -40,7 +40,7 @@ async def generate_sub_module_documentation(
             sub_agent = Agent(
                 model=fallback_models,
                 name=sub_module_name,
-                deps_type=DeepwikiAgentDeps,
+                deps_type=CodeWikiDeps,
                 system_prompt=SYSTEM_PROMPT.format(module_name=sub_module_name),
                 tools=[read_code_components_tool, str_replace_editor_tool, generate_sub_module_documentation_tool],
             )
@@ -48,7 +48,7 @@ async def generate_sub_module_documentation(
             sub_agent = Agent(
                 model=fallback_models,
                 name=sub_module_name,
-                deps_type=DeepwikiAgentDeps,
+                deps_type=CodeWikiDeps,
                 system_prompt=LEAF_SYSTEM_PROMPT.format(module_name=sub_module_name),
                 tools=[read_code_components_tool, str_replace_editor_tool],
             )

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FastAPI route handlers for the DeepwikiAgent web application.
+FastAPI route handlers for the CodeWiki web application.
 """
 
 import json

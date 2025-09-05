@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DeepwikiAgent Frontend Module
+CodeWiki Frontend Module
 
 Web interface components for the documentation generation service.
 """
