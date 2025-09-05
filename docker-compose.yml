@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+
+  # DeepwikiAgent Web Application
+  deepwiki-agent:
+    image: deepwiki-agent:0.0.1
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: deepwiki-agent
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    environment:
+      - PYTHONPATH=/app/src
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
+    networks:
+      - net
+    volumes:
+      # Persistent storage for cache and output
+      - ./output:/app/output
+      # Git credentials (if needed for private repos)
+      - ~/.gitconfig:/root/.gitconfig:ro
+      - ~/.ssh:/root/.ssh:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+networks:
+  net:
+    external: true
+    name: deepwiki-agent-network

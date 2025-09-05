@@ -1,0 +1,15 @@
+config/agent_config.yaml
+tool/add_header.sh
+
+.venv
+__pycache__/
+*.egg-info
+*.ipynb
+output/
+data/
+src/output/
+repo_data/
+.env*
+*.env
+**/.env
+**/.env.*
