@@ -34,7 +34,7 @@ class WebRoutes:
     async def index_get(self, request: Request) -> HTMLResponse:
         """Main page with form for submitting GitHub repositories."""
         # Clean up old jobs before displaying
-        self.cleanup_old_jobs()
+        # self.cleanup_old_jobs()
         
         # Get recent jobs (last 10)
         all_jobs = self.background_worker.get_all_jobs()
@@ -42,7 +42,7 @@ class WebRoutes:
             all_jobs.values(),
             key=lambda x: x.created_at,
             reverse=True
-        )[:10]
+        )[:100]
         
         context = {
             "message": None,

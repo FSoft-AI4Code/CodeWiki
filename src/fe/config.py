@@ -19,7 +19,7 @@ class WebAppConfig:
     QUEUE_SIZE = 100
     
     # Cache settings
-    CACHE_EXPIRY_DAYS = 30
+    CACHE_EXPIRY_DAYS = 365
     
     # Job cleanup settings
     JOB_CLEANUP_HOURS = 24
