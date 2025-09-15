@@ -9,8 +9,28 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 try:
-    logfire.configure()
+    # Configure logfire with environment variables for Docker compatibility
+    logfire_token = os.getenv('LOGFIRE_TOKEN')
+    logfire_project = os.getenv('LOGFIRE_PROJECT_NAME', 'default')
+    logfire_service = os.getenv('LOGFIRE_SERVICE_NAME', 'default')
+    
+    if logfire_token:
+        # Configure with explicit token (for Docker)
+        logfire.configure(
+            token=logfire_token,
+            project_name=logfire_project,
+            service_name=logfire_service,
+        )
+    else:
+        # Use default configuration (for local development with logfire auth)
+        logfire.configure(
+            project_name=logfire_project,
+            service_name=logfire_service,
+        )
+    
     logfire.instrument_pydantic_ai()
+    logger.info(f"Logfire configured successfully for project: {logfire_project}")
+    
 except Exception as e:
     logger.warning(f"Failed to configure logfire: {e}")
 
