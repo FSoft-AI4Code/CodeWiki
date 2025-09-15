@@ -18,7 +18,7 @@ certifi==2025.8.3
 cffi==2.0.0
 charset-normalizer==3.4.2
 click==8.2.1
-cohere==5.16.2
+cohere==5.18.0
 colorama==0.4.6
 comm==0.2.3
 debugpy==1.8.15
@@ -95,7 +95,7 @@ platformdirs==4.3.8
 pminit==1.2.0
 prompt_toolkit==3.0.51
 propcache==0.3.2
-protobuf==6.31.1
+protobuf==5.29.5
 psutil==7.0.0
 ptyprocess==0.7.0
 pure_eval==0.2.3
@@ -104,10 +104,10 @@ pyasn1_modules==0.4.2
 pycares==4.11.0
 pycparser==2.23
 pydantic==2.11.7
-pydantic-ai==1.0.5
-pydantic-ai-slim==0.5.0
-pydantic-evals==1.0.5
-pydantic-graph==1.0.5
+pydantic-ai==1.0.6
+pydantic-ai-slim==1.0.6
+pydantic-evals==1.0.6
+pydantic-graph==1.0.6
 pydantic-settings==2.10.1
 pydantic_core==2.33.2
 Pygments==2.19.2
