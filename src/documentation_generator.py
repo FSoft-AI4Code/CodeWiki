@@ -21,7 +21,8 @@ from config import (
     Config,
     FIRST_MODULE_TREE_FILENAME,
     MODULE_TREE_FILENAME,
-    OVERVIEW_FILENAME
+    OVERVIEW_FILENAME,
+    MAIN_MODEL
 )
 from utils import file_manager
 from agent_orchestrator import AgentOrchestrator
@@ -30,10 +31,47 @@ from agent_orchestrator import AgentOrchestrator
 class DocumentationGenerator:
     """Main documentation generation orchestrator."""
     
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, commit_id: str = None):
         self.config = config
+        self.commit_id = commit_id
         self.graph_builder = DependencyGraphBuilder(config)
         self.agent_orchestrator = AgentOrchestrator(config)
+    
+    def create_documentation_metadata(self, working_dir: str, components: Dict[str, Any], num_leaf_nodes: int):
+        """Create a metadata file with documentation generation information."""
+        from datetime import datetime
+        
+        metadata = {
+            "generation_info": {
+                "timestamp": datetime.now().isoformat(),
+                "main_model": MAIN_MODEL,
+                "generator_version": "1.0.0",
+                "repo_path": self.config.repo_path,
+                "commit_id": self.commit_id
+            },
+            "statistics": {
+                "total_components": len(components),
+                "leaf_nodes": num_leaf_nodes,
+                "max_depth": self.config.max_depth
+            },
+            "files_generated": [
+                "overview.md",
+                "module_tree.json",
+                "first_module_tree.json"
+            ]
+        }
+        
+        # Add generated markdown files to the metadata
+        try:
+            for file_path in os.listdir(working_dir):
+                if file_path.endswith('.md') and file_path not in metadata["files_generated"]:
+                    metadata["files_generated"].append(file_path)
+        except Exception as e:
+            logger.warning(f"Could not list generated files: {e}")
+        
+        metadata_path = os.path.join(working_dir, "metadata.json")
+        file_manager.save_json(metadata, metadata_path)
+        logger.info(f"Documentation metadata saved to: {metadata_path}")
     
     def get_processing_order(self, module_tree: Dict[str, Any], parent_path: List[str] = []) -> List[tuple[List[str], str]]:
         """Get the processing order using topological sort (leaf modules first)."""
@@ -195,9 +233,9 @@ class DocumentationGenerator:
             # Build dependency graph
             components, leaf_nodes = self.graph_builder.build_dependency_graph()
 
-            logger.info(f"Leaf nodes:\n{'\n'.join(leaf_nodes)}")
-
-            exit()
+            logger.info(f"Found {len(leaf_nodes)} leaf nodes")
+            # logger.info(f"Leaf nodes:\n{'\n'.join(sorted(leaf_nodes)[:200])}")
+            # exit()
             
             # Cluster modules
             working_dir = os.path.abspath(self.config.docs_dir)
@@ -221,6 +259,9 @@ class DocumentationGenerator:
             # Generate module documentation using dynamic programming approach
             # This processes leaf modules first, then parent modules
             working_dir = await self.generate_module_documentation(components)
+            
+            # Create documentation metadata
+            self.create_documentation_metadata(working_dir, components, len(leaf_nodes))
             
             logger.info(f"Documentation generation completed successfully using dynamic programming!")
             logger.info(f"Processing order: leaf modules → parent modules → repository overview")

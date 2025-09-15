@@ -52,18 +52,42 @@ class GitHubRepoProcessor:
         }
     
     @staticmethod
-    def clone_repository(clone_url: str, target_dir: str) -> bool:
-        """Clone a GitHub repository to the target directory."""
+    def clone_repository(clone_url: str, target_dir: str, commit_id: str = None) -> bool:
+        """Clone a GitHub repository to the target directory, optionally checking out a specific commit."""
         try:
             # Ensure target directory exists
             os.makedirs(os.path.dirname(target_dir), exist_ok=True)
             
-            # Clone repository
-            result = subprocess.run([
-                'git', 'clone', '--depth', str(WebAppConfig.CLONE_DEPTH), clone_url, target_dir
-            ], capture_output=True, text=True, timeout=WebAppConfig.CLONE_TIMEOUT)
+            # If specific commit is requested, don't use shallow clone
+            if commit_id:
+                # Clone full repository to access specific commit
+                result = subprocess.run([
+                    'git', 'clone', clone_url, target_dir
+                ], capture_output=True, text=True, timeout=WebAppConfig.CLONE_TIMEOUT)
+                
+                if result.returncode != 0:
+                    print(f"Error cloning repository: {result.stderr}")
+                    return False
+                
+                # Checkout specific commit
+                result = subprocess.run([
+                    'git', 'checkout', commit_id
+                ], cwd=target_dir, capture_output=True, text=True, timeout=30)
+                
+                if result.returncode != 0:
+                    print(f"Error checking out commit {commit_id}: {result.stderr}")
+                    return False
+            else:
+                # Clone repository with shallow depth (default behavior)
+                result = subprocess.run([
+                    'git', 'clone', '--depth', str(WebAppConfig.CLONE_DEPTH), clone_url, target_dir
+                ], capture_output=True, text=True, timeout=WebAppConfig.CLONE_TIMEOUT)
+                
+                if result.returncode != 0:
+                    print(f"Error cloning repository: {result.stderr}")
+                    return False
             
-            return result.returncode == 0
+            return True
         except Exception as e:
             print(f"Error cloning repository: {e}")
             return False

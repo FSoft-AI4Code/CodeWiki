@@ -231,6 +231,19 @@ WEB_INTERFACE_TEMPLATE = """
                     >
                 </div>
                 
+                <div class="form-group">
+                    <label for="commit_id">Commit ID (optional):</label>
+                    <input 
+                        type="text" 
+                        id="commit_id" 
+                        name="commit_id" 
+                        placeholder="Enter specific commit hash (defaults to latest)"
+                        value="{{ commit_id or '' }}"
+                        pattern="[a-f0-9]{4,40}"
+                        title="Enter a valid commit hash (4-40 characters, hexadecimal)"
+                    >
+                </div>
+                
                 <button type="submit" class="btn">Generate Documentation</button>
             </form>
             
@@ -244,6 +257,11 @@ WEB_INTERFACE_TEMPLATE = """
                         <div class="job-status status-{{ job.status }}">{{ job.status }}</div>
                     </div>
                     <div class="job-progress">{{ job.progress }}</div>
+                    {% if job.main_model %}
+                    <div class="job-model" style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;">
+                        Generated with: {{ job.main_model }}
+                    </div>
+                    {% endif %}
                     <div class="job-actions">
                         <a href="/docs/{{ job.job_id }}" class="btn btn-small">View Documentation</a>
                     </div>
@@ -553,6 +571,22 @@ DOCS_VIEW_TEMPLATE = """
     <div class="container">
         <nav class="sidebar">
             <a href="/static-docs/{{ job_id }}/overview.md" class="logo">📚 {{ repo_name }}</a>
+            
+            {% if metadata and metadata.generation_info %}
+            <div style="margin: 20px 0; padding: 15px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+                <h4 style="margin: 0 0 10px 0; font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">Generation Info</h4>
+                <div style="font-size: 11px; color: #475569; line-height: 1.4;">
+                    <div style="margin-bottom: 4px;"><strong>Model:</strong> {{ metadata.generation_info.main_model }}</div>
+                    <div style="margin-bottom: 4px;"><strong>Generated:</strong> {{ metadata.generation_info.timestamp[:16] }}</div>
+                    {% if metadata.generation_info.commit_id %}
+                    <div style="margin-bottom: 4px;"><strong>Commit:</strong> {{ metadata.generation_info.commit_id[:8] }}</div>
+                    {% endif %}
+                    {% if metadata.statistics %}
+                    <div><strong>Components:</strong> {{ metadata.statistics.total_components }}</div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
             
             {% if navigation %}
             <div class="nav-section">

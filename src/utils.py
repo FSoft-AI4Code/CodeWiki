@@ -3,7 +3,6 @@ import mermaid as md
 from pathlib import Path
 from typing import List, Tuple
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import tiktoken
 import os
 import json
@@ -46,7 +45,7 @@ def count_tokens(text: str) -> int:
 # ---------------------- Mermaid Validation -----------------
 # ------------------------------------------------------------
 
-def validate_mermaid_diagrams(md_file_path: str, relative_path: str) -> str:
+async def validate_mermaid_diagrams(md_file_path: str, relative_path: str) -> str:
     """
     Validate all Mermaid diagrams in a markdown file.
     
@@ -72,21 +71,13 @@ def validate_mermaid_diagrams(md_file_path: str, relative_path: str) -> str:
         if not mermaid_blocks:
             return "No mermaid diagrams found in the file"
         
-        # Validate each mermaid diagram in parallel
+        # Validate each mermaid diagram sequentially to avoid segfaults
         errors = []
-        with ThreadPoolExecutor(max_workers=min(len(mermaid_blocks), 10)) as executor:
-            # Submit all validation tasks
-            future_to_info = {}
-            for i, (line_start, diagram_content) in enumerate(mermaid_blocks, 1):
-                future = executor.submit(validate_single_diagram, diagram_content, i, line_start)
-                future_to_info[future] = i
-            
-            # Collect results as they complete
-            for future in as_completed(future_to_info):
-                error_msg = future.result()
-                if error_msg:
-                    errors.append("\n")
-                    errors.append(error_msg)
+        for i, (line_start, diagram_content) in enumerate(mermaid_blocks, 1):
+            error_msg = await validate_single_diagram(diagram_content, i, line_start)
+            if error_msg:
+                errors.append("\n")
+                errors.append(error_msg)
         
         if errors:
             logger.info(f"Mermaid syntax errors found in file: {md_file_path}: {errors}")
@@ -136,7 +127,7 @@ def extract_mermaid_blocks(content: str) -> List[Tuple[int, str]]:
     return mermaid_blocks
 
 
-def validate_single_diagram(diagram_content: str, diagram_num: int, line_start: int) -> str:
+async def validate_single_diagram(diagram_content: str, diagram_num: int, line_start: int) -> str:
     """
     Validate a single mermaid diagram.
     
@@ -148,27 +139,54 @@ def validate_single_diagram(diagram_content: str, diagram_num: int, line_start: 
     Returns:
         Error message if invalid, empty string if valid
     """
+
+    core_error = ""
+    
     try:
-        # Create Mermaid object and check response
-        render = md.Mermaid(diagram_content)
-        response_text = render.svg_response.text
-        
-        # Check if response indicates a parse error
-        if response_text.startswith("Parse error"):
-            # Extract line number from parse error and calculate actual line in markdown file
-            line_match = re.search(r'line (\d+):', response_text)
-            if line_match:
-                error_line_in_diagram = int(line_match.group(1))
-                actual_line_in_file = line_start + error_line_in_diagram
-                newline = '\n'
-                return f"Diagram {diagram_num}: Parse error on line {actual_line_in_file}:{newline}{newline.join(response_text.split(newline)[1:])}"
+        from mermaid_parser.parser import parse_mermaid_py
+        logger.info("Using mermaid-parser-py to validate mermaid diagrams")
+    
+        try:
+            json_output = await parse_mermaid_py(diagram_content)
+        except Exception as e:
+            error_str = str(e)
+            
+            # Extract the core error information from the exception message
+            # Look for the pattern that contains "Parse error on line X:"
+            error_pattern = r"Error:(.*?)(?=Stack Trace:|$)"
+            match = re.search(error_pattern, error_str, re.DOTALL)
+            
+            if match:
+                core_error = match.group(0).strip()
+                core_error = core_error
             else:
-                return f"Diagram {diagram_num}: {response_text}"
-        
-        return ""  # No error
-        
+                logger.error(f"No match found for error pattern, fallback to mermaid-py\n{error_str}")
+                raise Exception(error_str)
+
     except Exception as e:
-        return f"  Diagram {diagram_num}: Exception during validation - {str(e)}"
+        logger.info("Using mermaid-py to validate mermaid diagrams")
+        try:
+            import mermaid as md
+            # Create Mermaid object and check response
+            render = md.Mermaid(diagram_content)
+            core_error = render.svg_response.text
+            
+        except Exception as e:
+            return f"  Diagram {diagram_num}: Exception during validation - {str(e)}"
+
+    # Check if response indicates a parse error
+    if core_error:
+        # Extract line number from parse error and calculate actual line in markdown file
+        line_match = re.search(r'line (\d+)', core_error)
+        if line_match:
+            error_line_in_diagram = int(line_match.group(1))
+            actual_line_in_file = line_start + error_line_in_diagram
+            newline = '\n'
+            return f"Diagram {diagram_num}: Parse error on line {actual_line_in_file}:{newline}{newline.join(core_error.split(newline)[1:])}"
+        else:
+            return f"Diagram {diagram_num}: {core_error}"
+    
+    return ""  # No error
 
 
 # ------------------------------------------------------------
@@ -215,6 +233,7 @@ file_manager = FileManager()
 
 if __name__ == "__main__":
     # Test with the provided file
+    import asyncio
     test_file = "output/docs/SWE_agent-docs/agent_hooks.md"
-    result = validate_mermaid_diagrams(test_file, "agent_hooks.md")
+    result = asyncio.run(validate_mermaid_diagrams(test_file, "agent_hooks.md"))
     print(result)

@@ -48,12 +48,13 @@ class WebRoutes:
             "message": None,
             "message_type": None,
             "repo_url": "",
+            "commit_id": "",
             "recent_jobs": recent_jobs
         }
         
         return HTMLResponse(content=render_template(WEB_INTERFACE_TEMPLATE, context))
     
-    async def index_post(self, request: Request, repo_url: str = Form(...)) -> HTMLResponse:
+    async def index_post(self, request: Request, repo_url: str = Form(...), commit_id: str = Form("")) -> HTMLResponse:
         """Handle repository submission."""
         # Clean up old jobs before processing
         self.cleanup_old_jobs()
@@ -62,6 +63,7 @@ class WebRoutes:
         message_type = None
         
         repo_url = repo_url.strip()
+        commit_id = commit_id.strip() if commit_id else ""
         
         if not repo_url:
             message = "Please enter a GitHub repository URL"
@@ -109,7 +111,8 @@ class WebRoutes:
                         created_at=datetime.now(),
                         completed_at=datetime.now(),
                         docs_path=cached_docs,
-                        progress="Retrieved from cache"
+                        progress="Retrieved from cache",
+                        commit_id=commit_id if commit_id else None
                     )
                     self.background_worker.job_status[job_id] = job
                 else:
@@ -120,7 +123,8 @@ class WebRoutes:
                             repo_url=normalized_repo_url,  # Use normalized URL
                             status='queued',
                             created_at=datetime.now(),
-                            progress="Waiting in queue..."
+                            progress="Waiting in queue...",
+                            commit_id=commit_id if commit_id else None
                         )
                         
                         self.background_worker.add_job(job_id, job)
@@ -144,6 +148,7 @@ class WebRoutes:
             "message": message,
             "message_type": message_type,
             "repo_url": repo_url or "",
+            "commit_id": commit_id or "",
             "recent_jobs": recent_jobs
         }
         
@@ -205,7 +210,8 @@ class WebRoutes:
                     created_at=datetime.now(),
                     completed_at=datetime.now(),
                     docs_path=cached_docs,
-                    progress="Loaded from cache"
+                    progress="Loaded from cache",
+                    commit_id=None  # No commit info available from cache
                 )
                 self.background_worker.job_status[job_id] = job
                 self.background_worker.save_job_statuses()
@@ -221,6 +227,15 @@ class WebRoutes:
         if module_tree_file.exists():
             try:
                 module_tree = file_manager.load_json(module_tree_file)
+            except Exception:
+                pass
+        
+        # Load metadata
+        metadata = None
+        metadata_file = docs_path / "metadata.json"
+        if metadata_file.exists():
+            try:
+                metadata = file_manager.load_json(metadata_file)
             except Exception:
                 pass
         
@@ -245,7 +260,8 @@ class WebRoutes:
                 "content": html_content,
                 "navigation": module_tree,
                 "current_page": filename,
-                "job_id": job_id
+                "job_id": job_id,
+                "metadata": metadata
             }
             
             return HTMLResponse(content=render_template(DOCS_VIEW_TEMPLATE, context))

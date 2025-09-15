@@ -55,12 +55,12 @@ class TreeSitterJSAnalyzer:
             tree = self.parser.parse(bytes(self.content, "utf8"))
             root_node = tree.root_node
 
-            logger.info(f"Parsed AST with root node type: {root_node.type}")
+            logger.debug(f"Parsed AST with root node type: {root_node.type}")
 
             self._extract_functions(root_node)
             self._extract_call_relationships(root_node)
 
-            logger.info(
+            logger.debug(
                 f"Analysis complete: {len(self.nodes)} nodes, {len(self.call_relationships)} relationships"
             )
 
@@ -336,7 +336,7 @@ class TreeSitterJSAnalyzer:
                 component_id=component_id,
             )
         except Exception as e:
-            logger.warning(f"Error extracting function declaration: {e}")
+            logger.debug(f"Error extracting function declaration: {e}")
             return None
     def _extract_exported_function(self, node) -> Optional[Node]:
         """Extract export function or export default function"""
@@ -350,7 +350,7 @@ class TreeSitterJSAnalyzer:
                         func.name = "default"
                 return func
         except Exception as e:
-            logger.warning(f"Error extracting exported function: {e}")
+            logger.debug(f"Error extracting exported function: {e}")
         return None
 
     def _extract_arrow_function_from_declaration(self, node) -> Optional[Node]:
@@ -393,7 +393,7 @@ class TreeSitterJSAnalyzer:
                         )
             return None
         except Exception as e:
-            logger.warning(f"Error extracting function from declaration: {e}")
+            logger.debug(f"Error extracting function from declaration: {e}")
         return None
 
     def _should_include_function(self, func: Node) -> bool:
@@ -527,7 +527,7 @@ class TreeSitterJSAnalyzer:
             )
             
         except Exception as e:
-            logger.warning(f"Error extracting call relationship: {e}")
+            logger.debug(f"Error extracting call relationship: {e}")
             return None
 
     def _extract_jsdoc_type_dependencies(self, node, caller_name: str) -> None:
@@ -687,10 +687,10 @@ def analyze_javascript_file_treesitter(
 ) -> Tuple[List[Node], List[CallRelationship]]:
     """Analyze a JavaScript file using tree-sitter."""
     try:
-        logger.info(f"Tree-sitter JS analysis for {file_path}")
+        logger.debug(f"Tree-sitter JS analysis for {file_path}")
         analyzer = TreeSitterJSAnalyzer(file_path, content, repo_path)
         analyzer.analyze()
-        logger.info(
+        logger.debug(
             f"Found {len(analyzer.nodes)} top-level nodes, {len(analyzer.call_relationships)} calls"
         )
         return analyzer.nodes, analyzer.call_relationships

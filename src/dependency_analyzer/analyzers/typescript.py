@@ -4,6 +4,7 @@ from typing import List, Set, Optional, Tuple
 from pathlib import Path
 import sys
 import os
+from traceback import print_exc
 
 from tree_sitter import Parser, Language
 import tree_sitter_typescript
@@ -35,14 +36,14 @@ class TreeSitterTSAnalyzer:
 
     def analyze(self) -> None:
         if self.parser is None:
-            logger.warning(f"Skipping {self.file_path} - parser initialization failed")
+            logger.debug(f"Skipping {self.file_path} - parser initialization failed")
             return
 
         try:
             tree = self.parser.parse(bytes(self.content, "utf8"))
             root_node = tree.root_node
 
-            logger.info(f"Parsed AST with root node type: {root_node.type}")
+            logger.debug(f"Parsed AST with root node type: {root_node.type}")
 
             all_entities = {}  
             self._extract_all_entities(root_node, all_entities)
@@ -565,7 +566,7 @@ class TreeSitterTSAnalyzer:
                 component_id=component_id,
             )
         except Exception as e:
-            logger.warning(f"Error creating node from entity: {e}")
+            logger.debug(f"Error creating node from entity: {e}")
             return None
         
     def _should_include_node(self, node: Node) -> bool:
@@ -814,7 +815,7 @@ class TreeSitterTSAnalyzer:
                 logger.debug(f"Ignoring unknown call: {caller_name} -> {callee_name}")
                 
         except Exception as e:
-            logger.warning(f"Error extracting call relationship: {e}")
+            logger.debug(f"Error extracting call relationship: {e}")
 
     def _extract_new_relationship(self, node, caller_name: str, all_entities: dict) -> None:
         try:
@@ -833,7 +834,7 @@ class TreeSitterTSAnalyzer:
                         self._add_relationship(caller_name, constructor_name, call_line)
 
         except Exception as e:
-            logger.warning(f"Error extracting new relationship: {e}")
+            logger.debug(f"Error extracting new relationship: {e}")
 
     def _extract_member_relationship(self, node, caller_name: str, all_entities: dict) -> None:
         try:
@@ -844,7 +845,7 @@ class TreeSitterTSAnalyzer:
                 if property_name and not self._is_builtin_function(property_name):
                     self._add_relationship(caller_name, property_name, call_line)
         except Exception as e:
-            logger.warning(f"Error extracting member relationship: {e}")
+            logger.debug(f"Error extracting member relationship: {e}")
 
     def _extract_subscript_relationship(self, node, caller_name: str, all_entities: dict) -> None:
         pass
@@ -870,7 +871,7 @@ class TreeSitterTSAnalyzer:
                     self._add_relationship(caller_name, type_name, call_line)
                     
         except Exception as e:
-            logger.warning(f"Error extracting type relationship: {e}")
+            logger.debug(f"Error extracting type relationship: {e}")
     
     def _find_all_type_identifiers(self, node, type_identifiers: list) -> None:
         if node.type == "type_identifier":
@@ -890,7 +891,7 @@ class TreeSitterTSAnalyzer:
                             call_line = node.start_point[0] + 1
                             self._add_relationship(caller_name, target_name, call_line)
         except Exception as e:
-            logger.warning(f"Error extracting type arguments relationship: {e}")
+            logger.debug(f"Error extracting type arguments relationship: {e}")
     
     def _extract_inheritance_relationship(self, node, caller_name: str, all_entities: dict) -> None:
         """Extract inheritance/implementation relationships"""
@@ -904,7 +905,7 @@ class TreeSitterTSAnalyzer:
                             call_line = node.start_point[0] + 1
                             self._add_relationship(caller_name, target_name, call_line)
         except Exception as e:
-            logger.warning(f"Error extracting inheritance relationship: {e}")
+            logger.debug(f"Error extracting inheritance relationship: {e}")
 
     def _resolve_to_top_level(self, entity_name: str, all_entities: dict) -> Optional[str]:
         if entity_name in self.top_level_nodes:
@@ -967,10 +968,10 @@ def analyze_typescript_file_treesitter(
     file_path: str, content: str, repo_path: str = None
 ) -> Tuple[List[Node], List[CallRelationship]]:
     try:
-        logger.info(f"Tree-sitter TS analysis for {file_path}")
+        logger.debug(f"Tree-sitter TS analysis for {file_path}")
         analyzer = TreeSitterTSAnalyzer(file_path, content, repo_path)
         analyzer.analyze()
-        logger.info(
+        logger.debug(
             f"Found {len(analyzer.nodes)} top-level nodes, {len(analyzer.call_relationships)} calls"
         )
         return analyzer.nodes, analyzer.call_relationships

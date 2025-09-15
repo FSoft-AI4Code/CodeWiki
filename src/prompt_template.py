@@ -31,11 +31,10 @@ Generate documentation following this structure:
 
 <WORKFLOW>
 1. Analyze the provided code components and module structure, explore the not given dependencies between the components if needed
-2. Create the main `{module_name}.md` file with overview and architecture
+2. Create the main `{module_name}.md` file with overview and architecture in working directory
 3. Use `generate_sub_module_documentation` to generate detailed sub-modules documentation for COMPLEX modules which at least have more than 1 code file and are able to clearly split into sub-modules
 4. Include relevant Mermaid diagrams throughout the documentation
-5. After all sub-modules are documented, adjust `{module_name}.md` to ensure all generated files including sub-modules documentation are properly cross-refered
-6. Save all documentation in markdown format in the working directory
+5. After all sub-modules are documented, adjust `{module_name}.md` with ONLY ONE STEP to ensure all generated files including sub-modules documentation are properly cross-refered
 </WORKFLOW>
 
 <AVAILABLE_TOOLS>

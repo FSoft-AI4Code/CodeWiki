@@ -16,7 +16,7 @@ from typing import Dict
 from dataclasses import asdict
 
 from documentation_generator import DocumentationGenerator
-from config import Config
+from config import Config, MAIN_MODEL
 from .models import JobStatus
 from .cache_manager import CacheManager
 from .github_processor import GitHubRepoProcessor
@@ -172,6 +172,7 @@ class BackgroundWorker:
             job.status = 'processing'
             job.started_at = datetime.now()
             job.progress = "Starting repository clone..."
+            job.main_model = MAIN_MODEL
             
             # Check cache first
             cached_docs = self.cache_manager.get_cached_docs(job.repo_url)
@@ -180,6 +181,8 @@ class BackgroundWorker:
                 job.completed_at = datetime.now()
                 job.docs_path = cached_docs
                 job.progress = "Documentation retrieved from cache"
+                if not job.main_model:  # Only set if not already set
+                    job.main_model = MAIN_MODEL
                 
                 # Save job status to disk
                 self.save_job_statuses()
@@ -194,7 +197,7 @@ class BackgroundWorker:
             
             job.progress = f"Cloning repository {repo_info['full_name']}..."
             
-            if not GitHubRepoProcessor.clone_repository(repo_info['clone_url'], temp_repo_dir):
+            if not GitHubRepoProcessor.clone_repository(repo_info['clone_url'], temp_repo_dir, job.commit_id):
                 raise Exception("Failed to clone repository")
             
             # Generate documentation
@@ -212,7 +215,7 @@ class BackgroundWorker:
             job.progress = "Generating documentation..."
             
             # Generate documentation
-            doc_generator = DocumentationGenerator(config)
+            doc_generator = DocumentationGenerator(config, job.commit_id)
             
             # Run the async documentation generation in a new event loop
             loop = asyncio.new_event_loop()

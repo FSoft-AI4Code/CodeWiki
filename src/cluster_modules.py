@@ -12,9 +12,19 @@ def format_potential_core_components(leaf_nodes: List[str], components: Dict[str
     """
     Format the potential core components into a string that can be used in the prompt.
     """
+    # Filter out any invalid leaf nodes that don't exist in components
+    valid_leaf_nodes = []
+    for leaf_node in leaf_nodes:
+        if leaf_node in components:
+            valid_leaf_nodes.append(leaf_node)
+        else:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Skipping invalid leaf node '{leaf_node}' - not found in components")
+    
     #group leaf nodes by file
     leaf_nodes_by_file = defaultdict(list)
-    for leaf_node in leaf_nodes:
+    for leaf_node in valid_leaf_nodes:
         leaf_nodes_by_file[components[leaf_node].relative_path].append(leaf_node)
 
     potential_core_components = ""
@@ -49,7 +59,27 @@ def cluster_modules(
     response = call_llm(prompt, model=MAIN_MODEL)
 
     #parse the response
-    module_tree = eval(response.split("<GROUPED_COMPONENTS>")[1].split("</GROUPED_COMPONENTS>")[0])
+    try:
+        if "<GROUPED_COMPONENTS>" not in response or "</GROUPED_COMPONENTS>" not in response:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Invalid LLM response format - missing component tags: {response[:200]}...")
+            return {}
+        
+        response_content = response.split("<GROUPED_COMPONENTS>")[1].split("</GROUPED_COMPONENTS>")[0]
+        module_tree = eval(response_content)
+        
+        if not isinstance(module_tree, dict):
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Invalid module tree format - expected dict, got {type(module_tree)}")
+            return {}
+            
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to parse LLM response: {e}. Response: {response[:200]}...")
+        return {}
 
     # check if the module tree is valid
     if len(module_tree) <= 1:
@@ -66,10 +96,21 @@ def cluster_modules(
             value[module_name] = module_info
 
     for module_name, module_info in module_tree.items():
-        sub_leaf_nodes = module_info["components"]
+        sub_leaf_nodes = module_info.get("components", [])
+        
+        # Filter sub_leaf_nodes to ensure they exist in components
+        valid_sub_leaf_nodes = []
+        for node in sub_leaf_nodes:
+            if node in components:
+                valid_sub_leaf_nodes.append(node)
+            else:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Skipping invalid sub leaf node '{node}' in module '{module_name}' - not found in components")
+        
         current_module_path.append(module_name)
         module_info["children"] = {}
-        module_info["children"] = cluster_modules(sub_leaf_nodes, components, current_module_tree, module_name, current_module_path)
+        module_info["children"] = cluster_modules(valid_sub_leaf_nodes, components, current_module_tree, module_name, current_module_path)
         current_module_path.pop()
 
     return module_tree

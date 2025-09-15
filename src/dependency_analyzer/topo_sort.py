@@ -10,6 +10,8 @@ import logging
 from typing import Dict, List, Set, Tuple, Any, Optional
 from collections import defaultdict, deque
 
+from .models.core import Node
+
 logger = logging.getLogger(__name__)
 
 
@@ -89,17 +91,17 @@ def resolve_cycles(graph: Dict[str, Set[str]]) -> Dict[str, Set[str]]:
     cycles = detect_cycles(graph)
     
     if not cycles:
-        logger.info("No cycles detected in the dependency graph")
+        logger.debug("No cycles detected in the dependency graph")
         return graph
     
-    logger.info(f"Detected {len(cycles)} cycles in the dependency graph")
+    logger.debug(f"Detected {len(cycles)} cycles in the dependency graph")
     
     # Create a copy of the graph to modify
     new_graph = {node: deps.copy() for node, deps in graph.items()}
     
     # Process each cycle
     for i, cycle in enumerate(cycles):
-        logger.info(f"Cycle {i+1}: {' -> '.join(cycle)}")
+        logger.debug(f"Cycle {i+1}: {' -> '.join(cycle)}")
         
         # Strategy: Break the cycle by removing the "weakest" dependency
         # Here, we just arbitrarily remove the last edge to make the graph acyclic
@@ -110,7 +112,7 @@ def resolve_cycles(graph: Dict[str, Set[str]]) -> Dict[str, Set[str]]:
             next_node = cycle[j + 1]
             
             if next_node in new_graph[current]:
-                logger.info(f"Breaking cycle by removing dependency: {current} -> {next_node}")
+                logger.debug(f"Breaking cycle by removing dependency: {current} -> {next_node}")
                 new_graph[current].remove(next_node)
                 break
     
@@ -266,7 +268,7 @@ def build_graph_from_components(components: Dict[str, Any]) -> Dict[str, Set[str
     return graph 
 
 
-def get_leaf_nodes(graph: Dict[str, Set[str]]) -> List[str]:
+def get_leaf_nodes(graph: Dict[str, Set[str]], components: Dict[str, Node]) -> List[str]:
     """
     Find leaf nodes (nodes that no other nodes depend on) and build dependency trees
     showing the full dependency chain from each leaf back to the ultimate dependencies.
@@ -287,19 +289,45 @@ def get_leaf_nodes(graph: Dict[str, Set[str]]) -> List[str]:
     
     # Find leaf nodes (nodes that no other nodes depend on)
     leaf_nodes = set(acyclic_graph.keys())
+
     
-    # Remove nodes that are dependencies of other nodes
-    for node, deps in acyclic_graph.items():
-        for dep in deps:
-            leaf_nodes.discard(dep)
     
-    concise_leaf_nodes = set()
-    for node in leaf_nodes:
-        if node.endswith("__init__"):
-            # replace by class name
-            concise_leaf_nodes.add(node.replace(".__init__", ""))
-        else:
-            concise_leaf_nodes.add(node)
+    def concise_node(leaf_nodes: Set[str]) -> Set[str]:
+        concise_leaf_nodes = set()
+        for node in leaf_nodes:
+            if node.endswith("__init__"):
+                # replace by class name
+                concise_leaf_nodes.add(node.replace(".__init__", ""))
+            else:
+                concise_leaf_nodes.add(node)
+        
+        keep_leaf_nodes = []
+
+        for leaf_node in leaf_nodes:
+            # Skip any leaf nodes that are clearly error strings or invalid identifiers
+            if not isinstance(leaf_node, str) or leaf_node.strip() == "" or any(err_keyword in leaf_node.lower() for err_keyword in ['error', 'exception', 'failed', 'invalid']):
+                logger.debug(f"Skipping invalid leaf node identifier: '{leaf_node}'")
+                continue
+                
+            if leaf_node in components:
+                if components[leaf_node].component_type in ["class", "interface", "struct"]:
+                    keep_leaf_nodes.append(leaf_node)
+                else:
+                    logger.debug(f"Leaf node {leaf_node} is a {components[leaf_node].component_type}, removing it")
+            else:
+                logger.debug(f"Leaf node {leaf_node} not found in components, removing it")
+
+        return keep_leaf_nodes
+
+    concise_leaf_nodes = concise_node(leaf_nodes)
+    if len(concise_leaf_nodes) >= 400:
+        logger.info(f"Leaf nodes are too many ({len(concise_leaf_nodes)}), removing dependencies of other nodes")
+        # Remove nodes that are dependencies of other nodes
+        for node, deps in acyclic_graph.items():
+            for dep in deps:
+                leaf_nodes.discard(dep)
+        
+        concise_leaf_nodes = concise_node(leaf_nodes)
     
     if not leaf_nodes:
         logger.warning("No leaf nodes found in the graph")

@@ -130,7 +130,13 @@ DEFAULT_IGNORE_PATTERNS = {
     ## Dependencies in various languages
     # Gitingest
     "digest.txt",
-    "*.ini"
+    "*.ini",
+    "tests",
+    "test",
+    "Tests",
+    "Test",
+    "examples",
+    "Examples",
 }
 
 DEFAULT_INCLUDE_PATTERNS = [

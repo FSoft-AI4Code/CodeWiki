@@ -22,7 +22,7 @@ class WebAppConfig:
     CACHE_EXPIRY_DAYS = 365
     
     # Job cleanup settings
-    JOB_CLEANUP_HOURS = 24
+    JOB_CLEANUP_HOURS = 24000
     RETRY_COOLDOWN_MINUTES = 3
     
     # Server settings

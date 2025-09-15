@@ -25,6 +25,8 @@ class JobStatusResponse(BaseModel):
     error_message: Optional[str] = None
     progress: str = ""
     docs_path: Optional[str] = None
+    main_model: Optional[str] = None
+    commit_id: Optional[str] = None
 
 
 @dataclass
@@ -39,6 +41,8 @@ class JobStatus:
     error_message: Optional[str] = None
     progress: str = ""
     docs_path: Optional[str] = None
+    main_model: Optional[str] = None
+    commit_id: Optional[str] = None
 
 
 @dataclass

@@ -230,7 +230,7 @@ class PythonASTAnalyzer(ast.NodeVisitor):
             tree = ast.parse(self.content)
             self.visit(tree)
 
-            logger.info(
+            logger.debug(
                 f"Python analysis complete for {self.file_path}: {len(self.nodes)} nodes, "
                 f"{len(self.call_relationships)} relationships"
             )

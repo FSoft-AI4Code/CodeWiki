@@ -15,7 +15,14 @@ from pathlib import Path
 from typing import List, Optional, Tuple, Literal
 import io
 
+import logging
+
+# Configure logging and monitoring
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 from pydantic_ai import RunContext, Tool
+
 from .deps import CodeWikiDeps
 from utils import validate_mermaid_diagrams
 
@@ -755,7 +762,8 @@ async def str_replace_editor(
     result = "\n".join(tool.logs)
 
     if command != "view" and path.endswith(".md"):
-        result = result + "\n---------- Mermaid validation ----------\n" + validate_mermaid_diagrams(absolute_path, path)
+        mermaid_validation = await validate_mermaid_diagrams(absolute_path, path)
+        result = result + "\n---------- Mermaid validation ----------\n" + mermaid_validation
 
     return result
 
