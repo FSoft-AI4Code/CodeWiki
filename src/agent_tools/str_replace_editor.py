@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 
-"""This is an adaptation of the Anthropic Text Editor tool from
-https://github.com/anthropics/anthropic-quickstarts/blob/main/computer-use-demo/computer_use_demo/tools/edit.py
-However, we made it python 3.6 compatible and stateless (all state is saved in a json file)
+"""Source: https://github.com/SWE-agent/SWE-agent/blob/main/tools/edit_anthropic/bin/str_replace_editor
+This tool is used to view the given source code and view/edit the documentation files in the separate docs directory.
 """
 
-import argparse
 import json
 import re
 import subprocess

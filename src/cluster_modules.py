@@ -1,5 +1,7 @@
 from typing import List, Dict, Any
 from collections import defaultdict
+import logging
+logger = logging.getLogger(__name__)
 
 from dependency_analyzer.models.core import Node
 from llm_services import call_llm
@@ -18,8 +20,6 @@ def format_potential_core_components(leaf_nodes: List[str], components: Dict[str
         if leaf_node in components:
             valid_leaf_nodes.append(leaf_node)
         else:
-            import logging
-            logger = logging.getLogger(__name__)
             logger.warning(f"Skipping invalid leaf node '{leaf_node}' - not found in components")
     
     #group leaf nodes by file
@@ -53,6 +53,7 @@ def cluster_modules(
     potential_core_components, potential_core_components_with_code = format_potential_core_components(leaf_nodes, components)
 
     if count_tokens(potential_core_components_with_code) <= MAX_TOKEN_PER_MODULE:
+        logger.info(f"Skipping clustering for {current_module_name} because the potential core components are too few: {count_tokens(potential_core_components_with_code)} tokens")
         return {}
 
     prompt = format_cluster_prompt(potential_core_components, current_module_tree, current_module_name)
@@ -61,8 +62,6 @@ def cluster_modules(
     #parse the response
     try:
         if "<GROUPED_COMPONENTS>" not in response or "</GROUPED_COMPONENTS>" not in response:
-            import logging
-            logger = logging.getLogger(__name__)
             logger.error(f"Invalid LLM response format - missing component tags: {response[:200]}...")
             return {}
         
@@ -70,19 +69,16 @@ def cluster_modules(
         module_tree = eval(response_content)
         
         if not isinstance(module_tree, dict):
-            import logging
-            logger = logging.getLogger(__name__)
             logger.error(f"Invalid module tree format - expected dict, got {type(module_tree)}")
             return {}
             
     except Exception as e:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f"Failed to parse LLM response: {e}. Response: {response[:200]}...")
         return {}
 
     # check if the module tree is valid
     if len(module_tree) <= 1:
+        logger.info(f"Skipping clustering for {current_module_name} because the module tree is too small: {len(module_tree)} modules")
         return {}
 
     if current_module_tree == {}:
@@ -104,8 +100,6 @@ def cluster_modules(
             if node in components:
                 valid_sub_leaf_nodes.append(node)
             else:
-                import logging
-                logger = logging.getLogger(__name__)
                 logger.warning(f"Skipping invalid sub leaf node '{node}' in module '{module_name}' - not found in components")
         
         current_module_path.append(module_name)
