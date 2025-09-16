@@ -119,7 +119,7 @@ class DocumentationGenerator:
 
         return processed_module_tree
 
-    async def generate_module_documentation(self, components: Dict[str, Any]) -> str:
+    async def generate_module_documentation(self, components: Dict[str, Any], leaf_nodes: List[str]) -> str:
         """Generate documentation for all modules using dynamic programming approach."""
         # Prepare output directory
         working_dir = os.path.abspath(self.config.docs_dir)
@@ -180,7 +180,7 @@ class DocumentationGenerator:
             logger.info(f"Processing whole repo because repo can fit in the context window")
             repo_name = os.path.basename(os.path.normpath(self.config.repo_path))
             final_module_tree = await self.agent_orchestrator.process_module(
-                repo_name, components, list(components.keys()), [], working_dir
+                repo_name, components, leaf_nodes, [], working_dir
             )
 
             # rename repo_name.md to overview.md
@@ -258,7 +258,7 @@ class DocumentationGenerator:
             
             # Generate module documentation using dynamic programming approach
             # This processes leaf modules first, then parent modules
-            working_dir = await self.generate_module_documentation(components)
+            working_dir = await self.generate_module_documentation(components, leaf_nodes)
             
             # Create documentation metadata
             self.create_documentation_metadata(working_dir, components, len(leaf_nodes))
