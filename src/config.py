@@ -18,6 +18,7 @@ MAX_TOKEN_PER_LEAF_MODULE = 16_000
 # LLM services
 MAIN_MODEL = os.getenv('MAIN_MODEL', 'claude-sonnet-4')
 FALLBACK_MODEL_1 = os.getenv('FALLBACK_MODEL_1', 'glm-4p5')
+CLUSTER_MODEL = os.getenv('CLUSTER_MODEL', MAIN_MODEL)
 LLM_BASE_URL = os.getenv('LLM_BASE_URL', 'http://0.0.0.0:4000/')
 LLM_API_KEY = os.getenv('LLM_API_KEY', 'sk-1234')
 

@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 from dependency_analyzer.models.core import Node
 from llm_services import call_llm
 from utils import count_tokens
-from config import MAX_TOKEN_PER_MODULE, MAIN_MODEL
+from config import MAX_TOKEN_PER_MODULE, CLUSTER_MODEL
 from prompt_template import format_cluster_prompt
 
 
@@ -57,7 +57,7 @@ def cluster_modules(
         return {}
 
     prompt = format_cluster_prompt(potential_core_components, current_module_tree, current_module_name)
-    response = call_llm(prompt, model=MAIN_MODEL)
+    response = call_llm(prompt, model=CLUSTER_MODEL)
 
     #parse the response
     try:
