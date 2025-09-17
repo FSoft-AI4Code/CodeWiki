@@ -115,7 +115,11 @@ class DocumentationGenerator:
             module_info = module_info["children"]
 
         for child_name, child_info in module_info.items():
-            child_info["docs"] = file_manager.load_text(os.path.join(working_dir, f"{child_name}.md"))
+            if os.path.exists(os.path.join(working_dir, f"{child_name}.md")):
+                child_info["docs"] = file_manager.load_text(os.path.join(working_dir, f"{child_name}.md"))
+            else:
+                logger.warning(f"Module docs not found at {os.path.join(working_dir, f"{child_name}.md")}")
+                child_info["docs"] = ""
 
         return processed_module_tree
 
