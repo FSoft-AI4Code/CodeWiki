@@ -142,7 +142,7 @@ class WebRoutes:
             all_jobs.values(),
             key=lambda x: x.created_at,
             reverse=True
-        )[:10]
+        )
         
         context = {
             "message": message,
