@@ -10,13 +10,15 @@
 
 **The first open-source framework for holistic, structured repository-level documentation across multilingual codebases**
 
-[Features](#features) • [Installation](#installation) • [Quick Start](#quick-start) • [Benchmark](#benchmark) • [Documentation](#documentation-structure) • [Citation](#citation)
+[Features](#features) • [Installation](#installation) • [Quick Start](#quick-start) • [Benchmark](#benchmark) • [Documentation](#documentation-structure) • [Demo](https://fsoft-ai4code.github.io/codewiki-demo/) • [Citation](#citation)
 
 </div>
 
 ---
 
 ## 🎯 Overview
+
+> 🚀 **[View Live Demo](https://fsoft-ai4code.github.io/codewiki-demo/)** - Explore documentation generated for real-world open source projects
 
 Developers spend **58% of their working time** understanding codebases, yet maintaining comprehensive documentation remains a persistent challenge. CodeWiki addresses this by providing automated, scalable repository-level documentation generation that captures:
 
