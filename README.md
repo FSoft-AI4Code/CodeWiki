@@ -53,14 +53,14 @@ Developers spend **58% of their working time** understanding codebases, yet main
 
 CodeWiki has been evaluated on the **CodeWikiBench** dataset, the first benchmark specifically designed for repository-level documentation quality assessment.
 
-| Language Category | CodeWiki Avg | Improvement over Baseline |
+| Language Category | CodeWiki Avg | Improvement over DeepWiki |
 |-------------------|--------------|---------------------------|
 | High-Level (Python, JS, TS) | **79.14%** | +10.47% |
 | Managed (C#, Java) | **68.84%** | +4.04% |
 | Systems (C, C++) | 53.24% | -3.15% |
 | **Overall Average** | **68.79%** | **+4.73%** |
 
-CodeWiki demonstrates significant improvements in high-level and managed languages, with an overall 4.73% improvement over baseline approaches.
+CodeWiki demonstrates significant improvements in high-level and managed languages, with an overall 4.73% improvement over [DeepWiki](https://deepwiki.com/).
 
 ---
 
@@ -79,6 +79,12 @@ CodeWiki demonstrates significant improvements in high-level and managed languag
 git clone https://github.com/yourusername/codewiki.git
 cd codewiki
 
+# Install Node.js (if not already installed)
+# macOS
+brew install node
+# Linux
+sudo apt update && apt install -y nodejs npm
+
 # Create and activate virtual environment
 python3.12 -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
@@ -86,12 +92,13 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Install Node.js (if not already installed)
-# macOS
-brew install node
+#Create a `.env` file from the template and edit with your configuration
+cp env.example .env
 
-# Linux
-sudo apt update && apt install -y nodejs npm
+# Start the web application
+python run_web_app.py
+
+#Access the application at `http://localhost:8000` to generate documentation by github url and commit id (optional)
 ```
 
 ### Docker Installation
@@ -107,46 +114,6 @@ docker network create codewiki-network
 # Start services
 docker-compose up -d
 ```
-
----
-
-## Quick Start
-
-### 1. Configure API Keys
-
-Create a `.env` file from the template:
-
-```bash
-cp env.example .env
-```
-
-Edit `.env` with your configuration:
-
-```bash
-# LLM Configuration
-MAIN_MODEL=claude-sonnet-4
-FALLBACK_MODEL_1=glm-4p5
-LLM_BASE_URL=http://litellm:4000/
-LLM_API_KEY=your-api-key-here
-
-# Application
-APP_PORT=8000
-
-# Optional: Logfire for monitoring
-LOGFIRE_TOKEN=your-logfire-token
-```
-
-### 2. Run the Web Application
-
-```bash
-# Activate virtual environment
-source .venv/bin/activate
-
-# Start the web application
-python run_web_app.py
-```
-
-Access the application at `http://localhost:8000` to generate documentation by github url and commit id (optional)
 
 ---
 
