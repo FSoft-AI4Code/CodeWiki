@@ -208,8 +208,6 @@ Please shortlist the files, folders representing the core functionality and igno
 Reasoning at first, then return the list of relative paths in JSON format.
 """
 
-
-import json
 from typing import Dict, Any
 from utils import file_manager
 

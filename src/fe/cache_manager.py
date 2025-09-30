@@ -3,7 +3,6 @@
 Cache management for documentation generation results.
 """
 
-import json
 import hashlib
 from datetime import datetime, timedelta
 from pathlib import Path

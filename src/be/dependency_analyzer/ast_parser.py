@@ -11,11 +11,10 @@ from .analysis.analysis_service import AnalysisService
 from .utils.patterns import CODE_EXTENSIONS
 from .models.core import Node
 
-import sys
 from pathlib import Path
 from config import MAIN_MODEL
-from llm_services import call_llm
-from prompt_template import FILTER_FOLDERS_PROMPT
+from ..llm_services import call_llm
+from ..prompt_template import FILTER_FOLDERS_PROMPT
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

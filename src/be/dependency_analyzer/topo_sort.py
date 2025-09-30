@@ -7,8 +7,8 @@ including detection and resolution of dependency cycles.
 """
 
 import logging
-from typing import Dict, List, Set, Tuple, Any, Optional
-from collections import defaultdict, deque
+from typing import Dict, List, Set, Any
+from collections import deque
 
 from .models.core import Node
 

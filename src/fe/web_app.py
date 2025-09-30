@@ -10,7 +10,6 @@ Features:
 - Job status tracking
 """
 
-import os
 import argparse
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse

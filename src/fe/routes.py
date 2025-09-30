@@ -3,11 +3,9 @@
 FastAPI route handlers for the CodeWiki web application.
 """
 
-import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from dataclasses import asdict
-from urllib.parse import quote, unquote
 
 from traceback import format_exc
 

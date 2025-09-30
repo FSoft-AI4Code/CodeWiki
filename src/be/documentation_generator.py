@@ -10,13 +10,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Local imports
-from dependency_analyzer import DependencyGraphBuilder
-from llm_services import call_llm
-from prompt_template import (
+from .dependency_analyzer import DependencyGraphBuilder
+from .llm_services import call_llm
+from .prompt_template import (
     REPO_OVERVIEW_PROMPT,
     MODULE_OVERVIEW_PROMPT,
 )
-from cluster_modules import cluster_modules
+from .cluster_modules import cluster_modules
 from config import (
     Config,
     FIRST_MODULE_TREE_FILENAME,
@@ -25,7 +25,7 @@ from config import (
     MAIN_MODEL
 )
 from utils import file_manager
-from agent_orchestrator import AgentOrchestrator
+from .agent_orchestrator import AgentOrchestrator
 
 
 class DocumentationGenerator:

@@ -1,13 +1,12 @@
 from pydantic_ai import RunContext, Tool, Agent
-import json
 
 from .deps import CodeWikiDeps
 from .read_code_components import read_code_components_tool
 from .str_replace_editor import str_replace_editor_tool
-from llm_services import fallback_models
-from prompt_template import SYSTEM_PROMPT, LEAF_SYSTEM_PROMPT, format_user_prompt
-from utils import is_complex_module, count_tokens
-from cluster_modules import format_potential_core_components
+from ..llm_services import fallback_models
+from ..prompt_template import SYSTEM_PROMPT, LEAF_SYSTEM_PROMPT, format_user_prompt
+from ..utils import is_complex_module, count_tokens
+from ..cluster_modules import format_potential_core_components
 from config import MAX_TOKEN_PER_LEAF_MODULE
 
 

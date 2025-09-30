@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 from pydantic_ai import RunContext, Tool
 
 from .deps import CodeWikiDeps
-from utils import validate_mermaid_diagrams
+from ..utils import validate_mermaid_diagrams
 
 
 # There are some super strange "ascii can't decode x" errors,

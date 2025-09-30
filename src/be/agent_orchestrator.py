@@ -35,24 +35,23 @@ except Exception as e:
     logger.warning(f"Failed to configure logfire: {e}")
 
 # Local imports
-from agent_tools.deps import CodeWikiDeps
-from agent_tools.read_code_components import read_code_components_tool
-from agent_tools.str_replace_editor import str_replace_editor_tool
-from agent_tools.generate_sub_module_documentations import generate_sub_module_documentation_tool
-from llm_services import fallback_models
-from prompt_template import (
+from .agent_tools.deps import CodeWikiDeps
+from .agent_tools.read_code_components import read_code_components_tool
+from .agent_tools.str_replace_editor import str_replace_editor_tool
+from .agent_tools.generate_sub_module_documentations import generate_sub_module_documentation_tool
+from .llm_services import fallback_models
+from .prompt_template import (
     SYSTEM_PROMPT,
     LEAF_SYSTEM_PROMPT,
     format_user_prompt,
 )
-from utils import is_complex_module
-from cluster_modules import cluster_modules
+from .utils import is_complex_module
 from config import (
     Config,
     MODULE_TREE_FILENAME,
 )
 from utils import file_manager
-from dependency_analyzer.models.core import Node
+from .dependency_analyzer.models.core import Node
 
 
 class AgentOrchestrator:

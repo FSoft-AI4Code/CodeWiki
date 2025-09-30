@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from dependency_analyzer.models.core import Node
+from ..dependency_analyzer.models.core import Node
 
 @dataclass
 class CodeWikiDeps:

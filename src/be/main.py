@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Local imports
-from documentation_generator import DocumentationGenerator
+from .documentation_generator import DocumentationGenerator
 from config import (
     Config,
 )

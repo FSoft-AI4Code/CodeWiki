@@ -3,11 +3,11 @@ from collections import defaultdict
 import logging
 logger = logging.getLogger(__name__)
 
-from dependency_analyzer.models.core import Node
-from llm_services import call_llm
-from utils import count_tokens
+from .dependency_analyzer.models.core import Node
+from .llm_services import call_llm
+from .utils import count_tokens
 from config import MAX_TOKEN_PER_MODULE, CLUSTER_MODEL
-from prompt_template import format_cluster_prompt
+from .prompt_template import format_cluster_prompt
 
 
 def format_potential_core_components(leaf_nodes: List[str], components: Dict[str, Node]) -> tuple[str, str]:

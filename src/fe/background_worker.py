@@ -15,7 +15,7 @@ from queue import Queue
 from typing import Dict
 from dataclasses import asdict
 
-from documentation_generator import DocumentationGenerator
+from be.documentation_generator import DocumentationGenerator
 from config import Config, MAIN_MODEL
 from .models import JobStatus
 from .cache_manager import CacheManager
