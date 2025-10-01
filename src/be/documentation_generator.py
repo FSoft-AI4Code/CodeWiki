@@ -132,7 +132,7 @@ class DocumentationGenerator:
         module_tree_path = os.path.join(working_dir, MODULE_TREE_FILENAME)
         first_module_tree_path = os.path.join(working_dir, FIRST_MODULE_TREE_FILENAME)
         module_tree = file_manager.load_json(module_tree_path)
-        first_module_tree = file_manager.load_json(first_module_tree_path)
+        first_module_tree = file_manager.load_json(module_tree)
         
         # Get processing order (leaf modules first)
         processing_order = self.get_processing_order(first_module_tree)
