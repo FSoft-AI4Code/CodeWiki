@@ -1,9 +1,8 @@
-from pydantic_ai import RunContext, Tool, Agent
-
+from ..native_agent import AgentContext, NativeAgent, create_tool_definition
 from .deps import CodeWikiDeps
 from .read_code_components import read_code_components_tool
 from .str_replace_editor import str_replace_editor_tool
-from ..llm_services import fallback_models
+from ..llm_services import client, MAIN_MODEL, FALLBACK_MODEL_1
 from ..prompt_template import SYSTEM_PROMPT, LEAF_SYSTEM_PROMPT, format_user_prompt
 from ..utils import is_complex_module, count_tokens
 from ..cluster_modules import format_potential_core_components
@@ -12,7 +11,7 @@ from config import MAX_TOKEN_PER_LEAF_MODULE
 
 
 async def generate_sub_module_documentation(
-    ctx: RunContext[CodeWikiDeps],
+    ctx: AgentContext,
     sub_module_specs: dict[str, list[str]]
 ) -> str:
     """Generate detailed description of a given sub-module specs to the sub-agents
@@ -36,18 +35,20 @@ async def generate_sub_module_documentation(
         num_tokens = count_tokens(format_potential_core_components(core_component_ids, ctx.deps.components)[-1])
         
         if is_complex_module(ctx.deps.components, core_component_ids) and ctx.deps.current_depth < ctx.deps.max_depth and num_tokens >= MAX_TOKEN_PER_LEAF_MODULE:
-            sub_agent = Agent(
-                model=fallback_models,
+            sub_agent = NativeAgent(
+                client=client,
+                model=MAIN_MODEL,
+                fallback_model=FALLBACK_MODEL_1,
                 name=sub_module_name,
-                deps_type=CodeWikiDeps,
                 system_prompt=SYSTEM_PROMPT.format(module_name=sub_module_name),
                 tools=[read_code_components_tool, str_replace_editor_tool, generate_sub_module_documentation_tool],
             )
         else:
-            sub_agent = Agent(
-                model=fallback_models,
+            sub_agent = NativeAgent(
+                client=client,
+                model=MAIN_MODEL,
+                fallback_model=FALLBACK_MODEL_1,
                 name=sub_module_name,
-                deps_type=CodeWikiDeps,
                 system_prompt=LEAF_SYSTEM_PROMPT.format(module_name=sub_module_name),
                 tools=[read_code_components_tool, str_replace_editor_tool],
             )
@@ -78,4 +79,24 @@ async def generate_sub_module_documentation(
     return f"Generate successfully. Documentations: {', '.join([key + '.md' for key in sub_module_specs.keys()])} are saved in the working directory."
 
 
-generate_sub_module_documentation_tool = Tool(function=generate_sub_module_documentation, name="generate_sub_module_documentation", description="Generate detailed description of a given sub-module specs to the sub-agents", takes_ctx=True)
+# Tool definition for native OpenAI function calling
+generate_sub_module_documentation_tool = create_tool_definition(
+    name="generate_sub_module_documentation",
+    description="Generate detailed description of a given sub-module specs to the sub-agents",
+    function=generate_sub_module_documentation,
+    parameters={
+        "type": "object",
+        "properties": {
+            "sub_module_specs": {
+                "type": "object",
+                "description": "The specs of the sub-modules to generate documentation for. E.g. {'sub_module_1': ['core_component_1.1', 'core_component_1.2'], 'sub_module_2': ['core_component_2.1', 'core_component_2.2'], ...}",
+                "additionalProperties": {
+                    "type": "array",
+                    "items": {"type": "string"}
+                }
+            }
+        },
+        "required": ["sub_module_specs"]
+    },
+    takes_ctx=True
+)

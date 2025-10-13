@@ -1,5 +1,3 @@
-from pydantic_ai import Agent
-import logfire
 import logging
 import os
 from typing import Dict, List, Any
@@ -8,38 +6,13 @@ from typing import Dict, List, Any
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-try:
-    # Configure logfire with environment variables for Docker compatibility
-    logfire_token = os.getenv('LOGFIRE_TOKEN')
-    logfire_project = os.getenv('LOGFIRE_PROJECT_NAME', 'default')
-    logfire_service = os.getenv('LOGFIRE_SERVICE_NAME', 'default')
-    
-    if logfire_token:
-        # Configure with explicit token (for Docker)
-        logfire.configure(
-            token=logfire_token,
-            project_name=logfire_project,
-            service_name=logfire_service,
-        )
-    else:
-        # Use default configuration (for local development with logfire auth)
-        logfire.configure(
-            project_name=logfire_project,
-            service_name=logfire_service,
-        )
-    
-    logfire.instrument_pydantic_ai()
-    logger.info(f"Logfire configured successfully for project: {logfire_project}")
-    
-except Exception as e:
-    logger.warning(f"Failed to configure logfire: {e}")
-
 # Local imports
 from .agent_tools.deps import CodeWikiDeps
 from .agent_tools.read_code_components import read_code_components_tool
 from .agent_tools.str_replace_editor import str_replace_editor_tool
 from .agent_tools.generate_sub_module_documentations import generate_sub_module_documentation_tool
-from .llm_services import fallback_models
+from .llm_services import client, MAIN_MODEL, FALLBACK_MODEL_1
+from .native_agent import NativeAgent
 from .prompt_template import (
     SYSTEM_PROMPT,
     LEAF_SYSTEM_PROMPT,
@@ -61,13 +34,14 @@ class AgentOrchestrator:
         self.config = config
     
     def create_agent(self, module_name: str, components: Dict[str, Any], 
-                    core_component_ids: List[str]) -> Agent:
+                    core_component_ids: List[str]) -> NativeAgent:
         """Create an appropriate agent based on module complexity."""
         if is_complex_module(components, core_component_ids):
-            return Agent(
-                fallback_models,
+            return NativeAgent(
+                client=client,
+                model=MAIN_MODEL,
+                fallback_model=FALLBACK_MODEL_1,
                 name=module_name,
-                deps_type=CodeWikiDeps,
                 tools=[
                     read_code_components_tool, 
                     str_replace_editor_tool, 
@@ -76,10 +50,11 @@ class AgentOrchestrator:
                 system_prompt=SYSTEM_PROMPT.format(module_name=module_name),
             )
         else:
-            return Agent(
-                fallback_models,
+            return NativeAgent(
+                client=client,
+                model=MAIN_MODEL,
+                fallback_model=FALLBACK_MODEL_1,
                 name=module_name,
-                deps_type=CodeWikiDeps,
                 tools=[read_code_components_tool, str_replace_editor_tool],
                 system_prompt=LEAF_SYSTEM_PROMPT.format(module_name=module_name),
             )

@@ -19,9 +19,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-from pydantic_ai import RunContext, Tool
-
-from .deps import CodeWikiDeps
+from ..native_agent import AgentContext, create_tool_definition
 from ..utils import validate_mermaid_diagrams
 
 
@@ -707,9 +705,9 @@ class EditTool:
         return f"Here's the result of running `cat -n` on {file_descriptor}:\n" + file_content + "\n"
 
 async def str_replace_editor(
-    ctx: RunContext[CodeWikiDeps],
-    working_dir: Literal["repo", "docs"],
-    command: Literal["view", "create", "str_replace", "insert", "undo_edit"],
+    ctx: AgentContext,
+    working_dir: str,
+    command: str,
     path: str,
     file_text: Optional[str] = None,
     view_range: Optional[List[int]] = None,
@@ -766,17 +764,57 @@ async def str_replace_editor(
     return result
 
 
-str_replace_editor_tool = Tool(
-    function=str_replace_editor,
+# Tool definition for native OpenAI function calling
+str_replace_editor_tool = create_tool_definition(
     name="str_replace_editor",
-    description="""
-Custom editing tool for viewing, creating and editing files
+    description="""Custom editing tool for viewing, creating and editing files
     * State is persistent across command calls and discussions with the user
     * If `path` is a file, `view` displays the result of applying `cat -n`. If `path` is a directory, `view` lists non-hidden files and directories up to 2 levels deep.
     * The `create` command cannot be used if the specified `path` already exists as a file
     * If a `command` generates a long output, it will be truncated and marked with `<response clipped>`
     * The `undo_edit` command will revert the last edit made to the file at `path`
-    * Only `view` command is allowed when `working_dir` is `repo`.
-""".strip(),
+    * Only `view` command is allowed when `working_dir` is `repo`.""",
+    function=str_replace_editor,
+    parameters={
+        "type": "object",
+        "properties": {
+            "working_dir": {
+                "type": "string",
+                "enum": ["repo", "docs"],
+                "description": "The working directory to use. Choose 'repo' to work with repository files, or 'docs' to work with generated documentation files."
+            },
+            "command": {
+                "type": "string",
+                "enum": ["view", "create", "str_replace", "insert", "undo_edit"],
+                "description": "The command to run"
+            },
+            "path": {
+                "type": "string",
+                "description": "Path to file or directory, e.g. './chat_core.md' or './agents/'"
+            },
+            "file_text": {
+                "type": "string",
+                "description": "Required parameter of 'create' command, with the content of the file to be created"
+            },
+            "view_range": {
+                "type": "array",
+                "items": {"type": "integer"},
+                "description": "Optional parameter of 'view' command when path points to a file. Line number range [start, end]"
+            },
+            "old_str": {
+                "type": "string",
+                "description": "Required parameter of 'str_replace' command containing the string in path to replace"
+            },
+            "new_str": {
+                "type": "string",
+                "description": "Optional parameter of 'str_replace' command containing the new string"
+            },
+            "insert_line": {
+                "type": "integer",
+                "description": "Required parameter of 'insert' command specifying the line number to insert at"
+            }
+        },
+        "required": ["working_dir", "command", "path"]
+    },
     takes_ctx=True
 )

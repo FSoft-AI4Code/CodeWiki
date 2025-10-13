@@ -1,8 +1,7 @@
-from pydantic_ai import RunContext, Tool
-from .deps import CodeWikiDeps
+from ..native_agent import AgentContext, create_tool_definition
 
 
-async def read_code_components(ctx: RunContext[CodeWikiDeps], component_ids: list[str]) -> str:
+async def read_code_components(ctx: AgentContext, component_ids: list[str]) -> str:
     """Read the code of a given component id
 
     Args:
@@ -19,4 +18,22 @@ async def read_code_components(ctx: RunContext[CodeWikiDeps], component_ids: lis
 
     return "\n".join(results)
 
-read_code_components_tool = Tool(function=read_code_components, name="read_code_components", description="Read the code of a given list of component ids", takes_ctx=True)
+
+# Tool definition for native OpenAI function calling
+read_code_components_tool = create_tool_definition(
+    name="read_code_components",
+    description="Read the code of a given list of component ids",
+    function=read_code_components,
+    parameters={
+        "type": "object",
+        "properties": {
+            "component_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "The ids of the components to read, e.g. ['sweagent.types.AgentRunResult']"
+            }
+        },
+        "required": ["component_ids"]
+    },
+    takes_ctx=True
+)
