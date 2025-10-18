@@ -3,6 +3,7 @@ Generate command for documentation generation.
 """
 
 import sys
+import logging
 from pathlib import Path
 from typing import Optional
 import click
@@ -89,6 +90,9 @@ def generate_command(
     """
     logger = create_logger(verbose=verbose)
     start_time = time.time()
+    
+    # Suppress httpx INFO logs
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     
     try:
         # Pre-generation checks

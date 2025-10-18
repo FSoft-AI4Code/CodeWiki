@@ -135,6 +135,9 @@ async def validate_single_diagram(diagram_content: str, diagram_num: int, line_s
     Returns:
         Error message if invalid, empty string if valid
     """
+    import sys
+    import os
+    from io import StringIO
 
     core_error = ""
     
@@ -143,7 +146,16 @@ async def validate_single_diagram(diagram_content: str, diagram_num: int, line_s
         logger.debug("Using mermaid-parser-py to validate mermaid diagrams")
     
         try:
-            json_output = await parse_mermaid_py(diagram_content)
+            # Redirect stderr to suppress mermaid parser JavaScript errors
+            old_stderr = sys.stderr
+            sys.stderr = open(os.devnull, 'w')
+            
+            try:
+                json_output = await parse_mermaid_py(diagram_content)
+            finally:
+                # Restore stderr
+                sys.stderr.close()
+                sys.stderr = old_stderr
         except Exception as e:
             error_str = str(e)
             
