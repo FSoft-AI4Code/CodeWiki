@@ -94,8 +94,33 @@
                 mermaid.run();
             }
             
+            // Intercept clicks on markdown links and convert to hash-based navigation
+            this.interceptMarkdownLinks(content);
+            
             // Scroll to top
             document.getElementById('content').scrollTop = 0;
+        }
+        
+        interceptMarkdownLinks(container) {
+            // Find all links within the markdown content
+            const links = container.querySelectorAll('a[href]');
+            
+            links.forEach(link => {
+                const href = link.getAttribute('href');
+                
+                // Only intercept links to .md files (internal documentation links)
+                if (href && href.endsWith('.md') && !href.startsWith('http://') && !href.startsWith('https://')) {
+                    link.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        
+                        // Remove leading './' or '/' if present
+                        let cleanPath = href.replace(/^\.\//, '').replace(/^\//, '');
+                        
+                        // Update hash to trigger navigation
+                        window.location.hash = `/${cleanPath}`;
+                    });
+                }
+            });
         }
         
         updateBreadcrumbs(path) {
@@ -139,8 +164,6 @@
             link.href = `#/${moduleName}.md`;
             link.textContent = formatModuleName(moduleName);
             link.className = 'nav-link';
-            
-            // Active link highlighting is handled by updateActiveLink in the router
             
             item.appendChild(link);
             container.appendChild(item);
@@ -244,7 +267,7 @@
             const overviewLink = document.createElement('a');
             overviewLink.href = '#/';
             overviewLink.textContent = 'Overview';
-            overviewLink.className = 'nav-link';  // Active state will be set by router
+            overviewLink.className = 'nav-link';
             overviewItem.appendChild(overviewLink);
             navTree.appendChild(overviewItem);
             
