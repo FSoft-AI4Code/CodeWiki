@@ -1,0 +1,123 @@
+[build-system]
+requires = ["setuptools>=68.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codewiki"
+version = "1.0.0"
+description = "Transform codebases into comprehensive documentation using AI-powered analysis"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+authors = [
+    {name = "CodeWiki Contributors"}
+]
+keywords = ["documentation", "code-analysis", "ai", "llm", "developer-tools"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Documentation",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+    "click>=8.1.0",
+    "keyring>=24.0.0",
+    "GitPython>=3.1.40",
+    "Jinja2>=3.1.6",
+    "tree-sitter>=0.23.2",
+    "tree-sitter-language-pack>=0.8.0",
+    "tree-sitter-python>=0.23.6",
+    "tree-sitter-java>=0.23.5",
+    "tree-sitter-javascript>=0.21.4",
+    "tree-sitter-typescript>=0.21.2",
+    "tree-sitter-c>=0.21.4",
+    "tree-sitter-cpp>=0.23.4",
+    "tree-sitter-c-sharp>=0.23.1",
+    "openai>=1.107.0",
+    "litellm>=1.77.0",
+    "pydantic>=2.11.7",
+    "pydantic-settings>=2.10.1",
+    "pydantic-ai>=1.0.6",
+    "requests>=2.32.4",
+    "python-dotenv>=1.1.1",
+    "rich>=14.1.0",
+    "networkx>=3.5",
+    "psutil>=7.0.0",
+    "PyYAML>=6.0.2",
+    "mermaid-parser-py>=0.0.2",
+    "mermaid-py>=0.8.0"
+]
+
+[external]
+# Node.js is required for mermaid-py which validates mermaid diagrams in generated documentation
+build-requires = [
+    { name = "nodejs", version = ">=14.0.0" }
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "mypy>=1.5.0",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+codewiki = "codewiki.cli.main:cli"
+
+[project.urls]
+Homepage = "https://github.com/yourusername/codewiki"
+Documentation = "https://github.com/yourusername/codewiki/docs"
+Repository = "https://github.com/yourusername/codewiki"
+Issues = "https://github.com/yourusername/codewiki/issues"
+
+[tool.setuptools]
+packages = [
+    "codewiki", 
+    "codewiki.cli", 
+    "codewiki.cli.commands", 
+    "codewiki.cli.models", 
+    "codewiki.cli.utils", 
+    "codewiki.cli.adapters",
+    "codewiki.src",
+    "codewiki.src.be",
+    "codewiki.src.be.agent_tools",
+    "codewiki.src.be.dependency_analyzer",
+    "codewiki.src.be.dependency_analyzer.analysis",
+    "codewiki.src.be.dependency_analyzer.analyzers",
+    "codewiki.src.be.dependency_analyzer.models",
+    "codewiki.src.be.dependency_analyzer.utils",
+    "codewiki.src.fe"
+]
+
+[tool.setuptools.package-data]
+codewiki = ["templates/**/*", "py.typed"]
+
+[tool.black]
+line-length = 100
+target-version = ['py312']
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --cov=codewiki --cov-report=term-missing"
+

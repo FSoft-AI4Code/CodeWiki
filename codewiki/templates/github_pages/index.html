@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{TITLE}} - Documentation</title>
+    <meta name="description" content="Generated documentation for {{TITLE}}">
+    
+    <!-- CDN Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@9.1.0/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.0/dist/mermaid.min.js"></script>
+    
+    <style>
+        {{STYLES}}
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header id="header">
+            <div class="header-content">
+                <h1 id="doc-title">{{TITLE}}</h1>
+                <nav id="header-nav">
+                    {{#REPOSITORY_URL}}<a href="{{REPOSITORY_URL}}" target="_blank">GitHub</a>{{/REPOSITORY_URL}}
+                </nav>
+            </div>
+            <button id="mobile-menu-toggle">☰</button>
+        </header>
+
+        <!-- Main Container -->
+        <div id="main-container">
+            <!-- Sidebar Navigation -->
+            <aside id="sidebar">
+                <div id="nav-tree"></div>
+            </aside>
+
+            <!-- Content Area -->
+            <main id="content">
+                <div id="breadcrumbs"></div>
+                <article id="markdown-content">
+                    <p>Loading...</p>
+                </article>
+            </main>
+        </div>
+    </div>
+
+    <!-- Configuration Data -->
+    <script>
+        const CODEWIKI_CONFIG = {{CONFIG_JSON}};
+        const MODULE_TREE = {{MODULE_TREE_JSON}};
+    </script>
+
+    <!-- Application Logic -->
+    <script>
+        {{APP_SCRIPT}}
+    </script>
+</body>
+</html>
+
