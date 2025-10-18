@@ -3,51 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{TITLE}} - Documentation</title>
+    <title>{{TITLE}}</title>
     <meta name="description" content="Generated documentation for {{TITLE}}">
     
     <!-- CDN Libraries -->
-    <script src="https://cdn.jsdelivr.net/npm/marked@9.1.0/marked.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.0/dist/mermaid.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@11.9.0/dist/mermaid.min.js"></script>
     
     <style>
         {{STYLES}}
     </style>
 </head>
 <body>
-    <div id="app">
-        <!-- Header -->
-        <header id="header">
-            <div class="header-content">
-                <h1 id="doc-title">{{TITLE}}</h1>
-                <nav id="header-nav">
-                    {{#REPOSITORY_URL}}<a href="{{REPOSITORY_URL}}" target="_blank">GitHub</a>{{/REPOSITORY_URL}}
-                </nav>
-            </div>
-            <button id="mobile-menu-toggle">☰</button>
-        </header>
-
-        <!-- Main Container -->
-        <div id="main-container">
-            <!-- Sidebar Navigation -->
-            <aside id="sidebar">
-                <div id="nav-tree"></div>
-            </aside>
-
-            <!-- Content Area -->
-            <main id="content">
-                <div id="breadcrumbs"></div>
-                <article id="markdown-content">
-                    <p>Loading...</p>
-                </article>
-            </main>
-        </div>
+    <div class="container">
+        <nav class="sidebar" id="sidebar">
+            <a href="#/" class="logo">📚 {{TITLE}}</a>
+            
+            <div id="metadata-info"></div>
+            
+            <div id="nav-tree"></div>
+        </nav>
         
-        <!-- Footer -->
-        <footer id="footer" style="text-align: center; padding: 1rem; color: #6a737d; font-size: 0.75rem; border-top: 1px solid #e1e4e8;">
-            Generated with <a href="https://github.com/your-org/codewiki" target="_blank" style="color: #0366d6; text-decoration: none;">CodeWiki</a>
-        </footer>
+        <main class="content" id="content">
+            <div class="markdown-content" id="markdown-content">
+                <p>Loading...</p>
+            </div>
+        </main>
     </div>
 
     <!-- Configuration Data -->
