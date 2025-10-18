@@ -3,89 +3,12 @@
 (function() {
     'use strict';
     
-    // Simple markdown parser (GitHub-flavored)
-    function parseMarkdown(markdown) {
-        let html = markdown;
-        
-        // Escape HTML
-        html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        
-        // Headers
-        html = html.replace(/^##### (.*$)/gim, '<h5>$1</h5>');
-        html = html.replace(/^#### (.*$)/gim, '<h4>$1</h4>');
-        html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
-        html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
-        html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
-        
-        // Bold
-        html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-        html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
-        
-        // Italic
-        html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-        html = html.replace(/_(.+?)_/g, '<em>$1</em>');
-        
-        // Code blocks with language support (including mermaid)
-        html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, function(match, lang, code) {
-            code = code.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-            if (lang === 'mermaid') {
-                return '<div class="mermaid">' + code + '</div>';
-            }
-            return '<pre><code class="language-' + (lang || 'plaintext') + '">' + code.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</code></pre>';
+    // Configure marked
+    if (typeof marked !== 'undefined') {
+        marked.setOptions({
+            gfm: true,
+            breaks: true
         });
-        
-        // Inline code
-        html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-        
-        // Links
-        html = html.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2">$1</a>');
-        
-        // Images
-        html = html.replace(/!\[([^\]]*)\]\(([^\)]+)\)/g, '<img src="$2" alt="$1" />');
-        
-        // Blockquotes
-        html = html.replace(/^\> (.+)$/gim, '<blockquote>$1</blockquote>');
-        
-        // Horizontal rules
-        html = html.replace(/^---$/gim, '<hr>');
-        html = html.replace(/^\*\*\*$/gim, '<hr>');
-        
-        // Unordered lists
-        html = html.replace(/^\* (.+)$/gim, '<li>$1</li>');
-        html = html.replace(/^- (.+)$/gim, '<li>$1</li>');
-        html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
-        
-        // Ordered lists
-        html = html.replace(/^\d+\. (.+)$/gim, '<li>$1</li>');
-        
-        // Tables (basic support)
-        html = html.replace(/\|(.+)\|/g, function(match) {
-            const cells = match.split('|').filter(cell => cell.trim());
-            return '<tr>' + cells.map(cell => '<td>' + cell.trim() + '</td>').join('') + '</tr>';
-        });
-        html = html.replace(/(<tr>.*<\/tr>)/s, '<table>$1</table>');
-        
-        // Paragraphs
-        html = html.replace(/\n\n/g, '</p><p>');
-        html = '<p>' + html + '</p>';
-        
-        // Clean up
-        html = html.replace(/<p><\/p>/g, '');
-        html = html.replace(/<p>(<h[1-6]>)/g, '$1');
-        html = html.replace(/(<\/h[1-6]>)<\/p>/g, '$1');
-        html = html.replace(/<p>(<table>)/g, '$1');
-        html = html.replace(/(<\/table>)<\/p>/g, '$1');
-        html = html.replace(/<p>(<ul>)/g, '$1');
-        html = html.replace(/(<\/ul>)<\/p>/g, '$1');
-        html = html.replace(/<p>(<pre>)/g, '$1');
-        html = html.replace(/(<\/pre>)<\/p>/g, '$1');
-        html = html.replace(/<p>(<div class="mermaid">)/g, '$1');
-        html = html.replace(/(<\/div>)<\/p>/g, '$1');
-        html = html.replace(/<p>(<hr>)<\/p>/g, '$1');
-        html = html.replace(/<p>(<blockquote>)/g, '$1');
-        html = html.replace(/(<\/blockquote>)<\/p>/g, '$1');
-        
-        return html;
     }
     
     // Initialize mermaid
@@ -181,11 +104,22 @@
         }
         
         async renderMarkdown(markdown) {
-            const html = parseMarkdown(markdown);
             const content = document.getElementById('markdown-content');
+            
+            // Parse markdown to HTML
+            const html = marked.parse(markdown);
             content.innerHTML = html;
             
-            // Process mermaid diagrams
+            // Convert mermaid code blocks to mermaid divs
+            const mermaidBlocks = content.querySelectorAll('code.language-mermaid');
+            mermaidBlocks.forEach((block) => {
+                const div = document.createElement('div');
+                div.className = 'mermaid';
+                div.textContent = block.textContent;
+                block.parentElement.replaceWith(div);
+            });
+            
+            // Render mermaid diagrams
             const mermaidDivs = content.querySelectorAll('.mermaid');
             if (mermaidDivs.length > 0) {
                 try {
@@ -202,47 +136,33 @@
         }
     }
     
-    // Navigation tree renderer with proper subsection support
+    // Navigation tree renderer
     function renderNavTree(tree, container, depth = 0) {
         if (!tree || typeof tree !== 'object') return;
         
         for (const [moduleName, moduleData] of Object.entries(tree)) {
+            // Skip metadata fields
             if (moduleName === 'description' || moduleName === 'components') continue;
             
-            // Check if this has components (is a page) or just children (is a section)
-            const hasComponents = moduleData && moduleData.components && moduleData.components.length > 0;
-            const hasChildren = moduleData && moduleData.children && Object.keys(moduleData.children).length > 0;
-            
-            if (hasComponents) {
-                // This is a page - render as link
-                const item = document.createElement('div');
-                item.className = depth > 0 ? 'nav-subsection' : 'nav-item';
-                
-                const link = document.createElement('a');
-                link.href = `#/${moduleName}.md`;
-                link.textContent = formatModuleName(moduleName);
-                link.className = 'nav-link';
-                
-                item.appendChild(link);
-                container.appendChild(item);
-            } else if (hasChildren) {
-                // This is a section header - render as text
-                const sectionHeader = document.createElement('div');
-                sectionHeader.className = 'nav-section-header';
-                sectionHeader.textContent = formatModuleName(moduleName);
-                if (depth > 0) {
-                    sectionHeader.style.fontSize = `${14 - (depth * 1)}px`;
-                    sectionHeader.style.textTransform = 'none';
-                }
-                container.appendChild(sectionHeader);
+            // Create navigation item
+            const item = document.createElement('div');
+            if (depth > 0) {
+                item.className = 'nav-subsection';
+            } else {
+                item.className = 'nav-item';
             }
             
-            // Render children recursively
-            if (hasChildren) {
-                const subsection = document.createElement('div');
-                subsection.className = 'nav-subsection';
-                container.appendChild(subsection);
-                renderNavTree(moduleData.children, subsection, depth + 1);
+            const link = document.createElement('a');
+            link.href = `#/${moduleName}.md`;
+            link.textContent = formatModuleName(moduleName);
+            link.className = 'nav-link';
+            
+            item.appendChild(link);
+            container.appendChild(item);
+            
+            // Render children recursively if they exist
+            if (moduleData && moduleData.children && Object.keys(moduleData.children).length > 0) {
+                renderNavTree(moduleData.children, container, depth + 1);
             }
         }
     }
