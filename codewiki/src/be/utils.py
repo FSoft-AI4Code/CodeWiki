@@ -33,7 +33,7 @@ def count_tokens(text: str) -> int:
     Count the number of tokens in a text.
     """
     length = len(enc.encode(text))
-    logger.info(f"Number of tokens: {length}")
+    logger.debug(f"Number of tokens: {length}")
     return length
 
 
@@ -76,7 +76,7 @@ async def validate_mermaid_diagrams(md_file_path: str, relative_path: str) -> st
                 errors.append(error_msg)
         
         if errors:
-            logger.info(f"Mermaid syntax errors found in file: {md_file_path}: {errors}")
+            logger.debug(f"Mermaid syntax errors found in file: {md_file_path}: {errors}")
         
         if errors:
             return "Mermaid syntax errors found in file: " + relative_path + "\n" + "\n".join(errors)
@@ -140,7 +140,7 @@ async def validate_single_diagram(diagram_content: str, diagram_num: int, line_s
     
     try:
         from mermaid_parser.parser import parse_mermaid_py
-        logger.info("Using mermaid-parser-py to validate mermaid diagrams")
+        logger.debug("Using mermaid-parser-py to validate mermaid diagrams")
     
         try:
             json_output = await parse_mermaid_py(diagram_content)
@@ -160,7 +160,7 @@ async def validate_single_diagram(diagram_content: str, diagram_num: int, line_s
                 raise Exception(error_str)
 
     except Exception as e:
-        logger.info("Using mermaid-py to validate mermaid diagrams")
+        logger.debug("Using mermaid-py to validate mermaid diagrams")
         try:
             import mermaid as md
             # Create Mermaid object and check response

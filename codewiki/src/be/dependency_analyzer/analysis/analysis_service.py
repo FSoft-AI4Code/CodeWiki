@@ -55,7 +55,7 @@ class AnalysisService:
             Dict with analysis results including nodes and relationships
         """
         try:
-            logger.info(f"Analyzing local repository at {repo_path}")
+            logger.debug(f"Analyzing local repository at {repo_path}")
             
             # Get repo analyzer to find files
             repo_analyzer = RepoAnalyzer()
@@ -71,9 +71,9 @@ class AnalysisService:
             # Limit number of files
             if len(code_files) > max_files:
                 code_files = code_files[:max_files]
-                logger.info(f"Limited analysis to {max_files} files")
+                logger.debug(f"Limited analysis to {max_files} files")
             
-            logger.info(f"Analyzing {len(code_files)} files")
+            logger.debug(f"Analyzing {len(code_files)} files")
             
             # Analyze files
             result = self.call_graph_analyzer.analyze_code_files(code_files, repo_path)
@@ -115,18 +115,18 @@ class AnalysisService:
         """
         temp_dir = None
         try:
-            logger.info(f"Starting full analysis of {github_url}")
+            logger.debug(f"Starting full analysis of {github_url}")
 
             temp_dir = self._clone_repository(github_url)
             repo_info = self._parse_repository_info(github_url)
 
-            logger.info("Analyzing repository file structure...")
+            logger.debug("Analyzing repository file structure...")
             structure_result = self._analyze_structure(temp_dir, include_patterns, exclude_patterns)
-            logger.info(f"Found {structure_result['summary']['total_files']} files to analyze.")
+            logger.debug(f"Found {structure_result['summary']['total_files']} files to analyze.")
 
-            logger.info("Starting call graph analysis...")
+            logger.debug("Starting call graph analysis...")
             call_graph_result = self._analyze_call_graph(structure_result["file_tree"], temp_dir)
-            logger.info(
+            logger.debug(
                 f"Call graph analysis complete. Found {call_graph_result['call_graph']['total_functions']} functions."
             )
 
@@ -152,10 +152,10 @@ class AnalysisService:
                 readme_content=readme_content,
             )
 
-            logger.info(f"Cleaning up temporary repository directory: {temp_dir}")
+            logger.debug(f"Cleaning up temporary repository directory: {temp_dir}")
             self._cleanup_repository(temp_dir)
 
-            logger.info(
+            logger.debug(
                 f"Analysis completed: {analysis_result.summary['total_functions']} functions found"
             )
             return analysis_result
@@ -185,7 +185,7 @@ class AnalysisService:
         """
         temp_dir = None
         try:
-            logger.info(f"Starting structure analysis of {github_url}")
+            logger.debug(f"Starting structure analysis of {github_url}")
 
             temp_dir = self._clone_repository(github_url)
             repo_info = self._parse_repository_info(github_url)
@@ -203,7 +203,7 @@ class AnalysisService:
 
             self._cleanup_repository(temp_dir)
 
-            logger.info(
+            logger.debug(
                 f"Structure analysis completed: {result['file_summary']['total_files']} files found"
             )
             return result
@@ -216,9 +216,9 @@ class AnalysisService:
 
     def _clone_repository(self, github_url: str) -> str:
         """Clone repository and return temp dir path."""
-        logger.info(f"Cloning {github_url}...")
+        logger.debug(f"Cloning {github_url}...")
         temp_dir = clone_repository(github_url)
-        logger.info(f"Repository cloned to {temp_dir}")
+        logger.debug(f"Repository cloned to {temp_dir}")
         self._temp_directories.append(temp_dir)
         return temp_dir
 
@@ -233,7 +233,7 @@ class AnalysisService:
         exclude_patterns: Optional[List[str]],
     ) -> Dict[str, Any]:
         """Analyze repository file structure with filtering."""
-        logger.info(
+        logger.debug(
             f"Initializing RepoAnalyzer with include: {include_patterns}, exclude: {exclude_patterns}"
         )
         repo_analyzer = RepoAnalyzer(include_patterns, exclude_patterns)
@@ -246,12 +246,12 @@ class AnalysisService:
         #     readme_path = Path(repo_dir) / name
         #     if readme_path.exists():
         #         try:
-        #             logger.info(f"Found README file at {readme_path}")
+        #             logger.debug(f"Found README file at {readme_path}")
         #             return readme_path.read_text(encoding="utf-8")
         #         except Exception as e:
         #             logger.warning(f"Could not read README file at {readme_path}: {e}")
         #             return None
-        # logger.info("No README file found in repository root.")
+        # logger.debug("No README file found in repository root.")
         # return None
         base = Path(repo_dir)
         possible_readme_names = ["README.md", "README", "readme.md", "README.txt"]
@@ -260,12 +260,12 @@ class AnalysisService:
             if p.exists():
                 try:
                     assert_safe_path(base, p)
-                    logger.info(f"Found README file at {p}")
+                    logger.debug(f"Found README file at {p}")
                     return safe_open_text(base, p, encoding="utf-8")
                 except Exception as e:
                     logger.warning(f"Skipping unsafe/ unreadable README at {p}: {e}")
                     return None
-        logger.info("No README file found in repository root.")
+        logger.debug("No README file found in repository root.")
         return None
 
     def _analyze_call_graph(self, file_tree: Dict[str, Any], repo_dir: str) -> Dict[str, Any]:
@@ -277,12 +277,12 @@ class AnalysisService:
         - JavaScript/TypeScript AST analysis (planned)
         - Additional language support (future)
         """
-        logger.info("Extracting code files from file tree...")
+        logger.debug("Extracting code files from file tree...")
         code_files = self.call_graph_analyzer.extract_code_files(file_tree)
 
-        logger.info(f"Found {len(code_files)} total code files. Filtering for supported languages.")
+        logger.debug(f"Found {len(code_files)} total code files. Filtering for supported languages.")
         supported_files = self._filter_supported_languages(code_files)
-        logger.info(f"Analyzing {len(supported_files)} supported files.")
+        logger.debug(f"Analyzing {len(supported_files)} supported files.")
 
         result = self.call_graph_analyzer.analyze_code_files(supported_files, repo_dir)
 
@@ -321,7 +321,7 @@ class AnalysisService:
 
     def _cleanup_repository(self, temp_dir: str):
         """Clean up cloned repository."""
-        logger.info(f"Attempting to clean up {temp_dir}")
+        logger.debug(f"Attempting to clean up {temp_dir}")
         cleanup_repository(temp_dir)
         if temp_dir in self._temp_directories:
             self._temp_directories.remove(temp_dir)

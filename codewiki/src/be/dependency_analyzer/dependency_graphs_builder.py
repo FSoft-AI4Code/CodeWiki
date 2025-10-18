@@ -41,7 +41,7 @@ class DependencyGraphBuilder:
 
         filtered_folders = None
         # if os.path.exists(filtered_folders_path):
-        #     logger.info(f"Loading filtered folders from {filtered_folders_path}")
+        #     logger.debug(f"Loading filtered folders from {filtered_folders_path}")
         #     filtered_folders = file_manager.load_json(filtered_folders_path)
         # else:
         #     # Parse repository

@@ -54,7 +54,7 @@ def cluster_modules(
     potential_core_components, potential_core_components_with_code = format_potential_core_components(leaf_nodes, components)
 
     if count_tokens(potential_core_components_with_code) <= MAX_TOKEN_PER_MODULE:
-        logger.info(f"Skipping clustering for {current_module_name} because the potential core components are too few: {count_tokens(potential_core_components_with_code)} tokens")
+        logger.debug(f"Skipping clustering for {current_module_name} because the potential core components are too few: {count_tokens(potential_core_components_with_code)} tokens")
         return {}
 
     prompt = format_cluster_prompt(potential_core_components, current_module_tree, current_module_name)
@@ -79,7 +79,7 @@ def cluster_modules(
 
     # check if the module tree is valid
     if len(module_tree) <= 1:
-        logger.info(f"Skipping clustering for {current_module_name} because the module tree is too small: {len(module_tree)} modules")
+        logger.debug(f"Skipping clustering for {current_module_name} because the module tree is too small: {len(module_tree)} modules")
         return {}
 
     if current_module_tree == {}:

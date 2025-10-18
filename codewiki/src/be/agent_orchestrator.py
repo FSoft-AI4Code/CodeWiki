@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 #         )
     
 #     logfire.instrument_pydantic_ai()
-#     logger.info(f"Logfire configured successfully for project: {logfire_project}")
+#     logger.debug(f"Logfire configured successfully for project: {logfire_project}")
     
 # except Exception as e:
 #     logger.warning(f"Failed to configure logfire: {e}")
@@ -45,10 +45,11 @@ from codewiki.src.be.prompt_template import (
     LEAF_SYSTEM_PROMPT,
     format_user_prompt,
 )
-from .utils import is_complex_module
+from codewiki.src.be.utils import is_complex_module
 from codewiki.src.config import (
     Config,
     MODULE_TREE_FILENAME,
+    OVERVIEW_FILENAME,
 )
 from codewiki.src.utils import file_manager
 from codewiki.src.be.dependency_analyzer.models.core import Node
@@ -88,7 +89,7 @@ class AgentOrchestrator:
     async def process_module(self, module_name: str, components: Dict[str, Node], 
                            core_component_ids: List[str], module_path: List[str], working_dir: str) -> Dict[str, Any]:
         """Process a single module and generate its documentation."""
-        logger.info(f"Processing module: {module_name}")
+        logger.debug(f"Processing module: {module_name}")
         
         # Load or create module tree
         module_tree_path = os.path.join(working_dir, MODULE_TREE_FILENAME)
@@ -111,6 +112,12 @@ class AgentOrchestrator:
             config=self.config
         )
 
+        # check if overview docs already exists
+        overview_docs_path = os.path.join(working_dir, OVERVIEW_FILENAME)
+        if os.path.exists(overview_docs_path):
+            logger.info(f"Overview docs already exists at {overview_docs_path}")
+            return module_tree
+
         # check if module docs already exists
         docs_path = os.path.join(working_dir, f"{module_name}.md")
         if os.path.exists(docs_path):
@@ -131,7 +138,7 @@ class AgentOrchestrator:
             
             # Save updated module tree
             file_manager.save_json(deps.module_tree, module_tree_path)
-            logger.info(f"Successfully processed module: {module_name}")
+            logger.debug(f"Successfully processed module: {module_name}")
             
             return deps.module_tree
             

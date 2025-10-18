@@ -26,7 +26,7 @@ class DependencyParser:
         self.analysis_service = AnalysisService()
 
     def parse_repository(self, filtered_folders: List[str] = None) -> Dict[str, Node]:
-        logger.info(f"Parsing repository at {self.repo_path}")
+        logger.debug(f"Parsing repository at {self.repo_path}")
         
         structure_result = self.analysis_service._analyze_structure(
             self.repo_path, 
@@ -41,7 +41,7 @@ class DependencyParser:
         
         self._build_components_from_analysis(call_graph_result)
         
-        logger.info(f"Found {len(self.components)} components across {len(self.modules)} modules")
+        logger.debug(f"Found {len(self.components)} components across {len(self.modules)} modules")
         return self.components
     
     def _build_components_from_analysis(self, call_graph_result: Dict):
@@ -141,5 +141,5 @@ class DependencyParser:
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(result, f, indent=2, ensure_ascii=False)
         
-        logger.info(f"Saved {len(self.components)} components to {output_path}")
+        logger.debug(f"Saved {len(self.components)} components to {output_path}")
         return result

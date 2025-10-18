@@ -50,7 +50,7 @@ async def main() -> None:
         await doc_generator.run()
         
     except KeyboardInterrupt:
-        logger.info("Documentation generation interrupted by user")
+        logger.debug("Documentation generation interrupted by user")
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}")
         raise

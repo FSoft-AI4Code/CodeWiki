@@ -70,7 +70,7 @@ class DocumentationGenerator:
         
         metadata_path = os.path.join(working_dir, "metadata.json")
         file_manager.save_json(metadata, metadata_path)
-        logger.info(f"Documentation metadata saved to: {metadata_path}")
+        logger.debug(f"Documentation metadata saved to: {metadata_path}")
     
     def get_processing_order(self, module_tree: Dict[str, Any], parent_path: List[str] = []) -> List[tuple[List[str], str]]:
         """Get the processing order using topological sort (leaf modules first)."""
@@ -135,7 +135,7 @@ class DocumentationGenerator:
         
         # Get processing order (leaf modules first)
         processing_order = self.get_processing_order(first_module_tree)
-        logger.info(f"Processing {len(processing_order)} modules in dependency order:\n{processing_order}")
+        logger.debug(f"Processing {len(processing_order)} modules in dependency order:\n{processing_order}")
         
         # Process modules in dependency order
         final_module_tree = module_tree
@@ -175,12 +175,12 @@ class DocumentationGenerator:
                     continue
 
             # Generate repo overview
-            logger.info(f"Generating repo overview")
+            logger.debug(f"Generating repo overview")
             final_module_tree = await self.generate_parent_module_docs(
                 [], working_dir
             )
         else:
-            logger.info(f"Processing whole repo because repo can fit in the context window")
+            logger.debug(f"Processing whole repo because repo can fit in the context window")
             repo_name = os.path.basename(os.path.normpath(self.config.repo_path))
             final_module_tree = await self.agent_orchestrator.process_module(
                 repo_name, components, leaf_nodes, [], working_dir
@@ -197,12 +197,18 @@ class DocumentationGenerator:
         """Generate documentation for a parent module based on its children's documentation."""
         module_name = module_path[-1] if len(module_path) >= 1 else os.path.basename(os.path.normpath(self.config.repo_path))
 
-        logger.info(f"Generating parent documentation for: {module_name}")
+        logger.debug(f"Generating parent documentation for: {module_name}")
         
         # Load module tree
         module_tree_path = os.path.join(working_dir, MODULE_TREE_FILENAME)
         module_tree = file_manager.load_json(module_tree_path)
-        
+
+        # check if parent docs already exists
+        parent_docs_path = os.path.join(working_dir, f"{module_name if len(module_path) >= 1 else OVERVIEW_FILENAME.replace('.md', '')}.md")
+        if os.path.exists(parent_docs_path):
+            logger.info(f"Parent docs already exists at {parent_docs_path}")
+            return module_tree
+
         # Create repo structure with 1-depth children docs and target indicator
         repo_structure = self.build_overview_structure(module_tree, module_path, working_dir)
 
@@ -220,10 +226,9 @@ class DocumentationGenerator:
             # Parse and save parent documentation
             parent_content = parent_docs.split("<OVERVIEW>")[1].split("</OVERVIEW>")[0].strip()
             # parent_content = prompt
-            parent_docs_path = os.path.join(working_dir, f"{module_name if len(module_path) >= 1 else OVERVIEW_FILENAME.replace('.md', '')}.md")
             file_manager.save_text(parent_content, parent_docs_path)
             
-            logger.info(f"Successfully generated parent documentation for: {module_name}")
+            logger.debug(f"Successfully generated parent documentation for: {module_name}")
             return module_tree
             
         except Exception as e:
@@ -236,8 +241,8 @@ class DocumentationGenerator:
             # Build dependency graph
             components, leaf_nodes = self.graph_builder.build_dependency_graph()
 
-            logger.info(f"Found {len(leaf_nodes)} leaf nodes")
-            # logger.info(f"Leaf nodes:\n{'\n'.join(sorted(leaf_nodes)[:200])}")
+            logger.debug(f"Found {len(leaf_nodes)} leaf nodes")
+            # logger.debug(f"Leaf nodes:\n{'\n'.join(sorted(leaf_nodes)[:200])}")
             # exit()
             
             # Cluster modules
@@ -248,16 +253,16 @@ class DocumentationGenerator:
             
             # Check if module tree exists
             if os.path.exists(first_module_tree_path):
-                logger.info(f"Module tree found at {first_module_tree_path}")
+                logger.debug(f"Module tree found at {first_module_tree_path}")
                 module_tree = file_manager.load_json(first_module_tree_path)
             else:
-                logger.info(f"Module tree not found at {module_tree_path}, clustering modules")
+                logger.debug(f"Module tree not found at {module_tree_path}, clustering modules")
                 module_tree = cluster_modules(leaf_nodes, components, self.config)
                 file_manager.save_json(module_tree, first_module_tree_path)
             
             file_manager.save_json(module_tree, module_tree_path)
             
-            logger.info(f"Grouped components into {len(module_tree)} modules")
+            logger.debug(f"Grouped components into {len(module_tree)} modules")
             
             # Generate module documentation using dynamic programming approach
             # This processes leaf modules first, then parent modules
@@ -266,9 +271,9 @@ class DocumentationGenerator:
             # Create documentation metadata
             self.create_documentation_metadata(working_dir, components, len(leaf_nodes))
             
-            logger.info(f"Documentation generation completed successfully using dynamic programming!")
-            logger.info(f"Processing order: leaf modules → parent modules → repository overview")
-            logger.info(f"Documentation saved to: {working_dir}")
+            logger.debug(f"Documentation generation completed successfully using dynamic programming!")
+            logger.debug(f"Processing order: leaf modules → parent modules → repository overview")
+            logger.debug(f"Documentation saved to: {working_dir}")
             
         except Exception as e:
             logger.error(f"Documentation generation failed: {str(e)}")
