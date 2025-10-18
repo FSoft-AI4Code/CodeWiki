@@ -205,26 +205,22 @@ class CLIDocumentationGenerator:
         
         from codewiki.cli.html_generator import HTMLGenerator
         
-        # Create module tree placeholder
-        module_tree = {
-            "Overview": {
-                "description": "Repository overview",
-                "components": [],
-                "children": {}
-            }
-        }
-        
         # Generate HTML
         html_generator = HTMLGenerator()
+        
+        if self.verbose:
+            self.progress_tracker.update_stage(0.3, "Loading module tree and metadata...")
+        
         repo_info = html_generator.detect_repository_info(self.repo_path)
         
+        # Generate HTML with auto-loading of module_tree and metadata from docs_dir
         output_path = self.output_dir / "index.html"
         html_generator.generate(
             output_path=output_path,
             title=repo_info['name'],
-            module_tree=module_tree,
             repository_url=repo_info['url'],
-            github_pages_url=repo_info['github_pages_url']
+            github_pages_url=repo_info['github_pages_url'],
+            docs_dir=self.output_dir  # Auto-load module_tree and metadata from here
         )
         
         self.job.files_generated.append("index.html")

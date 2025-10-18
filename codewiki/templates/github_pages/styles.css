@@ -17,7 +17,11 @@ body {
 #app {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    min-height: 100vh;
+}
+
+#footer {
+    margin-top: auto;
 }
 
 /* Header */
@@ -89,6 +93,7 @@ body {
     text-decoration: none;
     border-radius: 4px;
     transition: background 0.2s;
+    font-size: 0.875rem;
 }
 
 .nav-link:hover {
@@ -98,6 +103,25 @@ body {
 .nav-link.active {
     background: #0366d6;
     color: #ffffff;
+}
+
+/* Support for deeply nested navigation items */
+.nav-item[style*="padding-left: 2rem"] .nav-link {
+    font-size: 0.8125rem;
+    color: #586069;
+}
+
+.nav-item[style*="padding-left: 3rem"] .nav-link {
+    font-size: 0.75rem;
+    color: #6a737d;
+}
+
+.metadata-box {
+    margin: 1rem 0;
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
 }
 
 /* Content */
@@ -212,6 +236,44 @@ body {
 
 #markdown-content li {
     margin: 0.5rem 0;
+}
+
+#markdown-content blockquote {
+    border-left: 4px solid #0366d6;
+    padding: 0.5rem 1rem;
+    margin: 1rem 0;
+    background: #f6f8fa;
+    color: #586069;
+}
+
+#markdown-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 6px;
+    margin: 1rem 0;
+}
+
+#markdown-content hr {
+    border: none;
+    border-top: 1px solid #e1e4e8;
+    margin: 2rem 0;
+}
+
+/* Mermaid diagrams */
+.mermaid {
+    background: #ffffff;
+    border: 1px solid #e1e4e8;
+    border-radius: 6px;
+    padding: 1rem;
+    margin: 1rem 0;
+    text-align: center;
+}
+
+/* Loading state */
+.loading {
+    text-align: center;
+    padding: 2rem;
+    color: #586069;
 }
 
 /* Responsive Design */

@@ -85,18 +85,21 @@
         }
     }
     
-    // Navigation tree renderer
+    // Navigation tree renderer - improved to handle nested structures
     function renderNavTree(tree, container, depth = 0) {
         if (!tree || typeof tree !== 'object') return;
         
         for (const [moduleName, moduleData] of Object.entries(tree)) {
+            // Skip if this is just metadata
+            if (moduleName === 'description' || moduleName === 'components') continue;
+            
             const item = document.createElement('div');
             item.className = 'nav-item';
             item.style.paddingLeft = `${depth * 1}rem`;
             
             const link = document.createElement('a');
             link.href = `#/${moduleName}.md`;
-            link.textContent = moduleName;
+            link.textContent = formatModuleName(moduleName);
             link.className = 'nav-link';
             
             // Highlight active link
@@ -108,11 +111,73 @@
             item.appendChild(link);
             container.appendChild(item);
             
-            // Render children recursively
-            if (moduleData.children && Object.keys(moduleData.children).length > 0) {
+            // Render children recursively if they exist
+            if (moduleData && moduleData.children && Object.keys(moduleData.children).length > 0) {
                 renderNavTree(moduleData.children, container, depth + 1);
             }
         }
+    }
+    
+    // Format module name for display
+    function formatModuleName(name) {
+        // Replace underscores and hyphens with spaces, capitalize words
+        return name
+            .replace(/[_-]/g, ' ')
+            .split(' ')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+    }
+    
+    // Render metadata info box
+    function renderMetadata(metadata) {
+        if (!metadata || !metadata.generation_info) return null;
+        
+        const metadataBox = document.createElement('div');
+        metadataBox.style.cssText = `
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8fafc;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            font-size: 11px;
+            line-height: 1.6;
+        `;
+        
+        const header = document.createElement('h4');
+        header.textContent = 'GENERATION INFO';
+        header.style.cssText = `
+            margin: 0 0 10px 0;
+            font-size: 11px;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 600;
+        `;
+        metadataBox.appendChild(header);
+        
+        const info = metadata.generation_info;
+        const contentDiv = document.createElement('div');
+        contentDiv.style.color = '#475569';
+        
+        let html = '';
+        if (info.main_model) {
+            html += `<div style="margin-bottom: 4px;"><strong>Model:</strong> ${info.main_model}</div>`;
+        }
+        if (info.timestamp) {
+            const date = new Date(info.timestamp);
+            html += `<div style="margin-bottom: 4px;"><strong>Generated:</strong> ${date.toLocaleString()}</div>`;
+        }
+        if (info.commit_id) {
+            html += `<div style="margin-bottom: 4px;"><strong>Commit:</strong> ${info.commit_id.substring(0, 8)}</div>`;
+        }
+        if (metadata.statistics && metadata.statistics.total_components) {
+            html += `<div><strong>Components:</strong> ${metadata.statistics.total_components}</div>`;
+        }
+        
+        contentDiv.innerHTML = html;
+        metadataBox.appendChild(contentDiv);
+        
+        return metadataBox;
     }
     
     // Mobile menu toggle
@@ -148,6 +213,14 @@
             overviewLink.className = 'nav-link active';
             overviewItem.appendChild(overviewLink);
             navTree.appendChild(overviewItem);
+            
+            // Add metadata info box if available
+            if (CODEWIKI_CONFIG && CODEWIKI_CONFIG.metadata) {
+                const metadataBox = renderMetadata(CODEWIKI_CONFIG.metadata);
+                if (metadataBox) {
+                    navTree.appendChild(metadataBox);
+                }
+            }
             
             // Add divider
             const divider = document.createElement('div');

@@ -36,6 +36,54 @@ class HTMLGenerator:
         self.styles = self._load_template("styles.css")
         self.app_script = self._load_template("app.js")
     
+    def load_module_tree(self, docs_dir: Path) -> Dict[str, Any]:
+        """
+        Load module tree from documentation directory.
+        
+        Args:
+            docs_dir: Documentation directory path
+            
+        Returns:
+            Module tree structure
+        """
+        module_tree_path = docs_dir / "module_tree.json"
+        if not module_tree_path.exists():
+            # Fallback to a simple structure
+            return {
+                "Overview": {
+                    "description": "Repository overview",
+                    "components": [],
+                    "children": {}
+                }
+            }
+        
+        try:
+            content = safe_read(module_tree_path)
+            return json.loads(content)
+        except Exception as e:
+            raise FileSystemError(f"Failed to load module tree: {e}")
+    
+    def load_metadata(self, docs_dir: Path) -> Optional[Dict[str, Any]]:
+        """
+        Load metadata from documentation directory.
+        
+        Args:
+            docs_dir: Documentation directory path
+            
+        Returns:
+            Metadata dictionary or None if not found
+        """
+        metadata_path = docs_dir / "metadata.json"
+        if not metadata_path.exists():
+            return None
+        
+        try:
+            content = safe_read(metadata_path)
+            return json.loads(content)
+        except Exception:
+            # Non-critical, return None
+            return None
+    
     def _load_template(self, filename: str) -> str:
         """
         Load a template file.
@@ -59,10 +107,12 @@ class HTMLGenerator:
         self,
         output_path: Path,
         title: str,
-        module_tree: Dict[str, Any],
+        module_tree: Optional[Dict[str, Any]] = None,
         repository_url: Optional[str] = None,
         github_pages_url: Optional[str] = None,
-        config: Optional[Dict[str, Any]] = None
+        config: Optional[Dict[str, Any]] = None,
+        docs_dir: Optional[Path] = None,
+        metadata: Optional[Dict[str, Any]] = None
     ):
         """
         Generate HTML documentation viewer.
@@ -70,11 +120,31 @@ class HTMLGenerator:
         Args:
             output_path: Output file path (index.html)
             title: Documentation title
-            module_tree: Module tree structure
+            module_tree: Module tree structure (auto-loaded from docs_dir if not provided)
             repository_url: GitHub repository URL
             github_pages_url: Expected GitHub Pages URL
             config: Additional configuration
+            docs_dir: Documentation directory (for auto-loading module_tree and metadata)
+            metadata: Metadata dictionary (auto-loaded from docs_dir if not provided)
         """
+        # Auto-load module tree if docs_dir provided
+        if docs_dir and module_tree is None:
+            module_tree = self.load_module_tree(docs_dir)
+        
+        # Auto-load metadata if docs_dir provided
+        if docs_dir and metadata is None:
+            metadata = self.load_metadata(docs_dir)
+        
+        # Ensure module_tree exists
+        if module_tree is None:
+            module_tree = {
+                "Overview": {
+                    "description": "Repository overview",
+                    "components": [],
+                    "children": {}
+                }
+            }
+        
         # Build configuration
         full_config = {
             "title": title,
@@ -103,6 +173,10 @@ class HTMLGenerator:
                 "search": False
             }
         }
+        
+        # Add metadata if available
+        if metadata:
+            full_config["metadata"] = metadata
         
         if config:
             full_config.update(config)
