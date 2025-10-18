@@ -27,7 +27,7 @@ class HTMLGenerator:
         """
         if template_dir is None:
             # Use package templates
-            template_dir = Path(__file__).parent / "templates" / "github_pages"
+            template_dir = Path(__file__).parent.parent / "templates" / "github_pages"
         
         self.template_dir = Path(template_dir)
         

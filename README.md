@@ -206,3 +206,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 [⬆ Back to Top](#codewiki-automated-repository-level-documentation-generation)
 
 </div>
+
+/Users/anhnh/Documents/vscode/titan-sight/.venv/lib/python3.13/site-packages/codewiki/templates/github_pages/index.html
+/Users/anhnh/Documents/vscode/titan-sight/.venv/lib/python3.13/site-packages/codewiki/cli/templates/github_pages/index.html
