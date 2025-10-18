@@ -28,22 +28,52 @@
         
         handleRoute() {
             const hash = window.location.hash.slice(1) || '/';
-            const path = hash === '/' ? 'overview.md' : hash;
+            // Remove leading slash if present
+            const cleanHash = hash.startsWith('/') ? hash.slice(1) : hash;
+            const path = (hash === '/' || cleanHash === '') ? 'overview.md' : cleanHash;
             this.loadMarkdown(path);
             this.updateBreadcrumbs(path);
         }
         
         async loadMarkdown(filename) {
+            const content = document.getElementById('markdown-content');
+            
+            // Show loading state
+            content.innerHTML = '<div class="loading">Loading...</div>';
+            
             try {
                 const response = await fetch(filename);
-                if (!response.ok) throw new Error(`Failed to load ${filename}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
                 const markdown = await response.text();
                 this.renderMarkdown(markdown);
+                this.updateActiveLink(filename);
             } catch (error) {
                 console.error('Error loading markdown:', error);
-                const content = document.getElementById('markdown-content');
-                content.innerHTML = `<h1>Error</h1><p>Could not load ${filename}</p>`;
+                content.innerHTML = `
+                    <h1>📄 Document Not Found</h1>
+                    <p>Could not load <code>${filename}</code></p>
+                    <p style="color: #6a737d; font-size: 0.9rem;">
+                        ${error.message}
+                    </p>
+                    <p>
+                        <a href="#/" style="color: #0366d6;">← Back to Overview</a>
+                    </p>
+                `;
             }
+        }
+        
+        updateActiveLink(filename) {
+            // Update active state on navigation links
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+                const linkPath = link.getAttribute('href').replace('#/', '').replace('#', '');
+                const currentPath = filename;
+                if (linkPath === currentPath || (linkPath === '' && filename === 'overview.md')) {
+                    link.classList.add('active');
+                }
+            });
         }
         
         renderMarkdown(markdown) {
@@ -70,15 +100,23 @@
         
         updateBreadcrumbs(path) {
             const breadcrumbs = document.getElementById('breadcrumbs');
+            
+            // Handle overview case
+            if (path === 'overview.md') {
+                breadcrumbs.innerHTML = '<a href="#/">Home</a>';
+                return;
+            }
+            
             const parts = path.split('/').filter(p => p);
             
             let html = '<a href="#/">Home</a>';
             let currentPath = '';
             
             for (const part of parts) {
-                currentPath += '/' + part;
+                currentPath += (currentPath ? '/' : '') + part;
                 html += ' <span class="separator">›</span> ';
-                html += `<a href="#${currentPath}">${part.replace('.md', '')}</a>`;
+                const displayName = formatModuleName(part.replace('.md', ''));
+                html += `<a href="#/${currentPath}">${displayName}</a>`;
             }
             
             breadcrumbs.innerHTML = html;
@@ -102,11 +140,7 @@
             link.textContent = formatModuleName(moduleName);
             link.className = 'nav-link';
             
-            // Highlight active link
-            link.addEventListener('click', function() {
-                document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-                this.classList.add('active');
-            });
+            // Active link highlighting is handled by updateActiveLink in the router
             
             item.appendChild(link);
             container.appendChild(item);
@@ -210,7 +244,7 @@
             const overviewLink = document.createElement('a');
             overviewLink.href = '#/';
             overviewLink.textContent = 'Overview';
-            overviewLink.className = 'nav-link active';
+            overviewLink.className = 'nav-link';  // Active state will be set by router
             overviewItem.appendChild(overviewLink);
             navTree.appendChild(overviewItem);
             

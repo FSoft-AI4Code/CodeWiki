@@ -186,6 +186,9 @@ class DocumentationGenerator:
                 repo_name, components, leaf_nodes, [], working_dir
             )
 
+            # save final_module_tree to module_tree.json
+            file_manager.save_json(final_module_tree, os.path.join(working_dir, MODULE_TREE_FILENAME))
+
             # rename repo_name.md to overview.md
             repo_overview_path = os.path.join(working_dir, f"{repo_name}.md")
             if os.path.exists(repo_overview_path):
