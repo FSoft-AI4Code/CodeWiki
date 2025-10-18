@@ -81,6 +81,32 @@ class HTMLGenerator:
             return None
     
     
+    def load_all_markdown_files(self, docs_dir: Path) -> Dict[str, str]:
+        """
+        Load all markdown files from documentation directory.
+        
+        Args:
+            docs_dir: Documentation directory path
+            
+        Returns:
+            Dictionary mapping filename to markdown content
+        """
+        markdown_files = {}
+        
+        if not docs_dir.exists():
+            return markdown_files
+        
+        # Load all .md files in the directory
+        for md_file in docs_dir.glob("*.md"):
+            try:
+                content = safe_read(md_file)
+                markdown_files[md_file.name] = content
+            except Exception:
+                # Skip files that can't be read
+                pass
+        
+        return markdown_files
+    
     def generate(
         self,
         output_path: Path,
@@ -112,6 +138,11 @@ class HTMLGenerator:
         if docs_dir and metadata is None:
             metadata = self.load_metadata(docs_dir)
         
+        # Load all markdown content
+        markdown_content = {}
+        if docs_dir:
+            markdown_content = self.load_all_markdown_files(docs_dir)
+        
         # Default values
         if module_tree is None:
             module_tree = {}
@@ -126,7 +157,8 @@ class HTMLGenerator:
             repository_url=repository_url,
             github_pages_url=github_pages_url,
             metadata=metadata,
-            config=config
+            config=config,
+            markdown_content=markdown_content
         )
         
         # Write to file
@@ -139,7 +171,8 @@ class HTMLGenerator:
         repository_url: Optional[str],
         github_pages_url: Optional[str],
         metadata: Optional[Dict[str, Any]],
-        config: Dict[str, Any]
+        config: Dict[str, Any],
+        markdown_content: Dict[str, str] = None
     ) -> str:
         """
         Generate the complete HTML template with embedded styles and scripts.
@@ -151,6 +184,7 @@ class HTMLGenerator:
             github_pages_url: GitHub Pages URL
             metadata: Metadata dictionary
             config: Additional configuration
+            markdown_content: Dictionary of markdown file contents
             
         Returns:
             Complete HTML string
@@ -158,6 +192,7 @@ class HTMLGenerator:
         # Escape and prepare JSON data for embedding
         module_tree_json = json.dumps(module_tree)
         metadata_json = json.dumps(metadata) if metadata else "null"
+        markdown_content_json = json.dumps(markdown_content) if markdown_content else "{}"
         
         html = f'''<!DOCTYPE html>
 <html lang="en">
@@ -448,7 +483,7 @@ class HTMLGenerator:
 <body>
     <div class="container">
         <nav class="sidebar" id="sidebar">
-            <div class="logo" onclick="loadPage('overview.md')">📚 {self._escape_html(title)}</div>
+            <div class="logo" onclick="loadPage(\\'overview.md\\')">📚 {self._escape_html(title)}</div>
             
             <div id="metadata-container"></div>
             <div id="navigation-container"></div>
@@ -467,6 +502,7 @@ class HTMLGenerator:
         const METADATA = {metadata_json};
         const REPO_URL = {json.dumps(repository_url) if repository_url else "null"};
         const GITHUB_PAGES_URL = {json.dumps(github_pages_url) if github_pages_url else "null"};
+        const MARKDOWN_CONTENT = {markdown_content_json};
         
         // Current state
         let currentPage = 'overview.md';
@@ -568,7 +604,7 @@ class HTMLGenerator:
             
             // Add overview link
             let html = '<div class="nav-section">';
-            html += '<div class="nav-item' + (currentPage === 'overview.md' ? ' active' : '') + '" onclick="loadPage(\'overview.md\')">Overview</div>';
+            html += '<div class="nav-item' + (currentPage === 'overview.md' ? ' active' : '') + '" onclick="loadPage(\\'overview.md\\')">Overview</div>';
             html += '</div>';
             
             // Render module tree
@@ -593,7 +629,7 @@ class HTMLGenerator:
                 // If has components, it's a clickable page
                 if (data.components && data.components.length > 0) {{
                     const classes = 'nav-item' + (isActive ? ' active' : '');
-                    html += `<div class="${{classes}}" onclick="loadPage('${{filename}}')">${{escapeHtml(displayName)}}</div>`;
+                    html += `<div class="${{classes}}" onclick="loadPage(\\'${{filename}}\\')">${{escapeHtml(displayName)}}</div>`;
                 }} else {{
                     // Otherwise it's just a header
                     html += `<div class="nav-section-header">${{escapeHtml(displayName)}}</div>`;
@@ -616,25 +652,41 @@ class HTMLGenerator:
         
         // Load and render a markdown page
         async function loadPage(filename) {{
+            console.log('[loadPage] Starting for:', filename);
             currentPage = filename;
             const contentEl = document.getElementById('content');
             
             try {{
                 // Show loading
                 contentEl.innerHTML = '<div class="loading">Loading...</div>';
+                console.log('[loadPage] Set loading message');
                 
-                // Fetch markdown file
-                const response = await fetch(filename);
+                let markdown;
                 
-                if (!response.ok) {{
-                    throw new Error(`Failed to load ${{filename}}: ${{response.statusText}}`);
+                // Try to get content from embedded data first
+                console.log('[loadPage] Checking MARKDOWN_CONTENT:', typeof MARKDOWN_CONTENT, Object.keys(MARKDOWN_CONTENT || {{}}).length);
+                if (MARKDOWN_CONTENT && MARKDOWN_CONTENT[filename]) {{
+                    markdown = MARKDOWN_CONTENT[filename];
+                    console.log('[loadPage] Got embedded content, length:', markdown.length);
+                }} else {{
+                    console.log('[loadPage] Embedded content not found, fetching...');
+                    // Fallback to fetching if not embedded (for backward compatibility)
+                    const response = await fetch(filename);
+                    
+                    if (!response.ok) {{
+                        throw new Error(`Failed to load ${{filename}}: ${{response.statusText}}`);
+                    }}
+                    
+                    markdown = await response.text();
+                    console.log('[loadPage] Fetched content, length:', markdown.length);
                 }}
                 
-                const markdown = await response.text();
-                
                 // Convert to HTML
+                console.log('[loadPage] Converting markdown to HTML with marked.parse()');
                 const html = marked.parse(markdown);
+                console.log('[loadPage] Converted, HTML length:', html.length);
                 contentEl.innerHTML = html;
+                console.log('[loadPage] Set content innerHTML');
                 
                 // Render mermaid diagrams
                 await mermaid.run({{
@@ -652,13 +704,26 @@ class HTMLGenerator:
                 
             }} catch (error) {{
                 console.error('Error loading page:', error);
-                contentEl.innerHTML = `
+                
+                let errorHtml = `
                     <div class="error-message">
                         <h3>Error Loading Page</h3>
                         <p>Could not load <strong>${{escapeHtml(filename)}}</strong></p>
-                        <p>${{escapeHtml(error.message)}}</p>
-                    </div>
+                        <p><strong>Error:</strong> ${{escapeHtml(error.message)}}</p>
                 `;
+                
+                // Check if markdown content is missing
+                if (!MARKDOWN_CONTENT || Object.keys(MARKDOWN_CONTENT).length === 0) {{
+                    errorHtml += `
+                        <p style="margin-top: 1rem; padding: 1rem; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px;">
+                            <strong>Note:</strong> This HTML file was generated without embedded markdown content. 
+                            Regenerate the documentation with the latest version to embed all markdown files.
+                        </p>
+                    `;
+                }}
+                
+                errorHtml += '</div>';
+                contentEl.innerHTML = errorHtml;
             }}
         }}
         
@@ -672,24 +737,70 @@ class HTMLGenerator:
         
         // Initialize app
         async function init() {{
-            // Render metadata and navigation
-            renderMetadata();
-            renderNavigation();
+            console.log('[init] Starting initialization');
+            console.log('[init] marked:', typeof marked);
+            console.log('[init] mermaid:', typeof mermaid);
+            console.log('[init] MARKDOWN_CONTENT keys:', Object.keys(MARKDOWN_CONTENT || {{}}).slice(0, 5));
             
-            // Load initial page from hash or default to overview
-            const hash = window.location.hash.substring(1);
-            const initialPage = hash && hash.endsWith('.md') ? hash : 'overview.md';
-            await loadPage(initialPage);
-            
-            // Listen for hash changes
-            window.addEventListener('hashchange', handleHashChange);
+            try {{
+                // Render metadata and navigation
+                console.log('[init] Rendering metadata');
+                renderMetadata();
+                console.log('[init] Rendering navigation');
+                renderNavigation();
+                
+                // Load initial page from hash or default to overview
+                const hash = window.location.hash.substring(1);
+                const initialPage = hash && hash.endsWith('.md') ? hash : 'overview.md';
+                console.log('[init] Initial page:', initialPage);
+                await loadPage(initialPage);
+                console.log('[init] Page loaded successfully');
+                
+                // Listen for hash changes
+                window.addEventListener('hashchange', handleHashChange);
+                console.log('[init] Initialization complete');
+            }} catch (error) {{
+                console.error('[init] ERROR:', error);
+                const contentEl = document.getElementById('content');
+                contentEl.innerHTML = `
+                    <div class="error-message">
+                        <h3>Initialization Error</h3>
+                        <p><strong>Error:</strong> ${{error.message}}</p>
+                        <pre>${{error.stack}}</pre>
+                    </div>
+                `;
+            }}
+        }}
+        
+        // Check if external libraries loaded
+        function checkLibraries() {{
+            if (typeof marked === 'undefined' || typeof mermaid === 'undefined') {{
+                const contentEl = document.getElementById('content');
+                contentEl.innerHTML = `
+                    <div class="error-message">
+                        <h3>External Libraries Not Loaded</h3>
+                        <p>The required JavaScript libraries (marked.js and mermaid.js) failed to load.</p>
+                        <p><strong>This usually happens when opening the HTML file directly (file:// protocol).</strong></p>
+                        <h4>Solution:</h4>
+                        <p>Serve the documentation with a local web server:</p>
+                        <ol>
+                            <li><strong>Python:</strong> <code>python3 -m http.server 8000</code> then visit <code>http://localhost:8000</code></li>
+                            <li><strong>Or deploy to GitHub Pages</strong> (works perfectly there!)</li>
+                        </ol>
+                    </div>
+                `;
+                return false;
+            }}
+            return true;
         }}
         
         // Start when DOM is ready
         if (document.readyState === 'loading') {{
-            document.addEventListener('DOMContentLoaded', init);
+            document.addEventListener('DOMContentLoaded', () => {{
+                if (checkLibraries()) init();
+            }});
         }} else {{
-            init();
+            if (checkLibraries()) init();
         }}
     </script>
 </body>
