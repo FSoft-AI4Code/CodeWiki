@@ -188,7 +188,8 @@ class DocumentationGenerator:
 
             # rename repo_name.md to overview.md
             repo_overview_path = os.path.join(working_dir, f"{repo_name}.md")
-            os.rename(repo_overview_path, os.path.join(working_dir, OVERVIEW_FILENAME))
+            if os.path.exists(repo_overview_path):
+                os.rename(repo_overview_path, os.path.join(working_dir, OVERVIEW_FILENAME))
         
         return working_dir
 
