@@ -89,7 +89,7 @@ class AgentOrchestrator:
     async def process_module(self, module_name: str, components: Dict[str, Node], 
                            core_component_ids: List[str], module_path: List[str], working_dir: str) -> Dict[str, Any]:
         """Process a single module and generate its documentation."""
-        logger.debug(f"Processing module: {module_name}")
+        logger.info(f"Processing module: {module_name}")
         
         # Load or create module tree
         module_tree_path = os.path.join(working_dir, MODULE_TREE_FILENAME)

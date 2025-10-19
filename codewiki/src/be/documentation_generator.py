@@ -69,7 +69,7 @@ class DocumentationGenerator:
         
         metadata_path = os.path.join(working_dir, "metadata.json")
         file_manager.save_json(metadata, metadata_path)
-        # logger.debug(f"Documentation metadata saved to: {metadata_path}")
+
     
     def get_processing_order(self, module_tree: Dict[str, Any], parent_path: List[str] = []) -> List[tuple[List[str], str]]:
         """Get the processing order using topological sort (leaf modules first)."""
@@ -134,7 +134,7 @@ class DocumentationGenerator:
         
         # Get processing order (leaf modules first)
         processing_order = self.get_processing_order(first_module_tree)
-        # logger.debug(f"Processing {len(processing_order)} modules in dependency order:\n{processing_order}")
+
         
         # Process modules in dependency order
         final_module_tree = module_tree
@@ -179,7 +179,7 @@ class DocumentationGenerator:
                 [], working_dir
             )
         else:
-            logger.debug(f"Processing whole repo because repo can fit in the context window")
+            logger.info(f"Processing whole repo because repo can fit in the context window")
             repo_name = os.path.basename(os.path.normpath(self.config.repo_path))
             final_module_tree = await self.agent_orchestrator.process_module(
                 repo_name, components, leaf_nodes, [], working_dir
@@ -200,7 +200,7 @@ class DocumentationGenerator:
         """Generate documentation for a parent module based on its children's documentation."""
         module_name = module_path[-1] if len(module_path) >= 1 else os.path.basename(os.path.normpath(self.config.repo_path))
 
-        logger.debug(f"Generating parent documentation for: {module_name}")
+        logger.info(f"Generating parent documentation for: {module_name}")
         
         # Load module tree
         module_tree_path = os.path.join(working_dir, MODULE_TREE_FILENAME)
