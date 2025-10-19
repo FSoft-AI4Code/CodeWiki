@@ -95,9 +95,9 @@ def display_post_generation_instructions(
             minutes = int(statistics['generation_time'] // 60)
             seconds = int(statistics['generation_time'] % 60)
             click.echo(f"  Generation time:   {minutes} minutes {seconds} seconds")
-        if 'total_tokens_used' in statistics:
-            tokens = statistics['total_tokens_used']
-            click.echo(f"  Tokens used:       ~{tokens:,}")
+        # if 'total_tokens_used' in statistics:
+        #     tokens = statistics['total_tokens_used']
+        #     click.echo(f"  Tokens used:       ~{tokens:,}")
         click.echo()
     
     # Next steps
