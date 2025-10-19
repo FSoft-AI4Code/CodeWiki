@@ -97,7 +97,7 @@ CodeWiki demonstrates significant improvements in high-level and managed languag
 Install CodeWiki CLI from source:
 
 ```bash
-pip install https://github.com/FSoft-AI4Code/CodeWiki.git
+pip install git+https://github.com/FSoft-AI4Code/CodeWiki.git
 ```
 
 Verify installation:

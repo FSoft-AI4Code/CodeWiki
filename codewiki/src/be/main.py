@@ -13,7 +13,11 @@ import argparse
 import asyncio
 
 # Configure logging and monitoring
-logging.basicConfig(level=logging.INFO)
+from codewiki.src.be.dependency_analyzer.utils.logging_config import setup_logging
+
+# Initialize colored logging
+setup_logging(level=logging.INFO)
+
 logger = logging.getLogger(__name__)
 
 # Local imports

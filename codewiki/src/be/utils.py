@@ -4,7 +4,7 @@ from typing import List, Tuple
 import logging
 import tiktoken
 
-logging.basicConfig(level=logging.INFO)
+
 logger = logging.getLogger(__name__)
 
 # ------------------------------------------------------------
@@ -33,7 +33,7 @@ def count_tokens(text: str) -> int:
     Count the number of tokens in a text.
     """
     length = len(enc.encode(text))
-    logger.debug(f"Number of tokens: {length}")
+    # logger.debug(f"Number of tokens: {length}")
     return length
 
 
@@ -75,8 +75,8 @@ async def validate_mermaid_diagrams(md_file_path: str, relative_path: str) -> st
                 errors.append("\n")
                 errors.append(error_msg)
         
-        if errors:
-            logger.debug(f"Mermaid syntax errors found in file: {md_file_path}: {errors}")
+        # if errors:
+        #     logger.debug(f"Mermaid syntax errors found in file: {md_file_path}: {errors}")
         
         if errors:
             return "Mermaid syntax errors found in file: " + relative_path + "\n" + "\n".join(errors)
@@ -143,7 +143,7 @@ async def validate_single_diagram(diagram_content: str, diagram_num: int, line_s
     
     try:
         from mermaid_parser.parser import parse_mermaid_py
-        logger.debug("Using mermaid-parser-py to validate mermaid diagrams")
+        # logger.debug("Using mermaid-parser-py to validate mermaid diagrams")
     
         try:
             # Redirect stderr to suppress mermaid parser JavaScript errors
@@ -172,7 +172,7 @@ async def validate_single_diagram(diagram_content: str, diagram_num: int, line_s
                 raise Exception(error_str)
 
     except Exception as e:
-        logger.debug("Using mermaid-py to validate mermaid diagrams")
+        logger.warning("Using mermaid-py to validate mermaid diagrams")
         try:
             import mermaid as md
             # Create Mermaid object and check response

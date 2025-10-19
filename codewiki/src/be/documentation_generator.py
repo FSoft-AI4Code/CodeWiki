@@ -6,7 +6,6 @@ from copy import deepcopy
 import traceback
 
 # Configure logging and monitoring
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Local imports
@@ -70,7 +69,7 @@ class DocumentationGenerator:
         
         metadata_path = os.path.join(working_dir, "metadata.json")
         file_manager.save_json(metadata, metadata_path)
-        logger.debug(f"Documentation metadata saved to: {metadata_path}")
+
     
     def get_processing_order(self, module_tree: Dict[str, Any], parent_path: List[str] = []) -> List[tuple[List[str], str]]:
         """Get the processing order using topological sort (leaf modules first)."""
@@ -135,7 +134,7 @@ class DocumentationGenerator:
         
         # Get processing order (leaf modules first)
         processing_order = self.get_processing_order(first_module_tree)
-        logger.debug(f"Processing {len(processing_order)} modules in dependency order:\n{processing_order}")
+
         
         # Process modules in dependency order
         final_module_tree = module_tree
@@ -158,12 +157,12 @@ class DocumentationGenerator:
                     
                     # Process the module
                     if self.is_leaf_module(module_info):
-                        logger.info(f"Processing leaf module: {module_key}")
+                        logger.info(f"📄 Processing leaf module: {module_key}")
                         final_module_tree = await self.agent_orchestrator.process_module(
                             module_name, components, module_info["components"], module_path, working_dir
                         )
                     else:
-                        logger.info(f"Processing parent module: {module_key}")
+                        logger.info(f"📁 Processing parent module: {module_key}")
                         final_module_tree = await self.generate_parent_module_docs(
                             module_path, working_dir
                         )
@@ -175,12 +174,12 @@ class DocumentationGenerator:
                     continue
 
             # Generate repo overview
-            logger.debug(f"Generating repo overview")
+            logger.info(f"📚 Generating repository overview")
             final_module_tree = await self.generate_parent_module_docs(
                 [], working_dir
             )
         else:
-            logger.debug(f"Processing whole repo because repo can fit in the context window")
+            logger.info(f"Processing whole repo because repo can fit in the context window")
             repo_name = os.path.basename(os.path.normpath(self.config.repo_path))
             final_module_tree = await self.agent_orchestrator.process_module(
                 repo_name, components, leaf_nodes, [], working_dir
@@ -201,7 +200,7 @@ class DocumentationGenerator:
         """Generate documentation for a parent module based on its children's documentation."""
         module_name = module_path[-1] if len(module_path) >= 1 else os.path.basename(os.path.normpath(self.config.repo_path))
 
-        logger.debug(f"Generating parent documentation for: {module_name}")
+        logger.info(f"Generating parent documentation for: {module_name}")
         
         # Load module tree
         module_tree_path = os.path.join(working_dir, MODULE_TREE_FILENAME)
@@ -210,13 +209,13 @@ class DocumentationGenerator:
         # check if overview docs already exists
         overview_docs_path = os.path.join(working_dir, OVERVIEW_FILENAME)
         if os.path.exists(overview_docs_path):
-            logger.info(f"Overview docs already exists at {overview_docs_path}")
+            logger.info(f"✓ Overview docs already exists at {overview_docs_path}")
             return module_tree
 
         # check if parent docs already exists
         parent_docs_path = os.path.join(working_dir, f"{module_name if len(module_path) >= 1 else OVERVIEW_FILENAME.replace('.md', '')}.md")
         if os.path.exists(parent_docs_path):
-            logger.info(f"Parent docs already exists at {parent_docs_path}")
+            logger.info(f"✓ Parent docs already exists at {parent_docs_path}")
             return module_tree
 
         # Create repo structure with 1-depth children docs and target indicator

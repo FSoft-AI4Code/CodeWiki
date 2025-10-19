@@ -5,7 +5,7 @@ import os
 from typing import Dict, List, Any
 
 # Configure logging and monitoring
-logging.basicConfig(level=logging.INFO)
+
 logger = logging.getLogger(__name__)
 
 # try:
@@ -89,7 +89,7 @@ class AgentOrchestrator:
     async def process_module(self, module_name: str, components: Dict[str, Node], 
                            core_component_ids: List[str], module_path: List[str], working_dir: str) -> Dict[str, Any]:
         """Process a single module and generate its documentation."""
-        logger.debug(f"Processing module: {module_name}")
+        logger.info(f"Processing module: {module_name}")
         
         # Load or create module tree
         module_tree_path = os.path.join(working_dir, MODULE_TREE_FILENAME)
@@ -115,13 +115,13 @@ class AgentOrchestrator:
         # check if overview docs already exists
         overview_docs_path = os.path.join(working_dir, OVERVIEW_FILENAME)
         if os.path.exists(overview_docs_path):
-            logger.info(f"Overview docs already exists at {overview_docs_path}")
+            logger.info(f"✓ Overview docs already exists at {overview_docs_path}")
             return module_tree
 
         # check if module docs already exists
         docs_path = os.path.join(working_dir, f"{module_name}.md")
         if os.path.exists(docs_path):
-            logger.info(f"Module docs already exists at {docs_path}")
+            logger.info(f"✓ Module docs already exists at {docs_path}")
             return module_tree
         
         # Run agent
