@@ -1,15 +1,74 @@
 config/agent_config.yaml
 tool/add_header.sh
 
+# Python
 .venv
+venv/
 __pycache__/
-*.egg-info
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Tests
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+tests/
+
+# Jupyter
 *.ipynb
+.ipynb_checkpoints
+
+# Project specific
 output/
 data/
 src/output/
 repo_data/
+docs/.cache/
+
+# Environment variables
 .env*
 *.env
 **/.env
 **/.env.*
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.log
+*.bak
