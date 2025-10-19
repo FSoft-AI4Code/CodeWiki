@@ -173,12 +173,30 @@ def detect_supported_languages(directory: Path) -> List[Tuple[str, int]]:
         'C#': ['.cs'],
     }
     
+    # Directories to exclude from counting
+    excluded_dirs = {
+        'node_modules', '__pycache__', '.git', 'build', 'dist', 
+        '.venv', 'venv', 'env', '.env', 'target', 'bin', 'obj',
+        '.pytest_cache', '.mypy_cache', '.tox', 'coverage',
+        'htmlcov', '.eggs', '*.egg-info', 'vendor', 'bower_components',
+        '.idea', '.vscode', '.gradle', '.mvn'
+    }
+    
+    def should_exclude_file(file_path: Path) -> bool:
+        """Check if file is in an excluded directory."""
+        parts = file_path.parts
+        return any(excluded_dir in parts for excluded_dir in excluded_dirs)
+    
     language_counts = {}
     
     for language, extensions in language_extensions.items():
         count = 0
         for ext in extensions:
-            count += len(list(directory.rglob(f"*{ext}")))
+            # Filter out files in excluded directories
+            count += sum(
+                1 for f in directory.rglob(f"*{ext}")
+                if f.is_file() and not should_exclude_file(f)
+            )
         
         if count > 0:
             language_counts[language] = count
@@ -199,10 +217,10 @@ def is_top_tier_model(model: str) -> bool:
     """
     top_tier_models = [
         'claude-opus',
-        'claude-sonnet-4',
+        'claude-sonnet',
         'gpt-4',
-        'gpt-4-turbo',
-        'gemini-1.5-pro',
+        'gpt-5',
+        'gemini-2.5',
     ]
     
     model_lower = model.lower()
