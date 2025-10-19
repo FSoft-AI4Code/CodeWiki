@@ -13,7 +13,7 @@ import argparse
 import asyncio
 
 # Configure logging and monitoring
-logging.basicConfig(level=logging.INFO)
+
 logger = logging.getLogger(__name__)
 
 # Local imports

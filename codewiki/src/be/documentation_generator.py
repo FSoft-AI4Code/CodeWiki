@@ -6,7 +6,6 @@ from copy import deepcopy
 import traceback
 
 # Configure logging and monitoring
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Local imports
@@ -70,7 +69,7 @@ class DocumentationGenerator:
         
         metadata_path = os.path.join(working_dir, "metadata.json")
         file_manager.save_json(metadata, metadata_path)
-        logger.debug(f"Documentation metadata saved to: {metadata_path}")
+        # logger.debug(f"Documentation metadata saved to: {metadata_path}")
     
     def get_processing_order(self, module_tree: Dict[str, Any], parent_path: List[str] = []) -> List[tuple[List[str], str]]:
         """Get the processing order using topological sort (leaf modules first)."""
@@ -135,7 +134,7 @@ class DocumentationGenerator:
         
         # Get processing order (leaf modules first)
         processing_order = self.get_processing_order(first_module_tree)
-        logger.debug(f"Processing {len(processing_order)} modules in dependency order:\n{processing_order}")
+        # logger.debug(f"Processing {len(processing_order)} modules in dependency order:\n{processing_order}")
         
         # Process modules in dependency order
         final_module_tree = module_tree

@@ -10,6 +10,8 @@ from typing import Dict, Any
 import time
 import asyncio
 import os
+import logging
+import sys
 
 
 from codewiki.cli.utils.progress import ProgressTracker
@@ -64,6 +66,51 @@ class CLIDocumentationGenerator:
             cluster_model=config.get('cluster_model', ''),
             base_url=config.get('base_url', '')
         )
+        
+        # Configure backend logging
+        self._configure_backend_logging()
+    
+    def _configure_backend_logging(self):
+        """Configure backend logger for CLI use."""
+        # Get backend logger (parent of all backend modules)
+        backend_logger = logging.getLogger('codewiki.src.be')
+        
+        # Remove existing handlers to avoid duplicates
+        backend_logger.handlers.clear()
+        
+        if self.verbose:
+            # In verbose mode, show DEBUG and above
+            backend_logger.setLevel(logging.DEBUG)
+            
+            # Create console handler with formatting
+            console_handler = logging.StreamHandler(sys.stdout)
+            console_handler.setLevel(logging.DEBUG)
+            
+            # Create formatter with timestamp and minimal formatting for cleaner output
+            formatter = logging.Formatter(
+                '[%(asctime)s] %(message)s',
+                datefmt='%H:%M:%S'
+            )
+            console_handler.setFormatter(formatter)
+            
+            # Add handler to logger
+            backend_logger.addHandler(console_handler)
+        else:
+            # In non-verbose mode, suppress backend logs (use WARNING level to hide INFO/DEBUG)
+            backend_logger.setLevel(logging.WARNING)
+            
+            # Create console handler for warnings and errors only
+            console_handler = logging.StreamHandler(sys.stderr)
+            console_handler.setLevel(logging.WARNING)
+            
+            # Simple formatter for warnings/errors
+            formatter = logging.Formatter('%(levelname)s: %(message)s')
+            console_handler.setFormatter(formatter)
+            
+            backend_logger.addHandler(console_handler)
+        
+        # Prevent propagation to root logger to avoid duplicate messages
+        backend_logger.propagate = False
     
     def generate(self) -> DocumentationJob:
         """

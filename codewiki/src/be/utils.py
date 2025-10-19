@@ -4,7 +4,7 @@ from typing import List, Tuple
 import logging
 import tiktoken
 
-logging.basicConfig(level=logging.INFO)
+
 logger = logging.getLogger(__name__)
 
 # ------------------------------------------------------------
@@ -143,7 +143,7 @@ async def validate_single_diagram(diagram_content: str, diagram_num: int, line_s
     
     try:
         from mermaid_parser.parser import parse_mermaid_py
-        logger.debug("Using mermaid-parser-py to validate mermaid diagrams")
+        # logger.debug("Using mermaid-parser-py to validate mermaid diagrams")
     
         try:
             # Redirect stderr to suppress mermaid parser JavaScript errors
@@ -172,7 +172,7 @@ async def validate_single_diagram(diagram_content: str, diagram_num: int, line_s
                 raise Exception(error_str)
 
     except Exception as e:
-        logger.debug("Using mermaid-py to validate mermaid diagrams")
+        logger.warning("Using mermaid-py to validate mermaid diagrams")
         try:
             import mermaid as md
             # Create Mermaid object and check response
