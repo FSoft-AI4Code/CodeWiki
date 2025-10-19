@@ -2,21 +2,21 @@ services:
   codewiki:
     image: codewiki:0.0.1
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: codewiki
     ports:
       - "${APP_PORT:-8000}:8000"
     environment:
-      - PYTHONPATH=/app/src
+      - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
     env_file:
-      - .env
+      - ../.env
     networks:
       - net
     volumes:
       # Persistent storage for cache and output
-      - ./output:/app/output
+      - ../output:/app/output
       # Git credentials (if needed for private repos)
       # - ~/.gitconfig:/root/.gitconfig:ro
       - ~/.ssh:/root/.ssh:ro

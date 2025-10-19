@@ -1,4 +1,4 @@
-# Use Python 3.11 slim image as base
+# Use Python 3.12 slim image as base
 FROM python:3.12-slim
 
 # Set working directory
@@ -19,13 +19,16 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY . .
+COPY codewiki ./codewiki
+COPY img ./img
+COPY pyproject.toml .
+COPY README.md .
 
 # Create output directories
 RUN mkdir -p output/cache output/temp output/docs output/dependency_graphs
 
 # Set environment variables
-ENV PYTHONPATH=/app/src
+ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
 # Expose port
@@ -36,4 +39,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/ || exit 1
 
 # Default command
-CMD ["python", "run_web_app.py", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "codewiki/run_web_app.py", "--host", "0.0.0.0", "--port", "8000"]
