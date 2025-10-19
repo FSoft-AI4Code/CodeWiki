@@ -38,7 +38,6 @@ class CallGraphAnalyzer:
         self.functions = {}
         self.call_relationships = []
 
-        logger.debug("Analyzing all code files")
         files_analyzed = 0
         for file_info in code_files:
             logger.debug(f"Analyzing: {file_info['path']}")
@@ -111,19 +110,13 @@ class CallGraphAnalyzer:
             repo_dir: Repository directory path
             file_info: File information dictionary
         """
-        # file_path = Path(repo_dir) / file_info["path"]
 
-        # logger.debug(f"Reading content of {file_path}")
-        # try:
-        #     with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-        #         content = f.read()
         base = Path(repo_dir)
         file_path = base / file_info["path"]
-        logger.debug(f"Reading content of {file_path}")
+
         try:
             content = safe_open_text(base, file_path)
             language = file_info["language"]
-            logger.debug(f"Analyzing {language} file: {file_path}")
             if language == "python":
                 self._analyze_python_file(file_path, content, repo_dir)
             elif language == "javascript":
@@ -138,10 +131,10 @@ class CallGraphAnalyzer:
                 self._analyze_c_file(file_path, content, repo_dir)
             elif language == "cpp":
                 self._analyze_cpp_file(file_path, content, repo_dir)
-            else:
-                logger.warning(
-                    f"Unsupported language for call graph analysis: {language} for file {file_path}"
-                )
+            # else:
+            #     logger.warning(
+            #         f"Unsupported language for call graph analysis: {language} for file {file_path}"
+            #     )
 
         except Exception as e:
             logger.error(f"⚠️ Error analyzing {file_path}: {str(e)}")
@@ -180,16 +173,11 @@ class CallGraphAnalyzer:
             repo_dir: Repository base directory
         """
         try:
-            logger.debug(f"Starting tree-sitter JavaScript analysis for {file_path}")
 
             from codewiki.src.be.dependency_analyzer.analyzers.javascript import analyze_javascript_file_treesitter
 
             functions, relationships = analyze_javascript_file_treesitter(
                 file_path, content, repo_path=repo_dir
-            )
-
-            logger.debug(
-                f"Tree-sitter JavaScript analysis completed for {file_path}: {len(functions)} functions, {len(relationships)} relationships"
             )
 
             for func in functions:
@@ -210,16 +198,11 @@ class CallGraphAnalyzer:
             content: File content string
         """
         try:
-            logger.debug(f"Starting tree-sitter TypeScript analysis for {file_path}")
 
             from codewiki.src.be.dependency_analyzer.analyzers.typescript import analyze_typescript_file_treesitter
 
             functions, relationships = analyze_typescript_file_treesitter(
                 file_path, content, repo_path=repo_dir
-            )
-
-            logger.debug(
-                f"Tree-sitter TypeScript analysis completed for {file_path}: {len(functions)} functions, {len(relationships)} relationships"
             )
 
             for func in functions:
@@ -285,9 +268,6 @@ class CallGraphAnalyzer:
 
         try:
             functions, relationships = analyze_java_file(file_path, content, repo_path=repo_dir)
-            logger.debug(
-                f"Found {len(functions)} functions and {len(relationships)} relationships in {file_path}"
-            )
             for func in functions:
                 func_id = func.id if func.id else f"{file_path}:{func.name}"
                 self.functions[func_id] = func
@@ -309,9 +289,6 @@ class CallGraphAnalyzer:
 
         try:
             functions, relationships = analyze_csharp_file(file_path, content, repo_path=repo_dir)
-            logger.debug(
-                f"Found {len(functions)} functions and {len(relationships)} relationships in {file_path}"
-            )
 
             for func in functions:
                 func_id = func.id if func.id else f"{file_path}:{func.name}"
@@ -328,7 +305,6 @@ class CallGraphAnalyzer:
         Attempts to match function calls to actual function definitions,
         handling cross-language calls where possible.
         """
-        logger.debug("Building function lookup table for resolving relationships.")
         func_lookup = {}
         for func_id, func_info in self.functions.items():
             func_lookup[func_id] = func_id
@@ -375,9 +351,6 @@ class CallGraphAnalyzer:
                 seen.add(key)
                 unique_relationships.append(rel)
 
-        logger.debug(
-            f"Removed {len(self.call_relationships) - len(unique_relationships)} duplicate relationships."
-        )
         self.call_relationships = unique_relationships
 
     def _generate_visualization_data(self) -> Dict:
@@ -391,7 +364,6 @@ class CallGraphAnalyzer:
         """
         cytoscape_elements = []
 
-        logger.debug(f"Adding {len(self.functions)} function nodes.")
         for func_id, func_info in self.functions.items():
             node_classes = []
             if func_info.node_type == "method":
@@ -425,7 +397,6 @@ class CallGraphAnalyzer:
             )
 
         resolved_rels = [r for r in self.call_relationships if r.is_resolved]
-        logger.debug(f"Adding {len(resolved_rels)} relationship edges.")
         for rel in resolved_rels:
             cytoscape_elements.append(
                 {
@@ -493,9 +464,6 @@ class CallGraphAnalyzer:
             target_count: The number of nodes to select
         """
         if len(self.functions) <= target_count:
-            logger.debug(
-                f"Have {len(self.functions)} functions, target is {target_count} - keeping all"
-            )
             return
 
         if not self.call_relationships:
@@ -537,8 +505,3 @@ class CallGraphAnalyzer:
             if rel.caller in selected_func_ids and rel.callee in selected_func_ids
         ]
 
-        logger.debug(
-            f"Node selection: {original_func_count} -> {len(self.functions)} functions, "
-            f"{original_rel_count} -> {len(self.call_relationships)} relationships"
-        )
-        logger.debug(f"Kept {len(selected_func_ids)} most connected nodes (target: {target_count})")

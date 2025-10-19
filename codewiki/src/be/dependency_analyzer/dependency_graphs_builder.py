@@ -73,7 +73,8 @@ class DependencyGraphBuilder:
                 if components[leaf_node].component_type in ["class", "interface", "struct"]:
                     keep_leaf_nodes.append(leaf_node)
                 else:
-                    logger.debug(f"Leaf node {leaf_node} is a {components[leaf_node].component_type}, removing it")
+                    # logger.debug(f"Leaf node {leaf_node} is a {components[leaf_node].component_type}, removing it")
+                    pass
             else:
                 logger.warning(f"Leaf node {leaf_node} not found in components, removing it")
         

@@ -33,7 +33,7 @@ def count_tokens(text: str) -> int:
     Count the number of tokens in a text.
     """
     length = len(enc.encode(text))
-    logger.debug(f"Number of tokens: {length}")
+    # logger.debug(f"Number of tokens: {length}")
     return length
 
 
@@ -75,8 +75,8 @@ async def validate_mermaid_diagrams(md_file_path: str, relative_path: str) -> st
                 errors.append("\n")
                 errors.append(error_msg)
         
-        if errors:
-            logger.debug(f"Mermaid syntax errors found in file: {md_file_path}: {errors}")
+        # if errors:
+        #     logger.debug(f"Mermaid syntax errors found in file: {md_file_path}: {errors}")
         
         if errors:
             return "Mermaid syntax errors found in file: " + relative_path + "\n" + "\n".join(errors)

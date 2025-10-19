@@ -39,9 +39,11 @@ async def generate_sub_module_documentation(
     
     for sub_module_name, core_component_ids in sub_module_specs.items():
 
-        tabs = "   " * deps.current_depth
+        # Create visual indentation for nested modules
+        indent = "  " * deps.current_depth
+        arrow = "└─" if deps.current_depth > 0 else "→"
 
-        logger.info(f"{tabs}Generating documentation for sub-module: {sub_module_name}")
+        logger.info(f"{indent}{arrow} Generating documentation for sub-module: {sub_module_name}")
 
         num_tokens = count_tokens(format_potential_core_components(core_component_ids, ctx.deps.components)[-1])
         

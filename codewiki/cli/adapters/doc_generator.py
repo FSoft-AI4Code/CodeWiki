@@ -71,7 +71,9 @@ class CLIDocumentationGenerator:
         self._configure_backend_logging()
     
     def _configure_backend_logging(self):
-        """Configure backend logger for CLI use."""
+        """Configure backend logger for CLI use with colored output."""
+        from codewiki.src.be.dependency_analyzer.utils.logging_config import ColoredFormatter
+        
         # Get backend logger (parent of all backend modules)
         backend_logger = logging.getLogger('codewiki.src.be')
         
@@ -79,19 +81,16 @@ class CLIDocumentationGenerator:
         backend_logger.handlers.clear()
         
         if self.verbose:
-            # In verbose mode, show DEBUG and above
-            backend_logger.setLevel(logging.DEBUG)
+            # In verbose mode, show INFO and above
+            backend_logger.setLevel(logging.INFO)
             
             # Create console handler with formatting
             console_handler = logging.StreamHandler(sys.stdout)
-            console_handler.setLevel(logging.DEBUG)
+            console_handler.setLevel(logging.INFO)
             
-            # Create formatter with timestamp and minimal formatting for cleaner output
-            formatter = logging.Formatter(
-                '[%(asctime)s] %(message)s',
-                datefmt='%H:%M:%S'
-            )
-            console_handler.setFormatter(formatter)
+            # Use colored formatter for better readability
+            colored_formatter = ColoredFormatter()
+            console_handler.setFormatter(colored_formatter)
             
             # Add handler to logger
             backend_logger.addHandler(console_handler)
@@ -103,9 +102,9 @@ class CLIDocumentationGenerator:
             console_handler = logging.StreamHandler(sys.stderr)
             console_handler.setLevel(logging.WARNING)
             
-            # Simple formatter for warnings/errors
-            formatter = logging.Formatter('%(levelname)s: %(message)s')
-            console_handler.setFormatter(formatter)
+            # Use colored formatter even for warnings/errors
+            colored_formatter = ColoredFormatter()
+            console_handler.setFormatter(colored_formatter)
             
             backend_logger.addHandler(console_handler)
         
