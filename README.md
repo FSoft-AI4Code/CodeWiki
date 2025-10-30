@@ -1,152 +1,95 @@
-# CodeWiki: Automated Repository-Level Documentation at Scale
+# CodeWiki: Evaluating AI’s Ability to Generate Holistic Documentation for Large-Scale Codebases
 
 <div align="center">
 
 ![CodeWiki Architecture](img/framework-overview.png)
 
-<!-- [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) -->
 [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-<!-- [![Paper](https://img.shields.io/badge/paper-arXiv-red.svg)](https://arxiv.org/abs/XXXXX) -->
 
 **The first open-source framework for holistic, structured repository-level documentation across multilingual codebases**
 
-[Features](#features) • [Installation](#installation) • [Quick Start](#quick-start) • [Benchmark](#benchmark) • [Demo](https://fsoft-ai4code.github.io/codewiki-demo/) • [Citation](#citation)
+[Demo](https://fsoft-ai4code.github.io/codewiki-demo/) • [Paper](https://arxiv.org/abs/2510.24428) • [Docker](docker/DOCKER_README.md) • [Development](DEVELOPMENT.md) • [Citation](#citation)
 
 </div>
 
 ---
 
-## 🎯 Overview
+## Abstract
 
-> 🚀 **[View Live Demo](https://fsoft-ai4code.github.io/codewiki-demo/)** - Explore documentation generated for real-world open source projects
+Given a large and evolving codebase, the ability to automatically generate holistic, architecture-aware documentation that captures not only individual functions but also their cross-file, cross-module, and system-level interactions remains an open challenge. We present **CodeWiki**, a unified framework for automated repository-level documentation across seven programming languages. CodeWiki introduces three key innovations: (i) hierarchical decomposition that preserves architectural context across multiple levels of granularity, (ii) recursive multi-agent processing with dynamic task delegation for scalable generation, and (iii) multi-modal synthesis that integrates textual descriptions with visual artifacts such as architecture diagrams and data-flow representations.
 
-Developers spend **58% of their working time** understanding codebases, yet maintaining comprehensive documentation remains a persistent challenge. CodeWiki addresses this by providing automated, scalable repository-level documentation generation that captures:
+---
 
-- 🏗️ **System Architecture** - High-level design patterns and module relationships
-- 🔄 **Data Flow Visualizations** - How information moves through your system
-- 📊 **Cross-Module Dependencies** - Interactive dependency graphs and sequence diagrams
-- 📝 **Comprehensive API Documentation** - From architectural overviews to implementation details
+## Usage Example
+
+![CLI Usage Example](img/cli-usage-example.gif)
+
+---
+
+## Overview
+
+CodeWiki addresses the challenge of comprehensive documentation for large-scale repositories through three core innovations:
 
 ### Key Innovations
 
-| Feature | Description | Impact |
-|---------|-------------|--------|
-| **Hierarchical Decomposition** | Dynamic programming-inspired strategy that partitions repositories into coherent modules | Handles codebases of arbitrary size (86K-1.4M LOC tested) |
-| **Recursive Agentic System** | Adaptive processing with dynamic delegation for complex modules | Maintains quality while scaling |
-| **Multi-Format Synthesis** | Generates textual documentation, architecture diagrams, data flows, and sequence diagrams | Comprehensive understanding from multiple perspectives |
-| **Multilingual Support** | Supports 7 languages: Python, Java, JavaScript, TypeScript, C, C++, C# | Universal applicability |
+| Innovation | Description | Impact |
+|------------|-------------|--------|
+| **Hierarchical Decomposition** | Dynamic programming-inspired strategy that partitions repositories into coherent modules while preserving architectural context | Handles codebases of arbitrary size (86K-1.4M LOC tested) |
+| **Recursive Agentic System** | Adaptive multi-agent processing with dynamic delegation capabilities for complex modules | Maintains quality while scaling to repository-level scope |
+| **Multi-Modal Synthesis** | Generates textual documentation, architecture diagrams, data flows, and sequence diagrams | Comprehensive understanding from multiple perspectives |
+
+### Multilingual Support
+
+Supports **7 programming languages**: Python, Java, JavaScript, TypeScript, C, C++, C#
 
 ---
 
-## Features
+## Experimental Results
 
-### 🎯 Two Usage Modes
+CodeWiki has been evaluated on **CodeWikiBench**, the first benchmark specifically designed for repository-level documentation quality assessment.
 
-CodeWiki offers both **CLI** and **Web Application** interfaces:
+### Performance by Language Category
 
-#### CLI Tool
-- ✅ **Local Projects** - Generate documentation for codebases on your machine
-- ✅ **Git Integration** - Automated branch creation and commit management
-- ✅ **Secure Configuration** - API keys stored in system keychain
-- ✅ **GitHub Pages** - Generate beautiful, interactive HTML documentation
-- ✅ **Progress Tracking** - Real-time progress updates with ETA
+| Language Category | CodeWiki (Sonnet-4) | DeepWiki | Improvement |
+|-------------------|---------------------|----------|-------------|
+| High-Level (Python, JS, TS) | **79.14%** | 68.67% | **+10.47%** |
+| Managed (C#, Java) | **68.84%** | 64.80% | **+4.04%** |
+| Systems (C, C++) | 53.24% | 56.39% | -3.15% |
+| **Overall Average** | **68.79%** | **64.06%** | **+4.73%** |
 
-#### Web Application
-- ✅ **GitHub URL Input** - Generate docs by repository URL and optional commit ID
-- ✅ **Remote Processing** - No need to clone repositories locally
-- ✅ **Web Interface** - Easy-to-use browser-based UI
+### Results on Representative Repositories
 
-### 📚 Documentation Generation
+| Repository | Language | LOC | CodeWiki-Sonnet-4 | DeepWiki | Improvement |
+|------------|----------|-----|-------------------|----------|-------------|
+| All-Hands-AI--OpenHands | Python | 229K | **82.45%** | 73.04% | **+9.41%** |
+| puppeteer--puppeteer | TypeScript | 136K | **83.00%** | 64.46% | **+18.54%** |
+| sveltejs--svelte | JavaScript | 125K | **71.96%** | 68.51% | **+3.45%** |
+| Unity-Technologies--ml-agents | C# | 86K | **79.78%** | 74.80% | **+4.98%** |
+| elastic--logstash | Java | 117K | **57.90%** | 54.80% | **+3.10%** |
 
-- ✅ **Repository-Level Documentation** - First framework to generate complete repo-level docs at scale
-- ✅ **Visual Artifacts** - Automatic generation of architecture diagrams and data flow visualizations
-- ✅ **Cross-Module References** - Intelligent reference management prevents redundancy
-- ✅ **Hierarchical Structure** - Multi-level documentation from high-level overviews to detailed APIs
-- ✅ **Mermaid Diagrams** - Automatic generation of architecture and data flow diagrams
-
-### 🔬 Benchmark
-
-- ✅ **[CodeWikiBench](https://github.com/FSoft-AI4Code/CodeWikiBench.git)** - First benchmark specifically designed for repository-level documentation
-
-#### Performance Results
-
-CodeWiki has been evaluated on the **CodeWikiBench** dataset, the first benchmark specifically designed for repository-level documentation quality assessment.
-
-| Language Category | CodeWiki Avg | Improvement over DeepWiki |
-|-------------------|--------------|---------------------------|
-| High-Level (Python, JS, TS) | **79.14%** | +10.47% |
-| Managed (C#, Java) | **68.84%** | +4.04% |
-| Systems (C, C++) | 53.24% | -3.15% |
-| **Overall Average** | **68.79%** | **+4.73%** |
-
-CodeWiki demonstrates significant improvements in high-level and managed languages, with an overall 4.73% improvement over [DeepWiki](https://deepwiki.com/).
+**View comprehensive results:** See [paper](https://arxiv.org/abs/2510.24428) for complete evaluation on 21 repositories spanning all supported languages.
 
 ---
 
-## Installation
+## CLI Installation & Usage
 
 ### Prerequisites
 
 - Python 3.12+
-- Node.js (for mermaid validation)
-- Git (optional, for CLI branch management)
-- Docker (optional, for containerized deployment)
+- Node.js (for mermaid diagram validation)
+- LLM API access (Anthropic Claude, OpenAI, etc.)
 
-### CLI Installation
-
-Install CodeWiki CLI from source:
+### Installation
 
 ```bash
+# Install from source
 pip install git+https://github.com/FSoft-AI4Code/CodeWiki.git
-```
 
-Verify installation:
-
-```bash
+# Verify installation
 codewiki --version
 ```
 
-### Web Application Installation
-
-For the web interface:
-
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/codewiki.git
-cd codewiki
-
-# Install Node.js (if not already installed)
-# macOS
-brew install node
-# Linux
-sudo apt update && sudo apt install -y nodejs npm
-
-# Create and activate virtual environment
-python3.12 -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Create a `.env` file from the template
-cp docker/env.example .env
-# Edit .env with your API keys and configuration
-
-# Start the web application
-python codewiki/run_web_app.py
-
-# Access at http://localhost:8000
-```
-
-### Docker Installation
-
-For containerized deployment, see [Docker Setup](#docker-deployment) section below.
-
----
-
-## Quick Start
-
-### CLI Usage
+### Quick Start
 
 #### 1. Configure CodeWiki
 
@@ -168,250 +111,76 @@ codewiki config validate
 #### 2. Generate Documentation
 
 ```bash
+# Navigate to your project
 cd /path/to/your/project
-codewiki generate
-```
 
-Documentation will be created in `./docs/`
-
-#### 3. Generate with GitHub Pages
-
-```bash
-codewiki generate --github-pages
-```
-
-This creates an interactive HTML viewer at `./docs/index.html`
-
----
-
-## CLI Commands
-
-### Configuration Management
-
-```bash
-# Set configuration
-codewiki config set --api-key <key> --base-url <url> \
-  --main-model <model> --cluster-model <model>
-
-# Show configuration
-codewiki config show
-
-# Validate configuration
-codewiki config validate
-```
-
-### Documentation Generation
-
-```bash
-# Basic generation
+# Generate documentation (saved to ./docs/)
 codewiki generate
 
-# Custom output directory
-codewiki generate --output ./documentation
-
-# Create git branch
-codewiki generate --create-branch
-
-# Generate GitHub Pages HTML
+# Generate with GitHub Pages HTML viewer
 codewiki generate --github-pages
 
-# Full-featured
+# Full-featured generation
 codewiki generate --create-branch --github-pages --verbose
 ```
 
----
-
-## Configuration
-
-### CLI Configuration
-
-Configuration is stored in:
-- API keys: System keychain (macOS Keychain, Windows Credential Manager, Linux Secret Service)
-- Settings: `~/.codewiki/config.json`
-
-### Web Application Configuration
-
-Configuration uses environment variables in `.env` file:
+### CLI Commands
 
 ```bash
-# LLM API Configuration
-MAIN_MODEL=claude-sonnet-4
-FALLBACK_MODEL_1=glm-4p5
-CLUSTER_MODEL=claude-sonnet-4
-LLM_BASE_URL=http://litellm:4000/
-LLM_API_KEY=sk-1234
+# Configuration Management
+codewiki config set --api-key <key> --base-url <url> \
+  --main-model <model> --cluster-model <model>
+codewiki config show
+codewiki config validate
 
-# Application Port
-APP_PORT=8000
-
-# Optional: Logfire Configuration
-LOGFIRE_TOKEN=
-LOGFIRE_PROJECT_NAME=codewiki
-LOGFIRE_SERVICE_NAME=codewiki
+# Documentation Generation
+codewiki generate                           # Basic generation
+codewiki generate --output ./documentation  # Custom output directory
+codewiki generate --create-branch           # Create git branch
+codewiki generate --github-pages            # Generate HTML viewer
+codewiki generate --verbose                 # Detailed logging
 ```
+
+### Configuration Storage
+
+- **API keys**: System keychain (macOS Keychain, Windows Credential Manager, Linux Secret Service)
+- **Settings**: `~/.codewiki/config.json`
 
 ---
 
-## Workflow
+## Additional Documentation
 
-```mermaid
-graph TB
-    A[Repository Input] --> B[Dependency Graph Construction]
-    B --> C[Hierarchical Decomposition]
-    C --> D[Module Tree]
-    D --> E[Recursive Agent Processing]
-    E --> F{Complexity Check}
-    F -->|Complex| G[Dynamic Delegation]
-    F -->|Simple| H[Generate Documentation]
-    G --> E
-    H --> I[Cross-Module References]
-    I --> J[Hierarchical Assembly]
-    J --> K[Comprehensive Documentation]
-    K --> L[Architecture Diagrams]
-    K --> M[Data Flow Visualizations]
-    K --> N[API Documentation]
-```
-
-### Processing Pipeline
-
-1. **Repository Analysis** - AST parsing and dependency graph construction
-2. **Hierarchical Decomposition** - Feature-based module partitioning
-3. **Recursive Documentation** - Agent-based processing with dynamic delegation
-4. **Hierarchical Assembly** - Bottom-up synthesis of comprehensive docs
+- **[Docker Deployment](docker/DOCKER_README.md)** - Containerized deployment instructions
+- **[Development Guide](DEVELOPMENT.md)** - Project structure, architecture, and contributing guidelines
 
 ---
 
-## Documentation Structure
+## Documentation Output
 
 Generated documentation includes:
 
-### 📄 Textual Documentation
-- **README Overview** - High-level project introduction
-- **Architecture Guide** - System design and component relationships
-- **API Reference** - Detailed interface specifications
-- **Usage Examples** - Practical code samples and patterns
+### Textual Documentation
+- Repository overview with architecture guide
+- Module-level documentation with API references
+- Usage examples and implementation patterns
 
-### 📊 Visual Artifacts
-- **System Architecture Diagrams** - Component relationships and hierarchies
-- **Data Flow Visualizations** - Information flow through the system
-- **Sequence Diagrams** - Inter-component communication patterns
-- **Dependency Graphs** - Module and function dependencies
+### Visual Artifacts
+- System architecture diagrams (Mermaid)
+- Data flow visualizations
+- Dependency graphs
 
 ### Output Structure
 
 ```
 ./docs/
-├── overview.md              # Start here!
+├── overview.md              # Repository overview (start here!)
 ├── module1.md               # Module documentation
-├── module2.md
-├── ...
-├── module_tree.json         # Module hierarchy
-├── first_module_tree.json   # Initial clustering
-├── metadata.json            # Generation details
-└── index.html              # GitHub Pages viewer (if --github-pages)
+├── module2.md               # Additional modules...
+├── module_tree.json         # Hierarchical module structure
+├── first_module_tree.json   # Initial clustering result
+├── metadata.json            # Generation metadata
+└── index.html               # Interactive viewer (with --github-pages)
 ```
-
----
-
-## Supported Languages
-
-| Language   | Extensions          | Support |
-|------------|---------------------|---------|
-| Python     | `.py`               | Full    |
-| Java       | `.java`             | Full    |
-| JavaScript | `.js`, `.jsx`       | Full    |
-| TypeScript | `.ts`, `.tsx`       | Full    |
-| C          | `.c`, `.h`          | Full    |
-| C++        | `.cpp`, `.hpp`, etc.| Full    |
-| C#         | `.cs`               | Full    |
-
----
-
-## Docker Deployment
-
-### Quick Start with Docker
-
-1. **Set up environment variables**:
-   ```bash
-   # Copy from docker directory
-   cp docker/env.example .env
-   # Edit .env with your configuration
-   ```
-
-2. **Create Docker network**:
-   ```bash
-   docker network create codewiki-network
-   ```
-
-3. **Start the services**:
-   ```bash
-   # From project root
-   docker-compose -f docker/docker-compose.yml up -d
-   
-   # Or from docker directory
-   cd docker
-   docker-compose up -d
-   ```
-
-4. **Access the application**:
-   - Web app: http://localhost:8000
-
-### Docker Configuration
-
-All Docker-related files are in the `docker/` directory:
-- `docker/Dockerfile` - Container image definition
-- `docker/docker-compose.yml` - Service orchestration
-- `docker/env.example` - Environment variables template
-
-### Stopping Services
-
-```bash
-# From project root
-docker-compose -f docker/docker-compose.yml down
-
-# Or from docker directory
-cd docker
-docker-compose down
-```
-
----
-
-## Development
-
-### Project Structure
-
-```
-codewiki/
-├── codewiki/                 # Main package
-│   ├── cli/                  # CLI implementation
-│   │   ├── commands/         # CLI commands (config, generate)
-│   │   ├── models/           # Data models
-│   │   ├── utils/            # Utilities
-│   │   └── adapters/         # External integrations
-│   ├── src/                  # Web application
-│   │   ├── be/               # Backend (dependency analysis, agents)
-│   │   └── fe/               # Frontend (web interface)
-│   ├── templates/            # HTML templates
-│   └── run_web_app.py        # Web app entry point
-├── docker/                   # Docker configuration
-│   ├── Dockerfile
-│   ├── docker-compose.yml
-│   └── env.example
-├── tests/                    # Test suite
-├── output/                   # Generated documentation output
-└── README.md                 # This file
-```
-
----
-
-## Requirements
-
-- Python 3.12+
-- Git (optional, for branch management)
-- LLM API access (Anthropic Claude, OpenAI, etc.)
-- Tree-sitter language parsers (automatically installed)
-- System keychain support for CLI (macOS Keychain, Windows Credential Manager, Linux Secret Service)
-- Node.js (for mermaid diagram validation)
 
 ---
 
@@ -420,26 +189,29 @@ codewiki/
 If you use CodeWiki in your research, please cite:
 
 ```bibtex
-@article{codewiki2025,
-  title={CodeWiki: Automated Repository-Level Documentation at Scale},
-  author={Your Name},
-  journal={arXiv preprint arXiv:XXXXX},
-  year={2025}
+@misc{anh2025codewikievaluatingaiabilitytogenerateholisticdocumentationforlargescalecodebase,
+      title={CodeWiki: Evaluating AI's Ability to Generate Holistic Documentation for Large-Scale Codebases}, 
+      author={Nguyen Hoang Anh and Minh Le-Anh and Bach Le and Nghi D. Q. Bui},
+      year={2025},
+      eprint={2510.24428},
+      archivePrefix={arXiv},
+      primaryClass={cs.SE},
+      url={https://arxiv.org/abs/2510.24428}, 
 }
 ```
 
 ---
 
-## License
+## Resources
 
-MIT License - see LICENSE file for details
+- **Live Demo**: [View documentation examples](https://fsoft-ai4code.github.io/codewiki-demo/)
+- **Benchmark**: [CodeWikiBench](https://github.com/FSoft-AI4Code/CodeWikiBench)
 
 ---
 
-## Support
+## License
 
-- **Live Demo**: [View documentation examples](https://fsoft-ai4code.github.io/codewiki-demo/)
-- **Issues**: https://github.com/yourusername/codewiki/issues
+MIT License
 
 ---
 
@@ -447,6 +219,6 @@ MIT License - see LICENSE file for details
 
 **Made with ❤️ by the CodeWiki Team**
 
-[⬆ Back to Top](#codewiki-automated-repository-level-documentation-at-scale)
+[⬆ Back to Top](#codewiki)
 
 </div>
