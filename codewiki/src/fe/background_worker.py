@@ -16,10 +16,10 @@ from typing import Dict
 from dataclasses import asdict
 
 from codewiki.src.be.documentation_generator import DocumentationGenerator
-from codewiki.src.config import Config
+from codewiki.src.config import Config, MAIN_MODEL
 from .models import JobStatus
 from .cache_manager import CacheManager
-from .github_processor import GitHubRepoProcessor
+from .github_processor import GitRepoProcessor
 from .config import WebAppConfig
 from codewiki.src.utils import file_manager
 
@@ -96,9 +96,8 @@ class BackgroundWorker:
             
             for repo_hash, cache_entry in cache_entries.items():
                 # Extract repo info to create job_id
-                from .github_processor import GitHubRepoProcessor
                 try:
-                    repo_info = GitHubRepoProcessor.get_repo_info(cache_entry.repo_url)
+                    repo_info = GitRepoProcessor.get_repo_info(cache_entry.repo_url)
                     job_id = repo_info['full_name'].replace('/', '--')
                     
                     # Only add if job doesn't already exist
@@ -191,13 +190,13 @@ class BackgroundWorker:
                 return
             
             # Clone repository
-            repo_info = GitHubRepoProcessor.get_repo_info(job.repo_url)
+            repo_info = GitRepoProcessor.get_repo_info(job.repo_url)
             # Use repo full name for temp directory (already URL-safe since job_id is URL-safe)
             temp_repo_dir = os.path.join(self.temp_dir, job_id)
             
             job.progress = f"Cloning repository {repo_info['full_name']}..."
             
-            if not GitHubRepoProcessor.clone_repository(repo_info['clone_url'], temp_repo_dir, job.commit_id):
+            if not GitRepoProcessor.clone_repository(repo_info['clone_url'], temp_repo_dir, job.commit_id):
                 raise Exception("Failed to clone repository")
             
             # Generate documentation

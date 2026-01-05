@@ -1,10 +1,11 @@
 services:
   codewiki:
-    image: codewiki:0.0.1
+    image: codewiki:0.0.4
     build:
       context: ..
       dockerfile: docker/Dockerfile
     container_name: codewiki
+    platform: linux/amd64
     ports:
       - "${APP_PORT:-8000}:8000"
     environment:
@@ -30,5 +31,5 @@ services:
 
 networks:
   net:
-    external: true
+    driver: bridge
     name: codewiki-network

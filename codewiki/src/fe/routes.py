@@ -13,7 +13,7 @@ from fastapi import Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from .models import JobStatus, JobStatusResponse
-from .github_processor import GitHubRepoProcessor
+from .github_processor import GitRepoProcessor
 from .background_worker import BackgroundWorker
 from .cache_manager import CacheManager
 from .templates import WEB_INTERFACE_TEMPLATE
@@ -30,7 +30,7 @@ class WebRoutes:
         self.cache_manager = cache_manager
     
     async def index_get(self, request: Request) -> HTMLResponse:
-        """Main page with form for submitting GitHub repositories."""
+        """Main page with form for submitting Git repositories."""
         # Clean up old jobs before displaying
         # self.cleanup_old_jobs()
         
@@ -64,17 +64,17 @@ class WebRoutes:
         commit_id = commit_id.strip() if commit_id else ""
         
         if not repo_url:
-            message = "Please enter a GitHub repository URL"
+            message = "Please enter a Git repository URL"
             message_type = "error"
-        elif not GitHubRepoProcessor.is_valid_github_url(repo_url):
-            message = "Please enter a valid GitHub repository URL"
+        elif not GitRepoProcessor.is_valid_git_url(repo_url):
+            message = "Please enter a valid Git repository URL (GitHub, GitLab, Gitee, etc.)"
             message_type = "error"
         else:
             # Normalize the repo URL for comparison
-            normalized_repo_url = self._normalize_github_url(repo_url)
+            normalized_repo_url = GitRepoProcessor.normalize_git_url(repo_url)
             
             # Get repo info for job ID generation
-            repo_info = GitHubRepoProcessor.get_repo_info(normalized_repo_url)
+            repo_info = GitRepoProcessor.get_repo_info(normalized_repo_url)
             job_id = self._repo_full_name_to_job_id(repo_info['full_name'])
             
             # Check if already in queue, processing, or recently failed
@@ -268,11 +268,11 @@ class WebRoutes:
             raise HTTPException(status_code=500, detail=f"Error reading {filename}: {e}\n{format_exc()}")
     
     def _normalize_github_url(self, url: str) -> str:
-        """Normalize GitHub URL for consistent comparison."""
+        """Normalize Git URL for consistent comparison (deprecated - use GitRepoProcessor.normalize_git_url)."""
         try:
             # Get repo info to standardize the URL format
-            repo_info = GitHubRepoProcessor.get_repo_info(url)
-            return f"https://github.com/{repo_info['full_name']}"
+            repo_info = GitRepoProcessor.get_repo_info(url)
+            return repo_info['web_url']
         except Exception:
             # Fallback to basic normalization
             return url.rstrip('/').lower()

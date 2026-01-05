@@ -10,7 +10,7 @@ WEB_INTERFACE_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CodeWiki - GitHub Repository Documentation Generator</title>
+    <title>CodeWiki - Git Repository Documentation Generator</title>
     <style>
         :root {
             --primary-color: #2563eb;
@@ -208,7 +208,7 @@ WEB_INTERFACE_TEMPLATE = """
     <div class="container">
         <div class="header">
             <h1>📚 CodeWiki</h1>
-            <p>Generate comprehensive documentation for any GitHub repository</p>
+            <p>Generate comprehensive documentation for any Git repository</p>
         </div>
         
         <div class="content">
@@ -220,12 +220,12 @@ WEB_INTERFACE_TEMPLATE = """
             
             <form method="POST" action="/">
                 <div class="form-group">
-                    <label for="repo_url">GitHub Repository URL:</label>
+                    <label for="repo_url">Git Repository URL:</label>
                     <input 
                         type="url" 
                         id="repo_url" 
                         name="repo_url" 
-                        placeholder="https://github.com/owner/repository"
+                        placeholder="https://github.com/owner/repo or https://gitlab.com/owner/repo"
                         required
                         value="{{ repo_url or '' }}"
                     >
