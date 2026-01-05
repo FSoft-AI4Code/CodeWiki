@@ -12,12 +12,15 @@ import logging
 import argparse
 import asyncio
 import traceback
+import os
 
 # Configure logging and monitoring
 from codewiki.src.be.dependency_analyzer.utils.logging_config import setup_logging
 
-# Initialize colored logging
-setup_logging(level=logging.INFO)
+# Initialize colored logging with environment variable support
+log_level_name = os.getenv('LOG_LEVEL', 'INFO').upper()
+log_level = getattr(logging, log_level_name, logging.INFO)
+setup_logging(level=log_level)
 
 logger = logging.getLogger(__name__)
 

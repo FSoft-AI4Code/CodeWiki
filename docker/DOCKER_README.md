@@ -98,6 +98,9 @@ The `docker-compose.yml` file defines the CodeWiki service with the following fe
 The container uses environment variables from the `.env` file:
 - `PYTHONPATH=/app/src` - Set Python module path
 - `PYTHONUNBUFFERED=1` - Enable real-time logging
+- `LOG_LEVEL` - Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  - `DEBUG`: Show detailed progress for each module and component
+  - `INFO`: Show general progress information (default)
 - All variables from `.env` file
 
 ### Volume Mounts
@@ -173,6 +176,12 @@ docker-compose logs -f
 
 # View specific service
 docker logs codewiki -f
+
+# Enable verbose/debug logging
+# Add to .env file:
+echo "LOG_LEVEL=DEBUG" >> .env
+# Then restart the container:
+docker-compose restart
 ```
 
 ### Stop Services

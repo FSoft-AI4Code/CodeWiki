@@ -75,6 +75,7 @@ async def serve_generated_docs(job_id: str, filename: str = "overview.md"):
 def main():
     """Main function to run the web application."""
     import uvicorn
+    import os
     
     parser = argparse.ArgumentParser(
         description="CodeWiki Web Application - Generate documentation for GitHub repositories"
@@ -104,6 +105,11 @@ def main():
     
     args = parser.parse_args()
     
+    # Get log level from environment variable or command line
+    log_level_name = os.getenv('LOG_LEVEL', 'DEBUG' if args.debug else 'INFO').upper()
+    log_level_map = {'DEBUG': 'debug', 'INFO': 'info', 'WARNING': 'warning', 'ERROR': 'error', 'CRITICAL': 'critical'}
+    uvicorn_log_level = log_level_map.get(log_level_name, 'info')
+    
     # Ensure required directories exist
     WebAppConfig.ensure_directories()
     
@@ -122,7 +128,7 @@ def main():
             host=args.host,
             port=args.port,
             reload=args.reload,
-            log_level="debug" if args.debug else "info"
+            log_level=uvicorn_log_level
         )
     except KeyboardInterrupt:
         print("\n👋 Server stopped")
