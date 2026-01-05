@@ -90,13 +90,15 @@ class AgentOrchestrator:
     async def process_module(self, module_name: str, components: Dict[str, Node], 
                            core_component_ids: List[str], module_path: List[str], working_dir: str) -> Dict[str, Any]:
         """Process a single module and generate its documentation."""
-        logger.info(f"Processing module: {module_name}")
+        logger.info(f"🔄 Starting to process module: {module_name}")
+        logger.info(f"   📦 Core components: {len(core_component_ids)}")
         
         # Load or create module tree
         module_tree_path = os.path.join(working_dir, MODULE_TREE_FILENAME)
         module_tree = file_manager.load_json(module_tree_path)
         
         # Create agent
+        logger.info(f"   🤖 Creating agent for module: {module_name}")
         agent = self.create_agent(module_name, components, core_component_ids)
         
         # Create dependencies
@@ -116,17 +118,18 @@ class AgentOrchestrator:
         # check if overview docs already exists
         overview_docs_path = os.path.join(working_dir, OVERVIEW_FILENAME)
         if os.path.exists(overview_docs_path):
-            logger.info(f"✓ Overview docs already exists at {overview_docs_path}")
+            logger.info(f"   ✓ Overview docs already exists, skipping")
             return module_tree
 
         # check if module docs already exists
         docs_path = os.path.join(working_dir, f"{module_name}.md")
         if os.path.exists(docs_path):
-            logger.info(f"✓ Module docs already exists at {docs_path}")
+            logger.info(f"   ✓ Module docs already exists, skipping")
             return module_tree
         
         # Run agent
         try:
+            logger.info(f"   🚀 Running agent for module: {module_name}")
             result = await agent.run(
                 format_user_prompt(
                     module_name=module_name,
@@ -138,12 +141,13 @@ class AgentOrchestrator:
             )
             
             # Save updated module tree
+            logger.info(f"   💾 Saving module tree for: {module_name}")
             file_manager.save_json(deps.module_tree, module_tree_path)
-            logger.debug(f"Successfully processed module: {module_name}")
+            logger.info(f"   ✅ Successfully completed module: {module_name}")
             
             return deps.module_tree
             
         except Exception as e:
-            logger.error(f"Error processing module {module_name}: {str(e)}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.error(f"   ❌ Error processing module {module_name}: {str(e)}")
+            logger.error(f"   Traceback: {traceback.format_exc()}")
             raise

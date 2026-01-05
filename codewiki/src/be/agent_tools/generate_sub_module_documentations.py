@@ -10,6 +10,7 @@ from codewiki.src.be.cluster_modules import format_potential_core_components
 from codewiki.src.config import MAX_TOKEN_PER_LEAF_MODULE
 
 import logging
+import traceback
 logger = logging.getLogger(__name__)
 
 
@@ -43,11 +44,13 @@ async def generate_sub_module_documentation(
         indent = "  " * deps.current_depth
         arrow = "└─" if deps.current_depth > 0 else "→"
 
-        logger.info(f"{indent}{arrow} Generating documentation for sub-module: {sub_module_name}")
+        logger.info(f"{indent}{arrow} 📝 Starting sub-module: {sub_module_name} ({len(core_component_ids)} components)")
 
         num_tokens = count_tokens(format_potential_core_components(core_component_ids, ctx.deps.components)[-1])
+        logger.info(f"{indent}   📊 Token count: {num_tokens}")
         
         if is_complex_module(ctx.deps.components, core_component_ids) and ctx.deps.current_depth < ctx.deps.max_depth and num_tokens >= MAX_TOKEN_PER_LEAF_MODULE:
+            logger.info(f"{indent}   🌳 Creating complex agent (with recursion capability)")
             sub_agent = Agent(
                 model=fallback_models,
                 name=sub_module_name,
@@ -56,6 +59,7 @@ async def generate_sub_module_documentation(
                 tools=[read_code_components_tool, str_replace_editor_tool, generate_sub_module_documentation_tool],
             )
         else:
+            logger.info(f"{indent}   🍃 Creating leaf agent (simple module)")
             sub_agent = Agent(
                 model=fallback_models,
                 name=sub_module_name,
@@ -67,22 +71,26 @@ async def generate_sub_module_documentation(
         deps.current_module_name = sub_module_name
         deps.path_to_current_module.append(sub_module_name)
         deps.current_depth += 1
-        # log the current module tree
-        # print(f"Current module tree: {json.dumps(deps.module_tree, indent=4)}")
 
-        result = await sub_agent.run(
-            format_user_prompt(
-                module_name=deps.current_module_name,
-                core_component_ids=core_component_ids,
-                components=ctx.deps.components,
-                module_tree=ctx.deps.module_tree,
-            ),
-            deps=ctx.deps
-        )
-
-        # remove the sub-module name from the path to current module and the module tree
-        deps.path_to_current_module.pop()
-        deps.current_depth -= 1
+        try:
+            logger.info(f"{indent}   🚀 Running agent for sub-module: {sub_module_name}")
+            result = await sub_agent.run(
+                format_user_prompt(
+                    module_name=deps.current_module_name,
+                    core_component_ids=core_component_ids,
+                    components=ctx.deps.components,
+                    module_tree=ctx.deps.module_tree,
+                ),
+                deps=ctx.deps
+            )
+            logger.info(f"{indent}   ✅ Completed sub-module: {sub_module_name}")
+        except Exception as e:
+            logger.error(f"{indent}   ❌ Failed sub-module {sub_module_name}: {str(e)}")
+            logger.error(f"{indent}   Traceback: {traceback.format_exc()}")
+            logger.info(f"{indent}   ⏩ Continuing with next sub-module...")
+        finally:
+            deps.path_to_current_module.pop()
+            deps.current_depth -= 1
 
     # restore the previous module name
     deps.current_module_name = previous_module_name

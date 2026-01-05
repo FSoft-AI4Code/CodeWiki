@@ -244,6 +244,9 @@ class BackgroundWorker:
             job.error_message = str(e)
             job.progress = f"Failed: {str(e)}"
             
+            # Save job status to disk
+            self.save_job_statuses()
+            
             print(f"Job {job_id}: Failed with error: {e}")
         
         finally:

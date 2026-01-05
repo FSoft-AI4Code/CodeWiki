@@ -99,11 +99,16 @@ def cluster_modules(
         
         # Filter sub_leaf_nodes to ensure they exist in components
         valid_sub_leaf_nodes = []
+        invalid_count = 0
         for node in sub_leaf_nodes:
             if node in components:
                 valid_sub_leaf_nodes.append(node)
             else:
-                logger.warning(f"Skipping invalid sub leaf node '{node}' in module '{module_name}' - not found in components")
+                invalid_count += 1
+                logger.debug(f"Skipping invalid sub leaf node '{node}' in module '{module_name}' - not found in components")
+        
+        if invalid_count > 0:
+            logger.info(f"⚠️  Module '{module_name}': Filtered {invalid_count} invalid component IDs from LLM response, kept {len(valid_sub_leaf_nodes)} valid ones")
         
         current_module_path.append(module_name)
         module_info["children"] = {}
