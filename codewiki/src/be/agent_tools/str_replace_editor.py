@@ -725,6 +725,7 @@ async def str_replace_editor(
         * If a `command` generates a long output, it will be truncated and marked with `<response clipped>`
         * The `undo_edit` command will revert the last edit made to the file at `path`
         * Only `view` command is allowed when `working_dir` is `repo`.
+        * IMPORTANT: `view_range` MUST be a JSON array of integers (e.g. [1, 50]), NOT a JSON string like "[1, 50]".
 
     Args:
         working_dir: The working directory to use. Choose `repo` to work with the repository files, or `docs` to work with the generated documentation files.
@@ -735,7 +736,6 @@ async def str_replace_editor(
         old_str: Required parameter of `str_replace` command containing the string in `path` to replace.
         new_str: Optional parameter of `str_replace` command containing the new string (if not given, no string will be added). Required parameter of `insert` command containing the string to insert.
     """
-
 
     tool = EditTool(ctx.deps.registry, ctx.deps.absolute_docs_path)
     if working_dir == "docs":
@@ -777,6 +777,7 @@ Custom editing tool for viewing, creating and editing files
     * If a `command` generates a long output, it will be truncated and marked with `<response clipped>`
     * The `undo_edit` command will revert the last edit made to the file at `path`
     * Only `view` command is allowed when `working_dir` is `repo`.
+    * IMPORTANT: When calling this tool, `view_range` MUST be a JSON array of integers (e.g. [1, 50]), not a quoted string like "[1, 50]".
 """.strip(),
     takes_ctx=True
 )
