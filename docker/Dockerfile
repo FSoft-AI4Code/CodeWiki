@@ -18,6 +18,10 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Pre-download tiktoken cache files for offline usage
+# This ensures the container can work in air-gapped environments
+RUN python -c "import tiktoken; tiktoken.encoding_for_model('gpt-4'); tiktoken.encoding_for_model('gpt-3.5-turbo'); print('Tiktoken cache downloaded successfully')"
+
 # Copy application code
 COPY codewiki ./codewiki
 COPY img ./img
