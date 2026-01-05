@@ -93,8 +93,12 @@ class AgentOrchestrator:
             )
     
     async def process_module(self, module_name: str, components: Dict[str, Node], 
-                           core_component_ids: List[str], module_path: List[str], working_dir: str) -> Dict[str, Any]:
-        """Process a single module and generate its documentation."""
+                           core_component_ids: List[str], module_path: List[str], working_dir: str) -> tuple[Dict[str, Any], dict]:
+        """Process a single module and generate its documentation.
+        
+        Returns:
+            Tuple of (module_tree, token_usage)
+        """
         logger.info(f"🔄 Starting to process module: {module_name}")
         logger.info(f"   📦 Core components: {len(core_component_ids)}")
         
@@ -103,7 +107,8 @@ class AgentOrchestrator:
             self.progress_callback(
                 progress=f"Processing module: {module_name} ({len(core_component_ids)} components)",
                 current_component=f"{module_name} (starting)",
-                total_components=len(core_component_ids)
+                total_components=len(core_component_ids),
+                total_tokens=0  # Will be updated after agent run
             )
         
         # Load or create module tree
@@ -132,13 +137,13 @@ class AgentOrchestrator:
         overview_docs_path = os.path.join(working_dir, OVERVIEW_FILENAME)
         if os.path.exists(overview_docs_path):
             logger.info(f"   ✓ Overview docs already exists, skipping")
-            return module_tree
+            return module_tree, {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
         # check if module docs already exists
         docs_path = os.path.join(working_dir, f"{module_name}.md")
         if os.path.exists(docs_path):
             logger.info(f"   ✓ Module docs already exists, skipping")
-            return module_tree
+            return module_tree, {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
         
         # Run agent
         try:
@@ -148,7 +153,8 @@ class AgentOrchestrator:
             if self.progress_callback:
                 self.progress_callback(
                     progress=f"Generating documentation for module: {module_name}",
-                    current_component=f"{module_name} (generating docs)"
+                    current_component=f"{module_name} (generating docs)",
+                    total_tokens=0  # Will be updated after agent run
                 )
             
             result = await agent.run(
@@ -162,12 +168,29 @@ class AgentOrchestrator:
                 deps=deps
             )
             
+            # Extract token usage from pydantic-ai result
+            if hasattr(result, 'usage') and result.usage:
+                usage_data = {
+                    "prompt_tokens": getattr(result.usage(), 'request_tokens', 0) if callable(result.usage) else getattr(result.usage, 'request_tokens', 0),
+                    "completion_tokens": getattr(result.usage(), 'response_tokens', 0) if callable(result.usage) else getattr(result.usage, 'response_tokens', 0),
+                    "total_tokens": getattr(result.usage(), 'total_tokens', 0) if callable(result.usage) else getattr(result.usage, 'total_tokens', 0),
+                }
+                deps.add_token_usage(usage_data)
+            
+            # Send progress update with token usage
+            if self.progress_callback:
+                self.progress_callback(
+                    progress=f"Completed module: {module_name}",
+                    current_component=f"{module_name} (done)",
+                    total_tokens=deps.token_usage["total_tokens"]
+                )
+            
             # Save updated module tree
             logger.info(f"   💾 Saving module tree for: {module_name}")
             file_manager.save_json(deps.module_tree, module_tree_path)
             logger.info(f"   ✅ Successfully completed module: {module_name}")
             
-            return deps.module_tree
+            return deps.module_tree, deps.token_usage
             
         except Exception as e:
             logger.error(f"   ❌ Error processing module {module_name}: {str(e)}")

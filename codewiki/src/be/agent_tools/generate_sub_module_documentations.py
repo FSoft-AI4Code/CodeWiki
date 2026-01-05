@@ -84,6 +84,17 @@ async def generate_sub_module_documentation(
                 ),
                 deps=ctx.deps
             )
+            
+            # Extract and aggregate token usage from sub-module
+            if hasattr(result, 'usage') and result.usage:
+                usage_data = {
+                    "prompt_tokens": getattr(result.usage(), 'request_tokens', 0) if callable(result.usage) else getattr(result.usage, 'request_tokens', 0),
+                    "completion_tokens": getattr(result.usage(), 'response_tokens', 0) if callable(result.usage) else getattr(result.usage, 'response_tokens', 0),
+                    "total_tokens": getattr(result.usage(), 'total_tokens', 0) if callable(result.usage) else getattr(result.usage, 'total_tokens', 0),
+                }
+                ctx.deps.add_token_usage(usage_data)
+                logger.info(f"{indent}   📊 Sub-module token usage: {usage_data['total_tokens']} tokens")
+            
             logger.info(f"{indent}   ✅ Completed sub-module: {sub_module_name}")
         except Exception as e:
             logger.error(f"{indent}   ❌ Failed sub-module {sub_module_name}: {str(e)}")

@@ -209,8 +209,13 @@ class CLIDocumentationGenerator:
             if os.path.exists(first_module_tree_path):
                 module_tree = file_manager.load_json(first_module_tree_path)
             else:
-                module_tree = cluster_modules(leaf_nodes, components, backend_config)
+                # Track clustering tokens
+                clustering_token_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+                module_tree = cluster_modules(leaf_nodes, components, backend_config, token_usage_tracker=clustering_token_usage)
                 file_manager.save_json(module_tree, first_module_tree_path)
+                
+                # Update job statistics
+                self.job.statistics.total_tokens_used += clustering_token_usage["total_tokens"]
             
             file_manager.save_json(module_tree, module_tree_path)
             self.job.module_count = len(module_tree)
@@ -230,6 +235,9 @@ class CLIDocumentationGenerator:
         try:
             # Run the actual documentation generation
             await doc_generator.generate_module_documentation(components, leaf_nodes)
+            
+            # Update token usage from backend
+            self.job.statistics.total_tokens_used += doc_generator.total_token_usage["total_tokens"]
             
             if self.verbose:
                 self.progress_tracker.update_stage(0.9, "Creating repository overview...")

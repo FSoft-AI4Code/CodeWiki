@@ -66,5 +66,6 @@ class ProgressMessage(BaseModel):
     total_modules: Optional[int] = None
     component_index: Optional[int] = None
     total_components: Optional[int] = None
+    total_tokens: Optional[int] = None  # Total tokens consumed
     timestamp: datetime = datetime.now()
     error_message: Optional[str] = None

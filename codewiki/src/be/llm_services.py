@@ -59,8 +59,9 @@ def call_llm(
     prompt: str,
     config: Config,
     model: str = None,
-    temperature: float = 0.0
-) -> str:
+    temperature: float = 0.0,
+    return_usage: bool = False
+) -> str | tuple[str, dict]:
     """
     Call LLM with the given prompt.
     
@@ -69,9 +70,11 @@ def call_llm(
         config: Configuration containing LLM settings
         model: Model name (defaults to config.main_model)
         temperature: Temperature setting
+        return_usage: If True, return (text, usage_dict) tuple
         
     Returns:
-        LLM response text
+        LLM response text, or (text, usage_dict) if return_usage=True
+        usage_dict contains: {"prompt_tokens": int, "completion_tokens": int, "total_tokens": int}
     """
     if model is None:
         model = config.main_model
@@ -83,4 +86,15 @@ def call_llm(
         temperature=temperature,
         max_tokens=32768
     )
-    return response.choices[0].message.content
+    
+    content = response.choices[0].message.content
+    
+    if return_usage:
+        usage = {
+            "prompt_tokens": response.usage.prompt_tokens if response.usage else 0,
+            "completion_tokens": response.usage.completion_tokens if response.usage else 0,
+            "total_tokens": response.usage.total_tokens if response.usage else 0,
+        }
+        return content, usage
+    
+    return content

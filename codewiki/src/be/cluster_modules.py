@@ -47,7 +47,8 @@ def cluster_modules(
     config: Config,
     current_module_tree: dict[str, Any] = {},
     current_module_name: str = None,
-    current_module_path: List[str] = []
+    current_module_path: List[str] = [],
+    token_usage_tracker: dict = None
 ) -> Dict[str, Any]:
     """
     Cluster the potential core components into modules.
@@ -59,7 +60,13 @@ def cluster_modules(
         return {}
 
     prompt = format_cluster_prompt(potential_core_components, current_module_tree, current_module_name)
-    response = call_llm(prompt, config, model=config.cluster_model)
+    response, usage = call_llm(prompt, config, model=config.cluster_model, return_usage=True)
+    
+    # Track token usage if tracker provided
+    if token_usage_tracker is not None:
+        token_usage_tracker["prompt_tokens"] += usage.get("prompt_tokens", 0)
+        token_usage_tracker["completion_tokens"] += usage.get("completion_tokens", 0)
+        token_usage_tracker["total_tokens"] += usage.get("total_tokens", 0)
 
     #parse the response
     try:
@@ -112,7 +119,7 @@ def cluster_modules(
         
         current_module_path.append(module_name)
         module_info["children"] = {}
-        module_info["children"] = cluster_modules(valid_sub_leaf_nodes, components, config, current_module_tree, module_name, current_module_path)
+        module_info["children"] = cluster_modules(valid_sub_leaf_nodes, components, config, current_module_tree, module_name, current_module_path, token_usage_tracker)
         current_module_path.pop()
 
     return module_tree

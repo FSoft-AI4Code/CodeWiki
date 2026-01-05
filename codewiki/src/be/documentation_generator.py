@@ -35,6 +35,12 @@ class DocumentationGenerator:
         self.graph_builder = DependencyGraphBuilder(config)
         self.agent_orchestrator = AgentOrchestrator(config)
         self.progress_callback = None
+        # Token usage tracking
+        self.total_token_usage = {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0
+        }
     
     def set_progress_callback(self, callback):
         """Set a callback function for progress updates."""
@@ -56,7 +62,8 @@ class DocumentationGenerator:
             "statistics": {
                 "total_components": len(components),
                 "leaf_nodes": num_leaf_nodes,
-                "max_depth": self.config.max_depth
+                "max_depth": self.config.max_depth,
+                "token_usage": self.total_token_usage
             },
             "files_generated": [
                 "overview.md",
@@ -175,12 +182,19 @@ class DocumentationGenerator:
                                 progress=f"Processing module {idx}/{total_modules}: {module_key}",
                                 current_module=module_key,
                                 module_index=idx,
-                                total_modules=total_modules
+                                total_modules=total_modules,
+                                total_tokens=self.total_token_usage["total_tokens"]
                             )
                         
-                        final_module_tree = await self.agent_orchestrator.process_module(
+                        final_module_tree, module_token_usage = await self.agent_orchestrator.process_module(
                             module_name, components, module_info["components"], module_path, working_dir
                         )
+                        
+                        # Aggregate token usage from this module
+                        self.total_token_usage["prompt_tokens"] += module_token_usage.get("prompt_tokens", 0)
+                        self.total_token_usage["completion_tokens"] += module_token_usage.get("completion_tokens", 0)
+                        self.total_token_usage["total_tokens"] += module_token_usage.get("total_tokens", 0)
+                        
                         logger.info(f"✅ [{idx}/{total_modules}] Completed leaf module: {module_key}")
                     else:
                         logger.info(f"📁 [{idx}/{total_modules}] Processing parent module: {module_key}")
@@ -191,7 +205,8 @@ class DocumentationGenerator:
                                 progress=f"Processing parent module {idx}/{total_modules}: {module_key}",
                                 current_module=module_key,
                                 module_index=idx,
-                                total_modules=total_modules
+                                total_modules=total_modules,
+                                total_tokens=self.total_token_usage["total_tokens"]
                             )
                         
                         final_module_tree = await self.generate_parent_module_docs(
@@ -216,9 +231,14 @@ class DocumentationGenerator:
         else:
             logger.info(f"Processing whole repo because repo can fit in the context window")
             repo_name = os.path.basename(os.path.normpath(self.config.repo_path))
-            final_module_tree = await self.agent_orchestrator.process_module(
+            final_module_tree, module_token_usage = await self.agent_orchestrator.process_module(
                 repo_name, components, leaf_nodes, [], working_dir
             )
+            
+            # Aggregate token usage
+            self.total_token_usage["prompt_tokens"] += module_token_usage.get("prompt_tokens", 0)
+            self.total_token_usage["completion_tokens"] += module_token_usage.get("completion_tokens", 0)
+            self.total_token_usage["total_tokens"] += module_token_usage.get("total_tokens", 0)
 
             # save final_module_tree to module_tree.json
             file_manager.save_json(final_module_tree, os.path.join(working_dir, MODULE_TREE_FILENAME))
@@ -269,7 +289,19 @@ class DocumentationGenerator:
         
         try:
             logger.info(f"🤖 Calling LLM to generate parent docs for: {module_name}")
-            parent_docs = call_llm(prompt, self.config)
+            parent_docs, usage = call_llm(prompt, self.config, return_usage=True)
+            
+            # Track token usage
+            self.total_token_usage["prompt_tokens"] += usage.get("prompt_tokens", 0)
+            self.total_token_usage["completion_tokens"] += usage.get("completion_tokens", 0)
+            self.total_token_usage["total_tokens"] += usage.get("total_tokens", 0)
+            
+            # Send progress update with token usage
+            if self.progress_callback:
+                self.progress_callback(
+                    progress=f"Generated parent docs for: {module_name}",
+                    total_tokens=self.total_token_usage["total_tokens"]
+                )
             
             logger.info(f"💾 Saving parent documentation for: {module_name}")
             # Parse and save parent documentation
@@ -313,8 +345,15 @@ class DocumentationGenerator:
                 module_tree = file_manager.load_json(first_module_tree_path)
             else:
                 logger.info(f"🆕 Creating new module tree (clustering in progress...)")
-                module_tree = cluster_modules(leaf_nodes, components, self.config)
+                module_tree = cluster_modules(leaf_nodes, components, self.config, token_usage_tracker=self.total_token_usage)
                 file_manager.save_json(module_tree, first_module_tree_path)
+                
+                # Send progress update with clustering token usage
+                if self.progress_callback:
+                    self.progress_callback(
+                        progress=f"Clustering completed",
+                        total_tokens=self.total_token_usage["total_tokens"]
+                    )
             
             file_manager.save_json(module_tree, module_tree_path)
             
