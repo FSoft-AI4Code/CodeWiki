@@ -76,6 +76,7 @@ def main():
     """Main function to run the web application."""
     import uvicorn
     import os
+    import logging
     
     parser = argparse.ArgumentParser(
         description="CodeWiki Web Application - Generate documentation for GitHub repositories"
@@ -110,6 +111,11 @@ def main():
     log_level_map = {'DEBUG': 'debug', 'INFO': 'info', 'WARNING': 'warning', 'ERROR': 'error', 'CRITICAL': 'critical'}
     uvicorn_log_level = log_level_map.get(log_level_name, 'info')
     
+    # Configure backend logging with the same log level
+    from codewiki.src.be.dependency_analyzer.utils.logging_config import setup_logging
+    python_log_level = getattr(logging, log_level_name, logging.INFO)
+    setup_logging(level=python_log_level)
+    
     # Ensure required directories exist
     WebAppConfig.ensure_directories()
     
@@ -118,6 +124,7 @@ def main():
     
     print(f"🚀 CodeWiki Web Application starting...")
     print(f"🌐 Server running at: http://{args.host}:{args.port}")
+    print(f"📊 Log level: {log_level_name}")
     print(f"📁 Cache directory: {WebAppConfig.get_absolute_path(WebAppConfig.CACHE_DIR)}")
     print(f"🗂️  Temp directory: {WebAppConfig.get_absolute_path(WebAppConfig.TEMP_DIR)}")
     print("\nPress Ctrl+C to stop the server")

@@ -148,8 +148,16 @@ class GitRepoProcessor:
     def clone_repository(clone_url: str, target_dir: str, commit_id: str = None) -> bool:
         """Clone a Git repository to the target directory, optionally checking out a specific commit."""
         try:
-            # Ensure target directory exists
-            os.makedirs(os.path.dirname(target_dir), exist_ok=True)
+            # Ensure parent directory exists
+            parent_dir = os.path.dirname(target_dir)
+            if parent_dir:
+                os.makedirs(parent_dir, exist_ok=True)
+            
+            # If target directory already exists, remove it first
+            if os.path.exists(target_dir):
+                print(f"Removing existing directory: {target_dir}")
+                import shutil
+                shutil.rmtree(target_dir)
             
             # If specific commit is requested, don't use shallow clone
             if commit_id:

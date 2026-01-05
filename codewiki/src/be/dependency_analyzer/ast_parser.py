@@ -12,7 +12,6 @@ from codewiki.src.be.dependency_analyzer.models.core import Node
 
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 
 class DependencyParser:
