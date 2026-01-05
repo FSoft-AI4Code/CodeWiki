@@ -10,7 +10,7 @@ import subprocess
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import List, Optional, Tuple, Literal
+from typing import List, Optional, Tuple, Literal, Union
 import io
 
 import logging
@@ -712,7 +712,7 @@ async def str_replace_editor(
     command: Literal["view", "create", "str_replace", "insert", "undo_edit"],
     path: str,
     file_text: Optional[str] = None,
-    view_range: Optional[List[int]] = None,
+    view_range: Optional[Union[List[int], str]] = None,
     old_str: Optional[str] = None,
     new_str: Optional[str] = None,
     insert_line: Optional[int] = None,
@@ -736,6 +736,13 @@ async def str_replace_editor(
         old_str: Required parameter of `str_replace` command containing the string in `path` to replace.
         new_str: Optional parameter of `str_replace` command containing the new string (if not given, no string will be added). Required parameter of `insert` command containing the string to insert.
     """
+
+    # Handle view_range parsing - convert string to list if needed
+    if view_range is not None and isinstance(view_range, str):
+        try:
+            view_range = json.loads(view_range)
+        except json.JSONDecodeError:
+            return f"Invalid view_range format: {view_range}. Expected a JSON array like [1, 50]"
 
     tool = EditTool(ctx.deps.registry, ctx.deps.absolute_docs_path)
     if working_dir == "docs":
