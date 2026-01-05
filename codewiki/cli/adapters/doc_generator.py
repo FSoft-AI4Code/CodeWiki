@@ -136,7 +136,8 @@ class CLIDocumentationGenerator:
                 llm_api_key=self.config.get('api_key'),
                 main_model=self.config.get('main_model'),
                 cluster_model=self.config.get('cluster_model'),
-                fallback_model=self.config.get('fallback_model')
+                fallback_model=self.config.get('fallback_model'),
+                language=self.config.get('language', 'english')
             )
             
             # Run backend documentation generation

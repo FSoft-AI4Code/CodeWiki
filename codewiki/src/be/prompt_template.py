@@ -3,6 +3,15 @@ SYSTEM_PROMPT = """
 You are an AI documentation assistant. Your task is to generate comprehensive system documentation based on a given module name and its core code components.
 </ROLE>
 
+<LANGUAGE_INSTRUCTION>
+IMPORTANT: Generate all documentation content in {language}. This includes:
+- All section titles and headings
+- All descriptive text and explanations
+- All diagram labels and annotations
+- All comments and notes
+The documentation MUST be written entirely in {language}.
+</LANGUAGE_INSTRUCTION>
+
 <OBJECTIVES>
 Create documentation that helps developers and maintainers understand:
 1. The module's purpose and core functionality
@@ -49,6 +58,15 @@ LEAF_SYSTEM_PROMPT = """
 You are an AI documentation assistant. Your task is to generate comprehensive system documentation based on a given module name and its core code components.
 </ROLE>
 
+<LANGUAGE_INSTRUCTION>
+IMPORTANT: Generate all documentation content in {language}. This includes:
+- All section titles and headings
+- All descriptive text and explanations
+- All diagram labels and annotations
+- All comments and notes
+The documentation MUST be written entirely in {language}.
+</LANGUAGE_INSTRUCTION>
+
 <OBJECTIVES>
 Create a comprehensive documentation that helps developers and maintainers understand:
 1. The module's purpose and core functionality
@@ -78,6 +96,10 @@ Generate documentation following the following requirements:
 USER_PROMPT = """
 Generate comprehensive documentation for the {module_name} module using the provided module tree and core components.
 
+<LANGUAGE_INSTRUCTION>
+IMPORTANT: Write all documentation in {language}.
+</LANGUAGE_INSTRUCTION>
+
 <MODULE_TREE>
 {module_tree}
 </MODULE_TREE>
@@ -90,6 +112,10 @@ Generate comprehensive documentation for the {module_name} module using the prov
 
 REPO_OVERVIEW_PROMPT = """
 You are an AI documentation assistant. Your task is to generate a brief overview of the {repo_name} repository.
+
+<LANGUAGE_INSTRUCTION>
+IMPORTANT: Write all documentation in {language}.
+</LANGUAGE_INSTRUCTION>
 
 The overview should be a brief documentation of the repository, including:
 - The purpose of the repository
@@ -109,6 +135,10 @@ overview_content
 
 MODULE_OVERVIEW_PROMPT = """
 You are an AI documentation assistant. Your task is to generate a brief overview of `{module_name}` module.
+
+<LANGUAGE_INSTRUCTION>
+IMPORTANT: Write all documentation in {language}.
+</LANGUAGE_INSTRUCTION>
 
 The overview should be a brief documentation of the module, including:
 - The purpose of the module
@@ -239,7 +269,7 @@ EXTENSION_TO_LANGUAGE = {
 }
 
 
-def format_user_prompt(module_name: str, core_component_ids: list[str], components: Dict[str, Any], module_tree: dict[str, any]) -> str:
+def format_user_prompt(module_name: str, core_component_ids: list[str], components: Dict[str, Any], module_tree: dict[str, any], language: str = "english") -> str:
     """
     Format the user prompt with module name and organized core component codes.
     
@@ -247,6 +277,7 @@ def format_user_prompt(module_name: str, core_component_ids: list[str], componen
         module_name: Name of the module to document
         core_component_ids: List of component IDs to include
         components: Dictionary mapping component IDs to CodeComponent objects
+        language: Language for documentation generation
     
     Returns:
         Formatted user prompt string
@@ -301,7 +332,7 @@ def format_user_prompt(module_name: str, core_component_ids: list[str], componen
         
         core_component_codes += "```\n\n"
         
-    return USER_PROMPT.format(module_name=module_name, formatted_core_component_codes=core_component_codes, module_tree=formatted_module_tree)
+    return USER_PROMPT.format(module_name=module_name, formatted_core_component_codes=core_component_codes, module_tree=formatted_module_tree, language=language)
 
 
 

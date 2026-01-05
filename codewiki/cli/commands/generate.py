@@ -60,6 +60,11 @@ from codewiki.cli.models.job import GenerationOptions
     is_flag=True,
     help="Show detailed progress and debug information",
 )
+@click.option(
+    "--language",
+    type=click.Choice(['english', 'chinese'], case_sensitive=False),
+    help="Language for generated documentation (overrides config)",
+)
 @click.pass_context
 def generate_command(
     ctx,
@@ -67,7 +72,8 @@ def generate_command(
     create_branch: bool,
     github_pages: bool,
     no_cache: bool,
-    verbose: bool
+    verbose: bool,
+    language: Optional[str]
 ):
     """
     Generate comprehensive documentation for a code repository.
@@ -117,6 +123,9 @@ def generate_command(
         
         config = config_manager.get_config()
         api_key = config_manager.get_api_key()
+        
+        # Use language from command line or config
+        doc_language = language.lower() if language else config.language
         
         logger.success("Configuration valid")
         
@@ -204,6 +213,7 @@ def generate_command(
                 'fallback_model': config.fallback_model,
                 'base_url': config.base_url,
                 'api_key': api_key,
+                'language': doc_language,
             },
             verbose=verbose,
             generate_html=github_pages

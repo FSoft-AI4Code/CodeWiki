@@ -88,7 +88,8 @@ class ConfigManager:
         main_model: Optional[str] = None,
         cluster_model: Optional[str] = None,
         fallback_model: Optional[str] = None,
-        default_output: Optional[str] = None
+        default_output: Optional[str] = None,
+        language: Optional[str] = None
     ):
         """
         Save configuration to file and keyring.
@@ -100,6 +101,7 @@ class ConfigManager:
             cluster_model: Clustering model
             fallback_model: Fallback model
             default_output: Default output directory
+            language: Language for documentation generation
         """
         # Ensure config directory exists
         try:
@@ -117,7 +119,8 @@ class ConfigManager:
                     main_model="",
                     cluster_model="",
                     fallback_model="glm-4p5",
-                    default_output="docs"
+                    default_output="docs",
+                    language="english"
                 )
         
         # Update fields if provided
@@ -131,6 +134,8 @@ class ConfigManager:
             self._config.fallback_model = fallback_model
         if default_output is not None:
             self._config.default_output = default_output
+        if language is not None:
+            self._config.language = language
         
         # Validate configuration
         self._config.validate()

@@ -233,10 +233,12 @@ class DocumentationGenerator:
 
         prompt = MODULE_OVERVIEW_PROMPT.format(
             module_name=module_name,
-            repo_structure=json.dumps(repo_structure, indent=4)
+            repo_structure=json.dumps(repo_structure, indent=4),
+            language=self.config.language
         ) if len(module_path) >= 1 else REPO_OVERVIEW_PROMPT.format(
             repo_name=module_name,
-            repo_structure=json.dumps(repo_structure, indent=4)
+            repo_structure=json.dumps(repo_structure, indent=4),
+            language=self.config.language
         )
         
         try:

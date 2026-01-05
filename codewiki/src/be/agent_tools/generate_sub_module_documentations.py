@@ -55,7 +55,7 @@ async def generate_sub_module_documentation(
                 model=fallback_models,
                 name=sub_module_name,
                 deps_type=CodeWikiDeps,
-                system_prompt=SYSTEM_PROMPT.format(module_name=sub_module_name),
+                system_prompt=SYSTEM_PROMPT.format(module_name=sub_module_name, language=deps.config.language),
                 tools=[read_code_components_tool, str_replace_editor_tool, generate_sub_module_documentation_tool],
             )
         else:
@@ -64,7 +64,7 @@ async def generate_sub_module_documentation(
                 model=fallback_models,
                 name=sub_module_name,
                 deps_type=CodeWikiDeps,
-                system_prompt=LEAF_SYSTEM_PROMPT.format(module_name=sub_module_name),
+                system_prompt=LEAF_SYSTEM_PROMPT.format(module_name=sub_module_name, language=deps.config.language),
                 tools=[read_code_components_tool, str_replace_editor_tool],
             )
 
@@ -80,6 +80,7 @@ async def generate_sub_module_documentation(
                     core_component_ids=core_component_ids,
                     components=ctx.deps.components,
                     module_tree=ctx.deps.module_tree,
+                    language=deps.config.language
                 ),
                 deps=ctx.deps
             )

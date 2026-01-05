@@ -55,12 +55,18 @@ def config_group():
     type=str,
     help="Fallback model for documentation generation"
 )
+@click.option(
+    "--language",
+    type=click.Choice(['english', 'chinese'], case_sensitive=False),
+    help="Language for generated documentation (default: english)"
+)
 def config_set(
     api_key: Optional[str],
     base_url: Optional[str],
     main_model: Optional[str],
     cluster_model: Optional[str],
-    fallback_model: Optional[str]
+    fallback_model: Optional[str],
+    language: Optional[str]
 ):
     """
     Set configuration values for CodeWiki.
@@ -83,7 +89,7 @@ def config_set(
     """
     try:
         # Check if at least one option is provided
-        if not any([api_key, base_url, main_model, cluster_model, fallback_model]):
+        if not any([api_key, base_url, main_model, cluster_model, fallback_model, language]):
             click.echo("No options provided. Use --help for usage information.")
             sys.exit(EXIT_CONFIG_ERROR)
         
@@ -105,6 +111,9 @@ def config_set(
         if fallback_model:
             validated_data['fallback_model'] = validate_model_name(fallback_model)
         
+        if language:
+            validated_data['language'] = language.lower()
+        
         # Create config manager and save
         manager = ConfigManager()
         manager.load()  # Load existing config if present
@@ -114,7 +123,8 @@ def config_set(
             base_url=validated_data.get('base_url'),
             main_model=validated_data.get('main_model'),
             cluster_model=validated_data.get('cluster_model'),
-            fallback_model=validated_data.get('fallback_model')
+            fallback_model=validated_data.get('fallback_model'),
+            language=validated_data.get('language')
         )
         
         # Display success messages
@@ -150,6 +160,9 @@ def config_set(
         
         if fallback_model:
             click.secho(f"✓ Fallback model: {fallback_model}", fg="green")
+        
+        if language:
+            click.secho(f"✓ Language: {language}", fg="green")
         
         click.echo("\n" + click.style("Configuration updated successfully.", fg="green", bold=True))
         
@@ -206,6 +219,7 @@ def config_show(output_json: bool):
                 "main_model": config.main_model if config else "",
                 "cluster_model": config.cluster_model if config else "",
                 "fallback_model": config.fallback_model if config else "glm-4p5",
+                "language": config.language if config else "english",
                 "default_output": config.default_output if config else "docs",
                 "config_file": str(manager.config_file_path)
             }
@@ -231,6 +245,7 @@ def config_show(output_json: bool):
                 click.echo(f"  Main Model:       {config.main_model or 'Not set'}")
                 click.echo(f"  Cluster Model:    {config.cluster_model or 'Not set'}")
                 click.echo(f"  Fallback Model:   {config.fallback_model or 'Not set'}")
+                click.echo(f"  Language:         {config.language or 'english'}")
             else:
                 click.secho("  Not configured", fg="yellow")
             

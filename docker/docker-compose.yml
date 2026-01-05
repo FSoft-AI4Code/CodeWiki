@@ -1,6 +1,6 @@
 services:
   codewiki:
-    image: codewiki:0.0.4
+    image: codewiki:0.0.5
     build:
       context: ..
       dockerfile: docker/Dockerfile
@@ -11,6 +11,7 @@ services:
     environment:
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
+      - LANGUAGE=chinese 
     env_file:
       - ../.env
     networks:

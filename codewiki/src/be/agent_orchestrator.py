@@ -76,7 +76,7 @@ class AgentOrchestrator:
                     str_replace_editor_tool, 
                     generate_sub_module_documentation_tool
                 ],
-                system_prompt=SYSTEM_PROMPT.format(module_name=module_name),
+                system_prompt=SYSTEM_PROMPT.format(module_name=module_name, language=self.config.language),
             )
         else:
             return Agent(
@@ -84,7 +84,7 @@ class AgentOrchestrator:
                 name=module_name,
                 deps_type=CodeWikiDeps,
                 tools=[read_code_components_tool, str_replace_editor_tool],
-                system_prompt=LEAF_SYSTEM_PROMPT.format(module_name=module_name),
+                system_prompt=LEAF_SYSTEM_PROMPT.format(module_name=module_name, language=self.config.language),
             )
     
     async def process_module(self, module_name: str, components: Dict[str, Node], 
@@ -135,7 +135,8 @@ class AgentOrchestrator:
                     module_name=module_name,
                     core_component_ids=core_component_ids,
                     components=components,
-                    module_tree=deps.module_tree
+                    module_tree=deps.module_tree,
+                    language=self.config.language
                 ),
                 deps=deps
             )

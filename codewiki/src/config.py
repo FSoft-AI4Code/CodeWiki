@@ -37,6 +37,10 @@ CLUSTER_MODEL = os.getenv('CLUSTER_MODEL', MAIN_MODEL)
 LLM_BASE_URL = os.getenv('LLM_BASE_URL', 'http://0.0.0.0:4000/')
 LLM_API_KEY = os.getenv('LLM_API_KEY', 'sk-1234')
 
+# Documentation language
+# Supported values: 'english', 'chinese'
+DOC_LANGUAGE = os.getenv('LANGUAGE', 'english').lower()
+
 @dataclass
 class Config:
     """Configuration class for CodeWiki."""
@@ -51,6 +55,8 @@ class Config:
     main_model: str
     cluster_model: str
     fallback_model: str = FALLBACK_MODEL_1
+    # Documentation language
+    language: str = "english"
     
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> 'Config':
@@ -68,7 +74,8 @@ class Config:
             llm_api_key=LLM_API_KEY,
             main_model=MAIN_MODEL,
             cluster_model=CLUSTER_MODEL,
-            fallback_model=FALLBACK_MODEL_1
+            fallback_model=FALLBACK_MODEL_1,
+            language=DOC_LANGUAGE
         )
     
     @classmethod
@@ -80,7 +87,8 @@ class Config:
         llm_api_key: str,
         main_model: str,
         cluster_model: str,
-        fallback_model: str = FALLBACK_MODEL_1
+        fallback_model: str = FALLBACK_MODEL_1,
+        language: str = "english"
     ) -> 'Config':
         """
         Create configuration for CLI context.
@@ -110,5 +118,6 @@ class Config:
             llm_api_key=llm_api_key,
             main_model=main_model,
             cluster_model=cluster_model,
-            fallback_model=fallback_model
+            fallback_model=fallback_model,
+            language=language
         )
