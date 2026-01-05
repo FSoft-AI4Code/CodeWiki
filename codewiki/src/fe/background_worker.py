@@ -17,7 +17,7 @@ from dataclasses import asdict
 
 from codewiki.src.be.documentation_generator import DocumentationGenerator
 from codewiki.src.config import Config, MAIN_MODEL
-from .models import JobStatus
+from .models import JobStatus, ProgressMessage
 from .cache_manager import CacheManager
 from .github_processor import GitRepoProcessor
 from .config import WebAppConfig
@@ -33,7 +33,12 @@ class BackgroundWorker:
         self.processing_queue = Queue(maxsize=WebAppConfig.QUEUE_SIZE)
         self.job_status: Dict[str, JobStatus] = {}
         self.jobs_file = Path(WebAppConfig.CACHE_DIR) / "jobs.json"
+        self.ws_manager = None  # Will be set after initialization
         self.load_job_statuses()
+    
+    def set_ws_manager(self, ws_manager):
+        """Set the WebSocket manager for progress broadcasting."""
+        self.ws_manager = ws_manager
     
     def start(self):
         """Start the background worker thread."""
@@ -159,6 +164,21 @@ class BackgroundWorker:
                 print(f"Worker error: {e}")
                 time.sleep(1)
     
+    def _send_progress(self, job_id: str, status: str, progress: str, **kwargs):
+        """Helper method to send progress updates via WebSocket."""
+        if self.ws_manager:
+            try:
+                progress_msg = ProgressMessage(
+                    job_id=job_id,
+                    status=status,
+                    progress=progress,
+                    **kwargs
+                )
+                # Use asyncio to schedule the broadcast
+                asyncio.run(self.ws_manager.broadcast_progress(progress_msg))
+            except Exception as e:
+                print(f"Error sending progress: {e}")
+    
     def _process_job(self, job_id: str):
         """Process a single documentation generation job."""
         if job_id not in self.job_status:
@@ -173,6 +193,9 @@ class BackgroundWorker:
             job.progress = "Starting repository clone..."
             job.main_model = MAIN_MODEL
             
+            # Send initial progress
+            self._send_progress(job_id, 'processing', job.progress)
+            
             # Check cache first
             cached_docs = self.cache_manager.get_cached_docs(job.repo_url)
             if cached_docs and Path(cached_docs).exists():
@@ -182,6 +205,9 @@ class BackgroundWorker:
                 job.progress = "Documentation retrieved from cache"
                 if not job.main_model:  # Only set if not already set
                     job.main_model = MAIN_MODEL
+                
+                # Send completion progress
+                self._send_progress(job_id, 'completed', job.progress)
                 
                 # Save job status to disk
                 self.save_job_statuses()
@@ -195,12 +221,14 @@ class BackgroundWorker:
             temp_repo_dir = os.path.join(self.temp_dir, job_id)
             
             job.progress = f"Cloning repository {repo_info['full_name']}..."
+            self._send_progress(job_id, 'processing', job.progress)
             
             if not GitRepoProcessor.clone_repository(repo_info['clone_url'], temp_repo_dir, job.commit_id):
                 raise Exception("Failed to clone repository")
             
             # Generate documentation
             job.progress = "Analyzing repository structure..."
+            self._send_progress(job_id, 'processing', job.progress)
             
             # Create config for documentation generation (using env vars)
             import argparse
@@ -210,9 +238,11 @@ class BackgroundWorker:
             config.docs_dir = os.path.join("output", "docs", f"{job_id}-docs")
             
             job.progress = "Generating documentation..."
+            self._send_progress(job_id, 'processing', job.progress)
             
             # Generate documentation
             doc_generator = DocumentationGenerator(config, job.commit_id)
+            doc_generator.set_progress_callback(lambda **kwargs: self._send_progress(job_id, 'processing', kwargs.get('progress', ''), **kwargs))
             
             # Run the async documentation generation in a new event loop
             loop = asyncio.new_event_loop()
@@ -232,6 +262,9 @@ class BackgroundWorker:
             job.docs_path = docs_path
             job.progress = "Documentation generation completed"
             
+            # Send completion progress
+            self._send_progress(job_id, 'completed', job.progress)
+            
             # Save job status to disk
             self.save_job_statuses()
             
@@ -243,6 +276,9 @@ class BackgroundWorker:
             job.completed_at = datetime.now()
             job.error_message = str(e)
             job.progress = f"Failed: {str(e)}"
+            
+            # Send error progress
+            self._send_progress(job_id, 'failed', job.progress, error_message=str(e))
             
             # Save job status to disk
             self.save_job_statuses()

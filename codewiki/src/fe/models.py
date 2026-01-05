@@ -53,3 +53,18 @@ class CacheEntry:
     docs_path: str
     created_at: datetime
     last_accessed: datetime
+
+
+class ProgressMessage(BaseModel):
+    """WebSocket progress message model."""
+    job_id: str
+    status: str  # 'queued', 'processing', 'completed', 'failed'
+    progress: str
+    current_module: Optional[str] = None
+    current_component: Optional[str] = None
+    module_index: Optional[int] = None
+    total_modules: Optional[int] = None
+    component_index: Optional[int] = None
+    total_components: Optional[int] = None
+    timestamp: datetime = datetime.now()
+    error_message: Optional[str] = None

@@ -62,6 +62,11 @@ class AgentOrchestrator:
     def __init__(self, config: Config):
         self.config = config
         self.fallback_models = create_fallback_models(config)
+        self.progress_callback = None
+    
+    def set_progress_callback(self, callback):
+        """Set a callback function for progress updates."""
+        self.progress_callback = callback
     
     def create_agent(self, module_name: str, components: Dict[str, Any], 
                     core_component_ids: List[str]) -> Agent:
@@ -92,6 +97,14 @@ class AgentOrchestrator:
         """Process a single module and generate its documentation."""
         logger.info(f"🔄 Starting to process module: {module_name}")
         logger.info(f"   📦 Core components: {len(core_component_ids)}")
+        
+        # Send progress update for component processing
+        if self.progress_callback:
+            self.progress_callback(
+                progress=f"Processing module: {module_name} ({len(core_component_ids)} components)",
+                current_component=f"{module_name} (starting)",
+                total_components=len(core_component_ids)
+            )
         
         # Load or create module tree
         module_tree_path = os.path.join(working_dir, MODULE_TREE_FILENAME)
@@ -130,6 +143,14 @@ class AgentOrchestrator:
         # Run agent
         try:
             logger.info(f"   🚀 Running agent for module: {module_name}")
+            
+            # Send progress update
+            if self.progress_callback:
+                self.progress_callback(
+                    progress=f"Generating documentation for module: {module_name}",
+                    current_component=f"{module_name} (generating docs)"
+                )
+            
             result = await agent.run(
                 format_user_prompt(
                     module_name=module_name,

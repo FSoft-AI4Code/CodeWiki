@@ -194,6 +194,29 @@ WEB_INTERFACE_TEMPLATE = """
             margin-top: 0.25rem;
         }
         
+        .job-progress-detail {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            margin-top: 0.25rem;
+            font-style: italic;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background-color: #e2e8f0;
+            border-radius: 2px;
+            margin-top: 0.5rem;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background-color: var(--primary-color);
+            transition: width 0.3s ease;
+            border-radius: 2px;
+        }
+        
         .job-actions {
             margin-top: 0.5rem;
         }
@@ -251,12 +274,16 @@ WEB_INTERFACE_TEMPLATE = """
             <div class="recent-jobs">
                 <h3>Recent Jobs</h3>
                 {% for job in recent_jobs %}
-                <div class="job-item">
+                <div class="job-item" data-job-id="{{ job.job_id }}">
                     <div class="job-header">
                         <div class="job-url">{{ job.repo_url }}</div>
                         <div class="job-status status-{{ job.status }}">{{ job.status }}</div>
                     </div>
                     <div class="job-progress">{{ job.progress }}</div>
+                    <div class="job-progress-detail" style="display: none;"></div>
+                    <div class="progress-bar" style="display: none;">
+                        <div class="progress-fill" style="width: 0%;"></div>
+                    </div>
                     {% if job.main_model %}
                     <div class="job-model" style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;">
                         Generated with: {{ job.main_model }}
@@ -275,6 +302,140 @@ WEB_INTERFACE_TEMPLATE = """
     <script>
         // Form submission protection
         let isSubmitting = false;
+        
+        // WebSocket connections for real-time progress
+        const wsConnections = new Map();
+        
+        function connectWebSocket(jobId) {
+            // Don't reconnect if already connected
+            if (wsConnections.has(jobId)) {
+                return;
+            }
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/progress/${jobId}`;
+            
+            try {
+                const ws = new WebSocket(wsUrl);
+                
+                ws.onopen = function() {
+                    console.log(`WebSocket connected for job ${jobId}`);
+                    wsConnections.set(jobId, ws);
+                    
+                    // Send periodic ping to keep connection alive
+                    const pingInterval = setInterval(() => {
+                        if (ws.readyState === WebSocket.OPEN) {
+                            ws.send('ping');
+                        } else {
+                            clearInterval(pingInterval);
+                        }
+                    }, 30000); // Ping every 30 seconds
+                };
+                
+                ws.onmessage = function(event) {
+                    if (event.data === 'pong') return; // Ignore pong responses
+                    
+                    try {
+                        const progress = JSON.parse(event.data);
+                        updateJobProgress(jobId, progress);
+                    } catch (e) {
+                        console.error('Error parsing progress message:', e);
+                    }
+                };
+                
+                ws.onerror = function(error) {
+                    console.error(`WebSocket error for job ${jobId}:`, error);
+                };
+                
+                ws.onclose = function() {
+                    console.log(`WebSocket closed for job ${jobId}`);
+                    wsConnections.delete(jobId);
+                    
+                    // Try to reconnect after 5 seconds if job is still processing
+                    const jobItem = document.querySelector(`.job-item[data-job-id="${jobId}"]`);
+                    if (jobItem) {
+                        const statusElement = jobItem.querySelector('.job-status');
+                        if (statusElement && (statusElement.textContent === 'queued' || statusElement.textContent === 'processing')) {
+                            setTimeout(() => connectWebSocket(jobId), 5000);
+                        }
+                    }
+                };
+            } catch (e) {
+                console.error(`Failed to create WebSocket for job ${jobId}:`, e);
+            }
+        }
+        
+        function updateJobProgress(jobId, progress) {
+            const jobItem = document.querySelector(`.job-item[data-job-id="${jobId}"]`);
+            if (!jobItem) return;
+            
+            // Update status
+            const statusElement = jobItem.querySelector('.job-status');
+            if (statusElement) {
+                statusElement.textContent = progress.status;
+                statusElement.className = `job-status status-${progress.status}`;
+            }
+            
+            // Update progress text
+            const progressElement = jobItem.querySelector('.job-progress');
+            if (progressElement) {
+                progressElement.textContent = progress.progress;
+            }
+            
+            // Update detailed progress
+            const detailElement = jobItem.querySelector('.job-progress-detail');
+            const progressBar = jobItem.querySelector('.progress-bar');
+            const progressFill = jobItem.querySelector('.progress-fill');
+            
+            if (progress.current_module || progress.current_component) {
+                let detailText = '';
+                if (progress.current_module) {
+                    detailText += `Module: ${progress.current_module}`;
+                    if (progress.module_index && progress.total_modules) {
+                        detailText += ` (${progress.module_index}/${progress.total_modules})`;
+                    }
+                }
+                if (progress.current_component) {
+                    if (detailText) detailText += ' | ';
+                    detailText += `Component: ${progress.current_component}`;
+                    if (progress.component_index && progress.total_components) {
+                        detailText += ` (${progress.component_index}/${progress.total_components})`;
+                    }
+                }
+                
+                if (detailElement && detailText) {
+                    detailElement.textContent = detailText;
+                    detailElement.style.display = 'block';
+                }
+                
+                // Show and update progress bar
+                if (progress.module_index && progress.total_modules) {
+                    const percentage = (progress.module_index / progress.total_modules) * 100;
+                    if (progressBar && progressFill) {
+                        progressBar.style.display = 'block';
+                        progressFill.style.width = `${percentage}%`;
+                    }
+                }
+            }
+            
+            // Hide progress details and bar when completed or failed
+            if (progress.status === 'completed' || progress.status === 'failed') {
+                if (detailElement) detailElement.style.display = 'none';
+                if (progressBar) progressBar.style.display = 'none';
+                
+                // Close WebSocket connection
+                const ws = wsConnections.get(jobId);
+                if (ws) {
+                    ws.close();
+                    wsConnections.delete(jobId);
+                }
+                
+                // Refresh the page after a delay to show final results
+                if (progress.status === 'completed') {
+                    setTimeout(() => window.location.reload(), 2000);
+                }
+            }
+        }
         
         document.addEventListener('DOMContentLoaded', function() {
             const form = document.querySelector('form');
@@ -300,6 +461,20 @@ WEB_INTERFACE_TEMPLATE = """
                 });
             }
             
+            // Connect WebSocket for all queued and processing jobs
+            const jobItems = document.querySelectorAll('.job-item');
+            jobItems.forEach(function(jobItem) {
+                const jobId = jobItem.getAttribute('data-job-id');
+                const statusElement = jobItem.querySelector('.job-status');
+                
+                if (statusElement && jobId) {
+                    const status = statusElement.textContent.trim();
+                    if (status === 'queued' || status === 'processing') {
+                        connectWebSocket(jobId);
+                    }
+                }
+            });
+            
             // Optional: Add manual refresh button instead of auto-refresh
             const refreshButton = document.createElement('button');
             refreshButton.textContent = 'Refresh Status';
@@ -313,6 +488,13 @@ WEB_INTERFACE_TEMPLATE = """
             if (recentJobsSection) {
                 recentJobsSection.appendChild(refreshButton);
             }
+        });
+        
+        // Clean up WebSocket connections when page is unloaded
+        window.addEventListener('beforeunload', function() {
+            wsConnections.forEach(function(ws) {
+                ws.close();
+            });
         });
     </script>
 </body>

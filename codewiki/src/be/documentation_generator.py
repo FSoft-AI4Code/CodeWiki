@@ -34,6 +34,12 @@ class DocumentationGenerator:
         self.commit_id = commit_id
         self.graph_builder = DependencyGraphBuilder(config)
         self.agent_orchestrator = AgentOrchestrator(config)
+        self.progress_callback = None
+    
+    def set_progress_callback(self, callback):
+        """Set a callback function for progress updates."""
+        self.progress_callback = callback
+        self.agent_orchestrator.set_progress_callback(callback)
     
     def create_documentation_metadata(self, working_dir: str, components: Dict[str, Any], num_leaf_nodes: int):
         """Create a metadata file with documentation generation information."""
@@ -162,12 +168,32 @@ class DocumentationGenerator:
                     # Process the module
                     if self.is_leaf_module(module_info):
                         logger.info(f"📄 [{idx}/{total_modules}] Processing leaf module: {module_key}")
+                        
+                        # Send progress update
+                        if self.progress_callback:
+                            self.progress_callback(
+                                progress=f"Processing module {idx}/{total_modules}: {module_key}",
+                                current_module=module_key,
+                                module_index=idx,
+                                total_modules=total_modules
+                            )
+                        
                         final_module_tree = await self.agent_orchestrator.process_module(
                             module_name, components, module_info["components"], module_path, working_dir
                         )
                         logger.info(f"✅ [{idx}/{total_modules}] Completed leaf module: {module_key}")
                     else:
                         logger.info(f"📁 [{idx}/{total_modules}] Processing parent module: {module_key}")
+                        
+                        # Send progress update
+                        if self.progress_callback:
+                            self.progress_callback(
+                                progress=f"Processing parent module {idx}/{total_modules}: {module_key}",
+                                current_module=module_key,
+                                module_index=idx,
+                                total_modules=total_modules
+                            )
+                        
                         final_module_tree = await self.generate_parent_module_docs(
                             module_path, working_dir
                         )

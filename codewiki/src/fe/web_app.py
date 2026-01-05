@@ -11,13 +11,14 @@ Features:
 """
 
 import argparse
-from fastapi import FastAPI, Request, Form
+from fastapi import FastAPI, Request, Form, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
 from .cache_manager import CacheManager
 from .background_worker import BackgroundWorker
 from .routes import WebRoutes
 from .config import WebAppConfig
+from .websocket_manager import ws_manager
 
 
 # Initialize FastAPI app
@@ -35,6 +36,8 @@ background_worker = BackgroundWorker(
     cache_manager=cache_manager, 
     temp_dir=WebAppConfig.TEMP_DIR
 )
+# Set WebSocket manager for background worker
+background_worker.set_ws_manager(ws_manager)
 web_routes = WebRoutes(background_worker=background_worker, cache_manager=cache_manager)
 
 
@@ -70,6 +73,22 @@ async def serve_generated_docs(job_id: str, filename: str = "overview.md"):
     if not filename: 
         filename = "overview.md"
     return await web_routes.serve_generated_docs(job_id, filename)
+
+
+@app.websocket("/ws/progress/{job_id}")
+async def websocket_progress(websocket: WebSocket, job_id: str):
+    """WebSocket endpoint for real-time progress updates."""
+    await ws_manager.connect(websocket, job_id)
+    try:
+        # Keep connection alive and listen for client messages
+        while True:
+            # Wait for any message from client (ping/pong)
+            data = await websocket.receive_text()
+            # Echo back to confirm connection is alive
+            if data == "ping":
+                await websocket.send_text("pong")
+    except WebSocketDisconnect:
+        await ws_manager.disconnect(websocket, job_id)
 
 
 def main():
