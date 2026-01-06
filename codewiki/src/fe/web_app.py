@@ -122,18 +122,71 @@ def main():
         action="store_true",
         help="Enable auto-reload for development"
     )
+    parser.add_argument(
+        "--log-file",
+        type=str,
+        default=None,
+        help="Log file path (default: output to console only)"
+    )
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+        default=None,
+        help="Set log level (default: DEBUG if --debug, else INFO)"
+    )
     
     args = parser.parse_args()
     
-    # Get log level from environment variable or command line
-    log_level_name = os.getenv('LOG_LEVEL', 'DEBUG' if args.debug else 'INFO').upper()
+    # Determine log level: command line > environment variable > default
+    if args.log_level:
+        log_level_name = args.log_level.upper()
+    else:
+        log_level_name = os.getenv('LOG_LEVEL', 'DEBUG' if args.debug else 'INFO').upper()
+    
     log_level_map = {'DEBUG': 'debug', 'INFO': 'info', 'WARNING': 'warning', 'ERROR': 'error', 'CRITICAL': 'critical'}
     uvicorn_log_level = log_level_map.get(log_level_name, 'info')
+    python_log_level = getattr(logging, log_level_name, logging.INFO)
     
     # Configure backend logging with the same log level
     from codewiki.src.be.dependency_analyzer.utils.logging_config import setup_logging
-    python_log_level = getattr(logging, log_level_name, logging.INFO)
     setup_logging(level=python_log_level)
+    
+    # Set LOG_LEVEL environment variable for child processes
+    os.environ['LOG_LEVEL'] = log_level_name
+    
+    # Configure log file if specified
+    if args.log_file:
+        # Configure logging to file for all loggers
+        file_handler = logging.FileHandler(args.log_file, mode='a', encoding='utf-8')
+        file_handler.setLevel(python_log_level)
+        formatter = logging.Formatter(
+            '[%(asctime)s] %(levelname)-8s %(name)s - %(message)s',
+            datefmt='%H:%M:%S'
+        )
+        file_handler.setFormatter(formatter)
+        
+        # Add file handler to root logger (this will catch all loggers)
+        root_logger = logging.getLogger()
+        root_logger.addHandler(file_handler)
+        root_logger.setLevel(python_log_level)  # Ensure root logger level is set
+        
+        # Explicitly configure backend loggers to use DEBUG level
+        for logger_name in ['codewiki.src.be', 'codewiki.src.be.agent_orchestrator', 
+                           'codewiki.src.be.agent_tools', 'codewiki.src.be.documentation_generator',
+                           'codewiki.src.be.cluster_modules', 'codewiki.src.be.dependency_analyzer']:
+            logger = logging.getLogger(logger_name)
+            logger.setLevel(python_log_level)
+            logger.addHandler(file_handler)
+        
+        # Also configure uvicorn to log to file
+        uvicorn_logger = logging.getLogger('uvicorn')
+        uvicorn_logger.addHandler(file_handler)
+        uvicorn_access_logger = logging.getLogger('uvicorn.access')
+        uvicorn_access_logger.addHandler(file_handler)
+        
+        print(f"📝 Logging to file: {args.log_file}")
+        print(f"📊 File log level: {log_level_name}")
     
     # Ensure required directories exist
     WebAppConfig.ensure_directories()

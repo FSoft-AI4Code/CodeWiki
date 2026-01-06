@@ -171,9 +171,35 @@ class AgentOrchestrator:
                 deps=deps
             ) as agent_run:
                 # Iterate through nodes and stream model requests
+                node_count = 0
                 async for node in agent_run:
+                    node_count += 1
                     node_type = type(node).__name__
-                    logger.debug(f"   📍 Node: {node_type}")
+                    logger.info(f"   📍 Node #{node_count}: {node_type}")
+                    
+                    # Log detailed information for each node type
+                    if node_type == 'UserPromptNode':
+                        logger.debug(f"      💬 User prompt initialized")
+                    elif node_type == 'ModelRequestNode':
+                        logger.debug(f"      🤖 Model request sent")
+                    elif node_type == 'CallToolsNode':
+                        # Extract model response details
+                        if hasattr(node, 'model_response'):
+                            model_response = node.model_response
+                            if hasattr(model_response, 'usage'):
+                                usage = model_response.usage
+                                logger.info(f"      📊 Model response - Input: {usage.input_tokens}, Output: {usage.output_tokens}, Total: {usage.total_tokens} tokens")
+                            # Log which tools were called
+                            if hasattr(model_response, 'parts'):
+                                for part in model_response.parts:
+                                    part_type = type(part).__name__
+                                    if part_type == 'ToolCallPart':
+                                        logger.info(f"      🔧 Tool called: {part.tool_name}")
+                                        logger.debug(f"         Args: {part.args}")
+                    elif node_type == 'ToolReturnNode':
+                        logger.debug(f"      ✅ Tool execution completed")
+                    elif node_type == 'End':
+                        logger.info(f"      🏁 Agent execution finished")
                     
                     # Stream model request nodes to enable streaming API
                     if Agent.is_model_request_node(node):
@@ -186,16 +212,30 @@ class AgentOrchestrator:
                 if agent_run.result:
                     result = agent_run.result
                     
-                    # Extract token usage from result
-                    if hasattr(result, 'usage') and result.usage:
-                        usage_data = {
-                            "prompt_tokens": result.usage.request_tokens if hasattr(result.usage, 'request_tokens') else 0,
-                            "completion_tokens": result.usage.response_tokens if hasattr(result.usage, 'response_tokens') else 0,
-                            "total_tokens": result.usage.total_tokens if hasattr(result.usage, 'total_tokens') else 0,
-                        }
-                        deps.add_token_usage(usage_data)
+                    # Extract token usage from agent_run
+                    # Note: agent_run.usage() includes all nested agent calls due to usage parameter passing
+                    if hasattr(agent_run, 'usage') and callable(agent_run.usage):
+                        usage_stats = agent_run.usage()
+                        if usage_stats:
+                            usage_data = {
+                                "prompt_tokens": usage_stats.input_tokens if hasattr(usage_stats, 'input_tokens') else 0,
+                                "completion_tokens": usage_stats.output_tokens if hasattr(usage_stats, 'output_tokens') else 0,
+                                "total_tokens": usage_stats.total_tokens if hasattr(usage_stats, 'total_tokens') else 0,
+                            }
+                            # Store token usage in deps for returning to documentation_generator
+                            deps.token_usage = usage_data
+                            
+                            # Debug: Log detailed token usage
+                            logger.debug(f"   🔍 Agent '{module_name}' agent_run.usage() breakdown:")
+                            logger.debug(f"      📥 Input tokens (prompt): {usage_data['prompt_tokens']}")
+                            logger.debug(f"      📤 Output tokens (completion): {usage_data['completion_tokens']}")
+                            logger.debug(f"      📊 Total tokens: {usage_data['total_tokens']}")
             
             logger.info(f"   ✅ Agent completed")
+            
+            # Token usage note: deps.token_usage already includes all sub-module tokens
+            # Sub-modules add their tokens via ctx.deps.add_token_usage() during recursion
+            logger.info(f"   📊 Total token usage (including sub-modules): {deps.token_usage['total_tokens']}")
             
             # Send progress update with token usage
             if self.progress_callback:

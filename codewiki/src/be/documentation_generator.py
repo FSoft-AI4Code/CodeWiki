@@ -195,6 +195,13 @@ class DocumentationGenerator:
                         self.total_token_usage["completion_tokens"] += module_token_usage.get("completion_tokens", 0)
                         self.total_token_usage["total_tokens"] += module_token_usage.get("total_tokens", 0)
                         
+                        # Debug: Log token usage details
+                        logger.debug(f"🔍 [{idx}/{total_modules}] Module '{module_key}' token usage:")
+                        logger.debug(f"   📥 Prompt tokens: {module_token_usage.get('prompt_tokens', 0)}")
+                        logger.debug(f"   📤 Completion tokens: {module_token_usage.get('completion_tokens', 0)}")
+                        logger.debug(f"   📊 Module total: {module_token_usage.get('total_tokens', 0)}")
+                        logger.debug(f"   🎯 Cumulative total: {self.total_token_usage['total_tokens']}")
+                        
                         logger.info(f"✅ [{idx}/{total_modules}] Completed leaf module: {module_key}")
                     else:
                         logger.info(f"📁 [{idx}/{total_modules}] Processing parent module: {module_key}")
@@ -239,6 +246,13 @@ class DocumentationGenerator:
             self.total_token_usage["prompt_tokens"] += module_token_usage.get("prompt_tokens", 0)
             self.total_token_usage["completion_tokens"] += module_token_usage.get("completion_tokens", 0)
             self.total_token_usage["total_tokens"] += module_token_usage.get("total_tokens", 0)
+            
+            # Debug: Log token usage details for whole repo
+            logger.debug(f"🔍 Whole repo token usage:")
+            logger.debug(f"   📥 Prompt tokens: {module_token_usage.get('prompt_tokens', 0)}")
+            logger.debug(f"   📤 Completion tokens: {module_token_usage.get('completion_tokens', 0)}")
+            logger.debug(f"   📊 Repo total: {module_token_usage.get('total_tokens', 0)}")
+            logger.debug(f"   🎯 Cumulative total: {self.total_token_usage['total_tokens']}")
 
             # save final_module_tree to module_tree.json
             file_manager.save_json(final_module_tree, os.path.join(working_dir, MODULE_TREE_FILENAME))
@@ -296,6 +310,13 @@ class DocumentationGenerator:
             self.total_token_usage["completion_tokens"] += usage.get("completion_tokens", 0)
             self.total_token_usage["total_tokens"] += usage.get("total_tokens", 0)
             
+            # Debug: Log parent module token usage
+            logger.debug(f"🔍 Parent module '{module_name}' token usage:")
+            logger.debug(f"   📥 Prompt tokens: {usage.get('prompt_tokens', 0)}")
+            logger.debug(f"   📤 Completion tokens: {usage.get('completion_tokens', 0)}")
+            logger.debug(f"   📊 Parent module total: {usage.get('total_tokens', 0)}")
+            logger.debug(f"   🎯 Cumulative total: {self.total_token_usage['total_tokens']}")
+            
             # Send progress update with token usage
             if self.progress_callback:
                 self.progress_callback(
@@ -348,6 +369,12 @@ class DocumentationGenerator:
                 module_tree = cluster_modules(leaf_nodes, components, self.config, token_usage_tracker=self.total_token_usage)
                 file_manager.save_json(module_tree, first_module_tree_path)
                 
+                # Debug: Log clustering token usage
+                logger.debug(f"🔍 Clustering token usage:")
+                logger.debug(f"   📥 Prompt tokens: {self.total_token_usage.get('prompt_tokens', 0)}")
+                logger.debug(f"   📤 Completion tokens: {self.total_token_usage.get('completion_tokens', 0)}")
+                logger.debug(f"   📊 Clustering total: {self.total_token_usage.get('total_tokens', 0)}")
+                
                 # Send progress update with clustering token usage
                 if self.progress_callback:
                     self.progress_callback(
@@ -372,6 +399,9 @@ class DocumentationGenerator:
             logger.info("=" * 80)
             logger.info(f"✅ Documentation generation completed successfully!")
             logger.info(f"📁 Documentation saved to: {working_dir}")
+            logger.info(f"📊 Total token usage: {self.total_token_usage['total_tokens']}")
+            logger.debug(f"   📥 Total prompt tokens: {self.total_token_usage['prompt_tokens']}")
+            logger.debug(f"   📤 Total completion tokens: {self.total_token_usage['completion_tokens']}")
             logger.info("=" * 80)
             
         except Exception as e:

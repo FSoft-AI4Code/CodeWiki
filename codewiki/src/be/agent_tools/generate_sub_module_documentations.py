@@ -84,12 +84,39 @@ async def generate_sub_module_documentation(
                     module_tree=ctx.deps.module_tree,
                     language=deps.config.language
                 ),
-                deps=ctx.deps
+                deps=ctx.deps,
+                usage=ctx.usage  # Pass parent usage to delegate agent for token tracking
             ) as sub_agent_run:
                 # Iterate through nodes and stream model requests
+                node_count = 0
                 async for node in sub_agent_run:
+                    node_count += 1
                     node_type = type(node).__name__
-                    logger.debug(f"{indent}      📍 Sub-node: {node_type}")
+                    logger.info(f"{indent}      📍 Sub-node #{node_count}: {node_type}")
+                    
+                    # Log detailed information for each node type
+                    if node_type == 'UserPromptNode':
+                        logger.debug(f"{indent}         💬 User prompt initialized")
+                    elif node_type == 'ModelRequestNode':
+                        logger.debug(f"{indent}         🤖 Model request sent")
+                    elif node_type == 'CallToolsNode':
+                        # Extract model response details
+                        if hasattr(node, 'model_response'):
+                            model_response = node.model_response
+                            if hasattr(model_response, 'usage'):
+                                usage = model_response.usage
+                                logger.info(f"{indent}         📊 Model response - Input: {usage.input_tokens}, Output: {usage.output_tokens}, Total: {usage.total_tokens} tokens")
+                            # Log which tools were called
+                            if hasattr(model_response, 'parts'):
+                                for part in model_response.parts:
+                                    part_type = type(part).__name__
+                                    if part_type == 'ToolCallPart':
+                                        logger.info(f"{indent}         🔧 Tool called: {part.tool_name}")
+                                        logger.debug(f"{indent}            Args: {part.args}")
+                    elif node_type == 'ToolReturnNode':
+                        logger.debug(f"{indent}         ✅ Tool execution completed")
+                    elif node_type == 'End':
+                        logger.info(f"{indent}         🏁 Sub-agent execution finished")
                     
                     # Stream model request nodes to enable streaming API
                     from pydantic_ai import Agent as PydanticAgent
@@ -103,15 +130,12 @@ async def generate_sub_module_documentation(
                 if sub_agent_run.result:
                     result = sub_agent_run.result
                     
-                    # Extract and aggregate token usage from sub-module
-                    if hasattr(result, 'usage') and result.usage:
-                        usage_data = {
-                            "prompt_tokens": result.usage.request_tokens if hasattr(result.usage, 'request_tokens') else 0,
-                            "completion_tokens": result.usage.response_tokens if hasattr(result.usage, 'response_tokens') else 0,
-                            "total_tokens": result.usage.total_tokens if hasattr(result.usage, 'total_tokens') else 0,
-                        }
-                        ctx.deps.add_token_usage(usage_data)
-                        logger.info(f"{indent}   📊 Sub-module token usage: {usage_data['total_tokens']} tokens")
+                    # Note: Token usage is automatically aggregated via usage=ctx.usage parameter
+                    # Log the token usage for this sub-module for visibility
+                    if hasattr(sub_agent_run, 'usage') and callable(sub_agent_run.usage):
+                        usage_stats = sub_agent_run.usage()
+                        if usage_stats and hasattr(usage_stats, 'total_tokens'):
+                            logger.info(f"{indent}   📊 Sub-module token usage: {usage_stats.total_tokens} tokens")
             
             logger.info(f"{indent}   ✅ Sub-agent completed")
             

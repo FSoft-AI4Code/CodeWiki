@@ -736,6 +736,8 @@ async def str_replace_editor(
         old_str: Required parameter of `str_replace` command containing the string in `path` to replace.
         new_str: Optional parameter of `str_replace` command containing the new string (if not given, no string will be added). Required parameter of `insert` command containing the string to insert.
     """
+    
+    logger.debug(f"   📝 str_replace_editor - {command} on {working_dir}/{path}")
 
     # Handle view_range parsing - convert string to list if needed
     if view_range is not None and isinstance(view_range, str):
@@ -765,6 +767,18 @@ async def str_replace_editor(
     )
 
     result = "\n".join(tool.logs)
+    
+    # Log the result summary
+    if command == "view":
+        logger.info(f"   ✅ Viewed {working_dir}/{path}")
+    elif command == "create":
+        logger.info(f"   ✅ Created {working_dir}/{path}")
+    elif command == "str_replace":
+        logger.info(f"   ✅ Edited {working_dir}/{path}")
+    elif command == "insert":
+        logger.info(f"   ✅ Inserted into {working_dir}/{path} at line {insert_line}")
+    elif command == "undo_edit":
+        logger.info(f"   ✅ Undid edit on {working_dir}/{path}")
 
     if command != "view" and path.endswith(".md"):
         mermaid_validation = await validate_mermaid_diagrams(absolute_path, path)

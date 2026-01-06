@@ -67,6 +67,14 @@ def cluster_modules(
         token_usage_tracker["prompt_tokens"] += usage.get("prompt_tokens", 0)
         token_usage_tracker["completion_tokens"] += usage.get("completion_tokens", 0)
         token_usage_tracker["total_tokens"] += usage.get("total_tokens", 0)
+        
+        # Debug: Log clustering LLM call token usage
+        module_label = f"'{current_module_name}'" if current_module_name else "root"
+        logger.debug(f"🔍 Clustering LLM call for {module_label}:")
+        logger.debug(f"   📥 Prompt tokens: {usage.get('prompt_tokens', 0)}")
+        logger.debug(f"   📤 Completion tokens: {usage.get('completion_tokens', 0)}")
+        logger.debug(f"   📊 Call total: {usage.get('total_tokens', 0)}")
+        logger.debug(f"   🎯 Clustering cumulative: {token_usage_tracker['total_tokens']}")
 
     #parse the response
     try:

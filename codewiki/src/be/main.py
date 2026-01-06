@@ -18,8 +18,8 @@ import os
 from codewiki.src.be.dependency_analyzer.utils.logging_config import setup_logging
 
 # Initialize colored logging with environment variable support
-log_level_name = os.getenv('LOG_LEVEL', 'INFO').upper()
-log_level = getattr(logging, log_level_name, logging.INFO)
+log_level_name = os.getenv('LOG_LEVEL', 'DEBUG').upper()  # Default to DEBUG for detailed logging
+log_level = getattr(logging, log_level_name, logging.DEBUG)
 setup_logging(level=log_level)
 
 logger = logging.getLogger(__name__)

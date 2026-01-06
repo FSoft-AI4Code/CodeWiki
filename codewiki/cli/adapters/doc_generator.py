@@ -81,12 +81,12 @@ class CLIDocumentationGenerator:
         backend_logger.handlers.clear()
         
         if self.verbose:
-            # In verbose mode, show INFO and above
-            backend_logger.setLevel(logging.INFO)
+            # In verbose mode, show DEBUG and above for full visibility
+            backend_logger.setLevel(logging.DEBUG)
             
             # Create console handler with formatting
             console_handler = logging.StreamHandler(sys.stdout)
-            console_handler.setLevel(logging.INFO)
+            console_handler.setLevel(logging.DEBUG)
             
             # Use colored formatter for better readability
             colored_formatter = ColoredFormatter()
