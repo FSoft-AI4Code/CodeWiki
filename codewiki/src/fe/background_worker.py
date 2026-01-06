@@ -242,7 +242,10 @@ class BackgroundWorker:
             
             # Generate documentation
             doc_generator = DocumentationGenerator(config, job.commit_id)
-            doc_generator.set_progress_callback(lambda **kwargs: self._send_progress(job_id, 'processing', kwargs.get('progress', ''), **kwargs))
+            def progress_callback(**kwargs):
+                progress = kwargs.pop('progress', '')
+                self._send_progress(job_id, 'processing', progress, **kwargs)
+            doc_generator.set_progress_callback(progress_callback)
             
             # Run the async documentation generation in a new event loop
             loop = asyncio.new_event_loop()
