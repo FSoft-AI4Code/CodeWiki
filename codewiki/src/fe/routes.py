@@ -169,7 +169,7 @@ class WebRoutes:
         if job.status != 'completed' or not job.docs_path:
             raise HTTPException(status_code=404, detail="Documentation not available")
         
-        docs_path = Path(job.docs_path)
+        docs_path = self._resolve_docs_path(job.docs_path, job_id)
         if not docs_path.exists():
             raise HTTPException(status_code=404, detail="Documentation files not found")
         
@@ -186,7 +186,7 @@ class WebRoutes:
             # Job status exists - use it
             if job.status != 'completed' or not job.docs_path:
                 raise HTTPException(status_code=404, detail="Documentation not available")
-            docs_path = Path(job.docs_path)
+            docs_path = self._resolve_docs_path(job.docs_path, job_id)
             repo_url = job.repo_url
         else:
             # No job status - try to find documentation in cache by job_id
@@ -284,6 +284,31 @@ class WebRoutes:
     def _job_id_to_repo_full_name(self, job_id: str) -> str:
         """Convert job ID back to repo full name."""
         return job_id.replace('--', '/')
+    
+    def _resolve_docs_path(self, docs_path: str, job_id: str) -> Path:
+        """Resolve documentation path, handling Docker container paths."""
+        path = Path(docs_path)
+        
+        # If path exists as-is, use it
+        if path.exists():
+            return path
+        
+        # If path doesn't exist, try to resolve relative to current working directory
+        # This handles cases where docs were generated in Docker but accessed locally
+        if str(docs_path).startswith('/app/'):
+            # Docker container path - convert to local path
+            relative_path = str(docs_path).replace('/app/', '')
+            local_path = Path(relative_path)
+            if local_path.exists():
+                return local_path
+        
+        # Last resort: try to construct path from job_id
+        fallback_path = Path(WebAppConfig.OUTPUT_DIR) / 'docs' / f'{job_id}-docs'
+        if fallback_path.exists():
+            return fallback_path
+        
+        # Return original path if nothing works (will fail with 404 later)
+        return path
     
     def cleanup_old_jobs(self):
         """Clean up old job status entries."""
