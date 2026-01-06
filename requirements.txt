@@ -105,10 +105,10 @@ pyasn1_modules==0.4.2
 pycares==4.11.0
 pycparser==2.23
 pydantic==2.11.7
-pydantic-ai==1.0.6
-pydantic-ai-slim==1.0.6
-pydantic-evals==1.0.6
-pydantic-graph==1.0.6
+pydantic-ai==1.39.1
+pydantic-ai-slim==1.39.1
+pydantic-evals==1.39.1
+pydantic-graph==1.39.1
 pydantic-settings==2.10.1
 pydantic_core==2.33.2
 Pygments==2.19.2

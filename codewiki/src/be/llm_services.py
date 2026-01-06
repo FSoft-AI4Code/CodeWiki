@@ -1,39 +1,39 @@
 """
 LLM service factory for creating configured LLM clients.
 """
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
-from pydantic_ai.models.openai import OpenAIModelSettings
+from pydantic_ai.models.openai import OpenAIChatModelSettings
 from pydantic_ai.models.fallback import FallbackModel
 from openai import OpenAI
 
 from codewiki.src.config import Config
 
 
-def create_main_model(config: Config) -> OpenAIModel:
+def create_main_model(config: Config) -> OpenAIChatModel:
     """Create the main LLM model from configuration."""
-    return OpenAIModel(
+    return OpenAIChatModel(
         model_name=config.main_model,
         provider=OpenAIProvider(
             base_url=config.llm_base_url,
             api_key=config.llm_api_key
         ),
-        settings=OpenAIModelSettings(
+        settings=OpenAIChatModelSettings(
             temperature=0.0,
             max_tokens=32768
         )
     )
 
 
-def create_fallback_model(config: Config) -> OpenAIModel:
+def create_fallback_model(config: Config) -> OpenAIChatModel:
     """Create the fallback LLM model from configuration."""
-    return OpenAIModel(
+    return OpenAIChatModel(
         model_name=config.fallback_model,
         provider=OpenAIProvider(
             base_url=config.llm_base_url,
             api_key=config.llm_api_key
         ),
-        settings=OpenAIModelSettings(
+        settings=OpenAIChatModelSettings(
             temperature=0.0,
             max_tokens=32768
         )
@@ -60,7 +60,8 @@ def call_llm(
     config: Config,
     model: str = None,
     temperature: float = 0.0,
-    return_usage: bool = False
+    return_usage: bool = False,
+    stream: bool = True
 ) -> str | tuple[str, dict]:
     """
     Call LLM with the given prompt.
@@ -71,6 +72,7 @@ def call_llm(
         model: Model name (defaults to config.main_model)
         temperature: Temperature setting
         return_usage: If True, return (text, usage_dict) tuple
+        stream: Enable streaming mode (default: True)
         
     Returns:
         LLM response text, or (text, usage_dict) if return_usage=True
@@ -80,21 +82,60 @@ def call_llm(
         model = config.main_model
     
     client = create_openai_client(config)
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=temperature,
-        max_tokens=32768
-    )
     
-    content = response.choices[0].message.content
-    
-    if return_usage:
-        usage = {
-            "prompt_tokens": response.usage.prompt_tokens if response.usage else 0,
-            "completion_tokens": response.usage.completion_tokens if response.usage else 0,
-            "total_tokens": response.usage.total_tokens if response.usage else 0,
-        }
-        return content, usage
+    if stream:
+        # Use streaming mode
+        response_stream = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=temperature,
+            max_tokens=32768,
+            stream=True
+        )
+        
+        # Collect streamed chunks
+        content_chunks = []
+        for chunk in response_stream:
+            if chunk.choices and chunk.choices[0].delta.content:
+                content_chunks.append(chunk.choices[0].delta.content)
+        
+        content = ''.join(content_chunks)
+        
+        # For streaming, we need to make a final call to get usage stats
+        # or use stream_options={"include_usage": True} if supported
+        if return_usage:
+            # Make another call to get usage (streaming doesn't return usage by default)
+            usage_response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=temperature,
+                max_tokens=32768,
+                stream=False
+            )
+            usage = {
+                "prompt_tokens": usage_response.usage.prompt_tokens if usage_response.usage else 0,
+                "completion_tokens": usage_response.usage.completion_tokens if usage_response.usage else 0,
+                "total_tokens": usage_response.usage.total_tokens if usage_response.usage else 0,
+            }
+            return content, usage
+    else:
+        # Use non-streaming mode
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=temperature,
+            max_tokens=32768,
+            stream=False
+        )
+        
+        content = response.choices[0].message.content
+        
+        if return_usage:
+            usage = {
+                "prompt_tokens": response.usage.prompt_tokens if response.usage else 0,
+                "completion_tokens": response.usage.completion_tokens if response.usage else 0,
+                "total_tokens": response.usage.total_tokens if response.usage else 0,
+            }
+            return content, usage
     
     return content

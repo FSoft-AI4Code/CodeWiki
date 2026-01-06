@@ -73,8 +73,10 @@ async def generate_sub_module_documentation(
         deps.current_depth += 1
 
         try:
-            logger.info(f"{indent}   🚀 Running agent for sub-module: {sub_module_name}")
-            result = await sub_agent.run(
+            # Use iter() with node.stream() to enable streaming API (stream: true)
+            logger.info(f"{indent}   🚀 Running sub-agent with iter() + node.stream(): {sub_module_name}")
+            
+            async with sub_agent.iter(
                 format_user_prompt(
                     module_name=deps.current_module_name,
                     core_component_ids=core_component_ids,
@@ -83,17 +85,35 @@ async def generate_sub_module_documentation(
                     language=deps.config.language
                 ),
                 deps=ctx.deps
-            )
+            ) as sub_agent_run:
+                # Iterate through nodes and stream model requests
+                async for node in sub_agent_run:
+                    node_type = type(node).__name__
+                    logger.debug(f"{indent}      📍 Sub-node: {node_type}")
+                    
+                    # Stream model request nodes to enable streaming API
+                    from pydantic_ai import Agent as PydanticAgent
+                    if PydanticAgent.is_model_request_node(node):
+                        async with node.stream(sub_agent_run.ctx) as stream:
+                            async for event in stream:
+                                # Just consume the stream to enable streaming
+                                pass
+                
+                # Get final result from sub_agent_run.result
+                if sub_agent_run.result:
+                    result = sub_agent_run.result
+                    
+                    # Extract and aggregate token usage from sub-module
+                    if hasattr(result, 'usage') and result.usage:
+                        usage_data = {
+                            "prompt_tokens": result.usage.request_tokens if hasattr(result.usage, 'request_tokens') else 0,
+                            "completion_tokens": result.usage.response_tokens if hasattr(result.usage, 'response_tokens') else 0,
+                            "total_tokens": result.usage.total_tokens if hasattr(result.usage, 'total_tokens') else 0,
+                        }
+                        ctx.deps.add_token_usage(usage_data)
+                        logger.info(f"{indent}   📊 Sub-module token usage: {usage_data['total_tokens']} tokens")
             
-            # Extract and aggregate token usage from sub-module
-            if hasattr(result, 'usage') and result.usage:
-                usage_data = {
-                    "prompt_tokens": getattr(result.usage(), 'request_tokens', 0) if callable(result.usage) else getattr(result.usage, 'request_tokens', 0),
-                    "completion_tokens": getattr(result.usage(), 'response_tokens', 0) if callable(result.usage) else getattr(result.usage, 'response_tokens', 0),
-                    "total_tokens": getattr(result.usage(), 'total_tokens', 0) if callable(result.usage) else getattr(result.usage, 'total_tokens', 0),
-                }
-                ctx.deps.add_token_usage(usage_data)
-                logger.info(f"{indent}   📊 Sub-module token usage: {usage_data['total_tokens']} tokens")
+            logger.info(f"{indent}   ✅ Sub-agent completed")
             
             logger.info(f"{indent}   ✅ Completed sub-module: {sub_module_name}")
         except Exception as e:

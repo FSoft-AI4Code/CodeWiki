@@ -145,9 +145,9 @@ class AgentOrchestrator:
             logger.info(f"   ✓ Module docs already exists, skipping")
             return module_tree, {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
         
-        # Run agent
+        # Run agent with iter() and stream nodes for true streaming API
         try:
-            logger.info(f"   🚀 Running agent for module: {module_name}")
+            logger.info(f"   🚀 Running agent for module: {module_name} (streaming mode)")
             
             # Send progress update
             if self.progress_callback:
@@ -157,7 +157,10 @@ class AgentOrchestrator:
                     total_tokens=0  # Will be updated after agent run
                 )
             
-            result = await agent.run(
+            # Use iter() with node.stream() to enable streaming API (stream: true)
+            logger.info(f"   🚀 Running agent with iter() + node.stream() for module: {module_name}")
+            
+            async with agent.iter(
                 format_user_prompt(
                     module_name=module_name,
                     core_component_ids=core_component_ids,
@@ -166,16 +169,33 @@ class AgentOrchestrator:
                     language=self.config.language
                 ),
                 deps=deps
-            )
+            ) as agent_run:
+                # Iterate through nodes and stream model requests
+                async for node in agent_run:
+                    node_type = type(node).__name__
+                    logger.debug(f"   📍 Node: {node_type}")
+                    
+                    # Stream model request nodes to enable streaming API
+                    if Agent.is_model_request_node(node):
+                        async with node.stream(agent_run.ctx) as stream:
+                            async for event in stream:
+                                # Just consume the stream to enable streaming
+                                pass
+                
+                # Get final result from agent_run.result
+                if agent_run.result:
+                    result = agent_run.result
+                    
+                    # Extract token usage from result
+                    if hasattr(result, 'usage') and result.usage:
+                        usage_data = {
+                            "prompt_tokens": result.usage.request_tokens if hasattr(result.usage, 'request_tokens') else 0,
+                            "completion_tokens": result.usage.response_tokens if hasattr(result.usage, 'response_tokens') else 0,
+                            "total_tokens": result.usage.total_tokens if hasattr(result.usage, 'total_tokens') else 0,
+                        }
+                        deps.add_token_usage(usage_data)
             
-            # Extract token usage from pydantic-ai result
-            if hasattr(result, 'usage') and result.usage:
-                usage_data = {
-                    "prompt_tokens": getattr(result.usage(), 'request_tokens', 0) if callable(result.usage) else getattr(result.usage, 'request_tokens', 0),
-                    "completion_tokens": getattr(result.usage(), 'response_tokens', 0) if callable(result.usage) else getattr(result.usage, 'response_tokens', 0),
-                    "total_tokens": getattr(result.usage(), 'total_tokens', 0) if callable(result.usage) else getattr(result.usage, 'total_tokens', 0),
-                }
-                deps.add_token_usage(usage_data)
+            logger.info(f"   ✅ Agent completed")
             
             # Send progress update with token usage
             if self.progress_callback:
