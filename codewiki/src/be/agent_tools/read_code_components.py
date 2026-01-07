@@ -30,4 +30,5 @@ async def read_code_components(ctx: RunContext[CodeWikiDeps], component_ids: lis
 
     return "\n".join(results)
 
-read_code_components_tool = Tool(function=read_code_components, name="read_code_components", description="Read the code of a given list of component ids", takes_ctx=True)
+read_code_components_tool = Tool(function=read_code_components, name="read_code_components", description="Read the code of a given list of component ids", takes_ctx=True,
+    strict=False,)
