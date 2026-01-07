@@ -376,32 +376,41 @@ WEB_INTERFACE_TEMPLATE = """
                 statusElement.className = `job-status status-${progress.status}`;
             }
             
-            // Update progress text
+            // Update progress text - append module, component, and token info
             const progressElement = jobItem.querySelector('.job-progress');
             if (progressElement) {
-                progressElement.textContent = progress.progress;
+                let progressText = progress.progress;
+                
+                // Build additional info
+                let additionalInfo = [];
+                
+                if (progress.current_module) {
+                    additionalInfo.push(`Module: ${progress.current_module}`);
+                }
+                
+                if (progress.current_component) {
+                    additionalInfo.push(`Component: ${progress.current_component}`);
+                }
+                
+                if (progress.total_tokens !== undefined && progress.total_tokens !== null) {
+                    additionalInfo.push(`Tokens: ${progress.total_tokens.toLocaleString()}`);
+                }
+                
+                // Append additional info to progress text if any
+                if (additionalInfo.length > 0) {
+                    progressText += ' | ' + additionalInfo.join(' | ');
+                }
+                
+                progressElement.textContent = progressText;
             }
             
-            // Update detailed progress
+            // Update detailed progress (module/component counts)
             const detailElement = jobItem.querySelector('.job-progress-detail');
             const progressBar = jobItem.querySelector('.progress-bar');
             const progressFill = jobItem.querySelector('.progress-fill');
             
-            if (progress.current_module || progress.current_component) {
-                let detailText = '';
-                if (progress.current_module) {
-                    detailText += `Module: ${progress.current_module}`;
-                    if (progress.module_index && progress.total_modules) {
-                        detailText += ` (${progress.module_index}/${progress.total_modules})`;
-                    }
-                }
-                if (progress.current_component) {
-                    if (detailText) detailText += ' | ';
-                    detailText += `Component: ${progress.current_component}`;
-                    if (progress.component_index && progress.total_components) {
-                        detailText += ` (${progress.component_index}/${progress.total_components})`;
-                    }
-                }
+            if (progress.module_index && progress.total_modules) {
+                let detailText = `Progress: ${progress.module_index}/${progress.total_modules} modules`;
                 
                 if (detailElement && detailText) {
                     detailElement.textContent = detailText;
@@ -409,12 +418,10 @@ WEB_INTERFACE_TEMPLATE = """
                 }
                 
                 // Show and update progress bar
-                if (progress.module_index && progress.total_modules) {
-                    const percentage = (progress.module_index / progress.total_modules) * 100;
-                    if (progressBar && progressFill) {
-                        progressBar.style.display = 'block';
-                        progressFill.style.width = `${percentage}%`;
-                    }
+                const percentage = (progress.module_index / progress.total_modules) * 100;
+                if (progressBar && progressFill) {
+                    progressBar.style.display = 'block';
+                    progressFill.style.width = `${percentage}%`;
                 }
             }
             

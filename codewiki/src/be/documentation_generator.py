@@ -33,14 +33,15 @@ class DocumentationGenerator:
         self.config = config
         self.commit_id = commit_id
         self.graph_builder = DependencyGraphBuilder(config)
-        self.agent_orchestrator = AgentOrchestrator(config)
-        self.progress_callback = None
         # Token usage tracking
         self.total_token_usage = {
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "total_tokens": 0
         }
+        # Pass total_token_usage reference to agent_orchestrator for real-time updates
+        self.agent_orchestrator = AgentOrchestrator(config, self.total_token_usage)
+        self.progress_callback = None
     
     def set_progress_callback(self, callback):
         """Set a callback function for progress updates."""

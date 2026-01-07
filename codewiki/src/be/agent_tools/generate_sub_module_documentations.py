@@ -106,6 +106,23 @@ async def generate_sub_module_documentation(
                             if hasattr(model_response, 'usage'):
                                 usage = model_response.usage
                                 logger.info(f"{indent}         📊 Model response - Input: {usage.input_tokens}, Output: {usage.output_tokens}, Total: {usage.total_tokens} tokens")
+                                
+                                # Update cumulative token usage in deps (this will also update global_token_usage)
+                                call_usage = {
+                                    "prompt_tokens": usage.input_tokens,
+                                    "completion_tokens": usage.output_tokens,
+                                    "total_tokens": usage.total_tokens
+                                }
+                                deps.add_token_usage(call_usage)
+                                
+                                # Send real-time token update via WebSocket (using global token usage)
+                                if deps.progress_callback and deps.global_token_usage:
+                                    deps.progress_callback(
+                                        progress=f"Processing sub-module: {sub_module_name}",
+                                        current_module="/".join(deps.path_to_current_module),
+                                        total_tokens=deps.global_token_usage["total_tokens"]
+                                    )
+                            
                             # Log which tools were called
                             if hasattr(model_response, 'parts'):
                                 for part in model_response.parts:

@@ -84,38 +84,37 @@ def call_llm(
     client = create_openai_client(config)
     
     if stream:
-        # Use streaming mode
+        # Use streaming mode with usage stats if requested
+        stream_options = {"include_usage": True} if return_usage else None
+        
         response_stream = client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
             temperature=temperature,
             max_tokens=32768,
-            stream=True
+            stream=True,
+            stream_options=stream_options
         )
         
-        # Collect streamed chunks
+        # Collect streamed chunks and usage from final chunk
         content_chunks = []
+        usage_data = None
+        
         for chunk in response_stream:
             if chunk.choices and chunk.choices[0].delta.content:
                 content_chunks.append(chunk.choices[0].delta.content)
+            
+            # Usage info is in the final chunk when stream_options={"include_usage": True}
+            if return_usage and hasattr(chunk, 'usage') and chunk.usage:
+                usage_data = chunk.usage
         
         content = ''.join(content_chunks)
         
-        # For streaming, we need to make a final call to get usage stats
-        # or use stream_options={"include_usage": True} if supported
         if return_usage:
-            # Make another call to get usage (streaming doesn't return usage by default)
-            usage_response = client.chat.completions.create(
-                model=model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=temperature,
-                max_tokens=32768,
-                stream=False
-            )
             usage = {
-                "prompt_tokens": usage_response.usage.prompt_tokens if usage_response.usage else 0,
-                "completion_tokens": usage_response.usage.completion_tokens if usage_response.usage else 0,
-                "total_tokens": usage_response.usage.total_tokens if usage_response.usage else 0,
+                "prompt_tokens": usage_data.prompt_tokens if usage_data else 0,
+                "completion_tokens": usage_data.completion_tokens if usage_data else 0,
+                "total_tokens": usage_data.total_tokens if usage_data else 0,
             }
             return content, usage
     else:

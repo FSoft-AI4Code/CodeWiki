@@ -174,8 +174,8 @@ class BackgroundWorker:
                     progress=progress,
                     **kwargs
                 )
-                # Use asyncio to schedule the broadcast
-                asyncio.run(self.ws_manager.broadcast_progress(progress_msg))
+                # Use the synchronous method to send progress
+                self.ws_manager.send_progress_sync(progress_msg)
             except Exception as e:
                 print(f"Error sending progress: {e}")
     

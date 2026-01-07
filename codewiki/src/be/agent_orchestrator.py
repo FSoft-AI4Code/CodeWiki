@@ -59,10 +59,16 @@ from codewiki.src.be.dependency_analyzer.models.core import Node
 class AgentOrchestrator:
     """Orchestrates the AI agents for documentation generation."""
     
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, total_token_usage: dict = None):
         self.config = config
         self.fallback_models = create_fallback_models(config)
         self.progress_callback = None
+        # Reference to the DocumentationGenerator's total_token_usage for real-time updates
+        self.total_token_usage = total_token_usage or {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0
+        }
     
     def set_progress_callback(self, callback):
         """Set a callback function for progress updates."""
@@ -130,7 +136,9 @@ class AgentOrchestrator:
             module_tree=module_tree,
             max_depth=self.config.max_depth,
             current_depth=1,
-            config=self.config
+            config=self.config,
+            progress_callback=self.progress_callback,  # Pass progress callback to deps
+            global_token_usage=self.total_token_usage  # Pass global token usage for real-time updates
         )
 
         # check if overview docs already exists
@@ -189,6 +197,28 @@ class AgentOrchestrator:
                             if hasattr(model_response, 'usage'):
                                 usage = model_response.usage
                                 logger.info(f"      📊 Model response - Input: {usage.input_tokens}, Output: {usage.output_tokens}, Total: {usage.total_tokens} tokens")
+                                
+                                # Update cumulative token usage in deps
+                                call_usage = {
+                                    "prompt_tokens": usage.input_tokens,
+                                    "completion_tokens": usage.output_tokens,
+                                    "total_tokens": usage.total_tokens
+                                }
+                                deps.add_token_usage(call_usage)
+                                
+                                # Also update the orchestrator's total_token_usage (shared with DocumentationGenerator)
+                                self.total_token_usage["prompt_tokens"] += usage.input_tokens
+                                self.total_token_usage["completion_tokens"] += usage.output_tokens
+                                self.total_token_usage["total_tokens"] += usage.total_tokens
+                                
+                                # Send real-time token update via WebSocket
+                                if self.progress_callback:
+                                    self.progress_callback(
+                                        progress=f"Processing module: {module_name}",
+                                        current_module=module_name,
+                                        total_tokens=self.total_token_usage["total_tokens"]
+                                    )
+                            
                             # Log which tools were called
                             if hasattr(model_response, 'parts'):
                                 for part in model_response.parts:
