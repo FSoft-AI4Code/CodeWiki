@@ -11,11 +11,13 @@ from pydantic import BaseModel, HttpUrl
 
 class RepositorySubmission(BaseModel):
     """Pydantic model for repository submission form."""
+
     repo_url: HttpUrl
 
 
 class JobStatusResponse(BaseModel):
     """Pydantic model for job status API response."""
+
     job_id: str
     repo_url: str
     status: str
@@ -27,11 +29,13 @@ class JobStatusResponse(BaseModel):
     docs_path: Optional[str] = None
     main_model: Optional[str] = None
     commit_id: Optional[str] = None
+    total_tokens: Optional[int] = None
 
 
 @dataclass
 class JobStatus:
     """Tracks the status of a documentation generation job."""
+
     job_id: str
     repo_url: str
     status: str  # 'queued', 'processing', 'completed', 'failed'
@@ -43,11 +47,13 @@ class JobStatus:
     docs_path: Optional[str] = None
     main_model: Optional[str] = None
     commit_id: Optional[str] = None
+    total_tokens: Optional[int] = None
 
 
 @dataclass
 class CacheEntry:
     """Represents a cached documentation result."""
+
     repo_url: str
     repo_url_hash: str
     docs_path: str
@@ -57,6 +63,7 @@ class CacheEntry:
 
 class ProgressMessage(BaseModel):
     """WebSocket progress message model."""
+
     job_id: str
     status: str  # 'queued', 'processing', 'completed', 'failed'
     progress: str

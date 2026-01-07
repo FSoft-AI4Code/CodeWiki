@@ -167,6 +167,18 @@ WEB_INTERFACE_TEMPLATE = """
             font-size: 0.875rem;
             font-weight: 600;
         }
+
+        .job-status-container {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0.25rem;
+        }
+
+        .job-token-summary {
+            font-size: 0.75rem;
+            color: #64748b;
+        }
         
         .status-queued {
             background: #fef3c7;
@@ -277,7 +289,13 @@ WEB_INTERFACE_TEMPLATE = """
                 <div class="job-item" data-job-id="{{ job.job_id }}">
                     <div class="job-header">
                         <div class="job-url">{{ job.repo_url }}</div>
-                        <div class="job-status status-{{ job.status }}">{{ job.status }}</div>
+                        <div class="job-status-container">
+                            <div class="job-status status-{{ job.status }}">{{ job.status }}</div>
+                            <div
+                                class="job-token-summary"
+                                {% if not (job.status == 'completed' and job.total_tokens) %}style="display: none;"{% endif %}
+                            >{% if job.status == 'completed' and job.total_tokens %}Total Tokens: {{ job.total_tokens }}{% endif %}</div>
+                        </div>
                     </div>
                     <div class="job-progress">{{ job.progress }}</div>
                     <div class="job-progress-detail" style="display: none;"></div>
@@ -374,6 +392,16 @@ WEB_INTERFACE_TEMPLATE = """
             if (statusElement) {
                 statusElement.textContent = progress.status;
                 statusElement.className = `job-status status-${progress.status}`;
+            }
+
+            const tokenSummaryElement = jobItem.querySelector('.job-token-summary');
+            if (tokenSummaryElement) {
+                if (progress.status === 'completed' && progress.total_tokens !== undefined && progress.total_tokens !== null) {
+                    tokenSummaryElement.textContent = `Total Tokens: ${progress.total_tokens.toLocaleString()}`;
+                    tokenSummaryElement.style.display = 'block';
+                } else {
+                    tokenSummaryElement.style.display = 'none';
+                }
             }
             
             // Update progress text - append module, component, and token info
