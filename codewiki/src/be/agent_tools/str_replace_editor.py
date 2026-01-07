@@ -800,5 +800,6 @@ Custom editing tool for viewing, creating and editing files
     * Only `view` command is allowed when `working_dir` is `repo`.
     * IMPORTANT: When calling this tool, `view_range` MUST be a JSON array of integers (e.g. [1, 50]), not a quoted string like "[1, 50]".
 """.strip(),
-    takes_ctx=True
+    takes_ctx=True,
+    strict=False,
 )
