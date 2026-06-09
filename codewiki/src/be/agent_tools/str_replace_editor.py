@@ -212,9 +212,9 @@ def flake8(file_path: str) -> str:
     """Run flake8 on a given file and return the output as a string"""
     if Path(file_path).suffix != ".py":
         return ""
-    cmd = "flake8 --isolated --select=F821,F822,F831,E111,E112,E113,E999,E902 {file_path}"
+    cmd = ["flake8", "--isolated", "--select=F821,F822,F831,E111,E112,E113,E999,E902", file_path]
     # don't use capture_output because it's not compatible with python3.6
-    out = subprocess.run(cmd.format(file_path=file_path), shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    out = subprocess.run(cmd, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     # Use errors="replace" so non-UTF-8 bytes (e.g. GBK-encoded paths on Windows) don't crash decoding.
     return out.stdout.decode("utf-8", errors="replace")
 
@@ -488,8 +488,8 @@ class EditTool:
                 return
 
             out = subprocess.run(
-                rf"find {path} -maxdepth 2 -not -path '*/\.*'",
-                shell=True,
+                ["find", str(path), "-maxdepth", "2", "-not", "-path", "*/\\.*"],
+                shell=False,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
@@ -772,9 +772,16 @@ async def str_replace_editor(
 
     tool = EditTool(ctx.deps.registry, ctx.deps.absolute_docs_path)
     if working_dir == "docs":
-        absolute_path = str(Path(ctx.deps.absolute_docs_path) / path)
+        base_dir = Path(ctx.deps.absolute_docs_path).resolve()
+        absolute_path = str(base_dir / path)
     else:
-        absolute_path = str(Path(ctx.deps.absolute_repo_path) / path)
+        base_dir = Path(ctx.deps.absolute_repo_path).resolve()
+        absolute_path = str(base_dir / path)
+
+    # Guard against absolute path escape (e.g. Path("/base") / "/etc/passwd" = "/etc/passwd")
+    resolved = Path(absolute_path).resolve()
+    if not resolved.is_relative_to(base_dir):
+        return f"Error: Path '{path}' escapes the allowed directory. Access denied."
 
     # validate command
     if command != "view" and working_dir == "repo":

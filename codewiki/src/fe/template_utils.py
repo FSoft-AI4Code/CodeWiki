@@ -3,7 +3,8 @@
 Template utilities for FastAPI applications using Jinja2.
 """
 
-from jinja2 import Environment, BaseLoader, select_autoescape
+from jinja2 import BaseLoader, select_autoescape
+from jinja2.sandbox import SandboxedEnvironment
 from typing import Dict, Any
 
 
@@ -29,7 +30,7 @@ def render_template(template: str, context: Dict[str, Any]) -> str:
         Rendered HTML string
     """
     # Create Jinja2 environment with string template
-    env = Environment(
+    env = SandboxedEnvironment(
         loader=StringTemplateLoader(template),
         autoescape=select_autoescape(['html', 'xml']),
         trim_blocks=True,

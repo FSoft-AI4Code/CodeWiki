@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Callable, Optional
 from collections import defaultdict
+import json
 import logging
 import traceback
 logger = logging.getLogger(__name__)
@@ -121,7 +122,7 @@ def cluster_modules(
             return {}
         
         response_content = response.split("<GROUPED_COMPONENTS>")[1].split("</GROUPED_COMPONENTS>")[0]
-        module_tree = eval(response_content)
+        module_tree = json.loads(response_content)
         
         if not isinstance(module_tree, dict):
             logger.error(f"Invalid module tree format - expected dict, got {type(module_tree)}")
