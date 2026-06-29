@@ -43,6 +43,10 @@ CLUSTER_MODEL = os.getenv('CLUSTER_MODEL', MAIN_MODEL)
 LLM_BASE_URL = os.getenv('LLM_BASE_URL', 'http://0.0.0.0:4000/')
 LLM_API_KEY = os.getenv('LLM_API_KEY', 'sk-1234')
 
+# Atlas Cloud default endpoint (OpenAI-compatible). Used to auto-fill the base URL
+# when the user selects the `atlas-cloud` provider without passing --base-url.
+ATLAS_CLOUD_BASE_URL = "https://api.atlascloud.ai/v1"
+
 @dataclass
 class Config:
     """Configuration class for CodeWiki."""
@@ -58,7 +62,7 @@ class Config:
     cluster_model: str
     fallback_model: str = FALLBACK_MODEL_1
     # Provider configuration
-    provider: str = "openai-compatible"  # openai-compatible, anthropic, bedrock, azure-openai
+    provider: str = "openai-compatible"  # openai-compatible, atlas-cloud, anthropic, bedrock, azure-openai
     aws_region: str = "us-east-1"
     api_version: str = "2024-12-01-preview"  # Azure OpenAI API version
     azure_deployment: str = ""  # Azure OpenAI deployment name
@@ -181,7 +185,7 @@ class Config:
             main_model: Primary model
             cluster_model: Clustering model
             fallback_model: Fallback model
-            provider: LLM provider type (openai-compatible, anthropic, bedrock, azure-openai)
+            provider: LLM provider type (openai-compatible, atlas-cloud, anthropic, bedrock, azure-openai)
             aws_region: AWS region for Bedrock provider
             api_version: Azure OpenAI API version
             azure_deployment: Azure OpenAI deployment name

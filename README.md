@@ -48,7 +48,7 @@ codewiki --version
 
 ### 2. Configure Your Environment
 
-CodeWiki supports multiple LLM providers: **OpenAI-compatible**, **Anthropic**, **AWS Bedrock**, **Azure OpenAI**, plus subscription mode via **Claude Code** and **Codex** CLIs (no API key required).
+CodeWiki supports multiple LLM providers: **OpenAI-compatible**, **Atlas Cloud**, **Anthropic**, **AWS Bedrock**, **Azure OpenAI**, plus subscription mode via **Claude Code** and **Codex** CLIs (no API key required).
 
 ```bash
 # OpenAI-compatible
@@ -59,6 +59,14 @@ codewiki config set \
   --main-model claude-sonnet-4 \
   --cluster-model claude-sonnet-4 \
   --fallback-model glm-4p5
+
+# Atlas Cloud — base URL auto-set to https://api.atlascloud.ai/v1;
+# API key read from $ATLASCLOUD_API_KEY when --api-key is omitted.
+codewiki config set \
+  --provider atlas-cloud \
+  --main-model anthropic/claude-sonnet-4.6 \
+  --cluster-model anthropic/claude-sonnet-4.6 \
+  --fallback-model zai-org/GLM-4.6
 
 # Anthropic
 codewiki config set \
@@ -99,6 +107,8 @@ codewiki config set \
   --main-model gpt-5.4 \
   --cluster-model gpt-5.5
 ```
+
+**About Atlas Cloud.** [Atlas Cloud](https://www.atlascloud.ai) is a full-modal AI inference platform that exposes LLM, image, and video models (300+) behind a single OpenAI-compatible API, so it works with CodeWiki out of the box. Browse model IDs at the [models endpoint](https://api.atlascloud.ai/v1/models) and pick a strong coding model for `--main-model` / `--cluster-model`; their [coding plan](https://www.atlascloud.ai/console/coding-plan) offers budget-friendly API access.
 
 **Subscription mode** routes every LLM call through the local `claude` / `codex` CLI binary (via the [`caw`](https://github.com/zzjas/caw) library), so you can run CodeWiki on a Claude Pro/Max or Codex subscription instead of paying per-token API usage. Claude Code's built-in `Write`/`Edit`/`Bash` tools are disabled inside CodeWiki's agent loop so documentation writes still go through CodeWiki's Mermaid-validating editor.
 

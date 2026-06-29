@@ -3,6 +3,7 @@ Configuration commands for CodeWiki CLI.
 """
 
 import json
+import os
 import sys
 import click
 from typing import Optional, List
@@ -86,11 +87,12 @@ def config_group():
 @click.option(
     "--provider",
     type=click.Choice(
-        ['openai-compatible', 'anthropic', 'bedrock', 'azure-openai', 'claude-code', 'codex'],
+        ['openai-compatible', 'atlas-cloud', 'anthropic', 'bedrock', 'azure-openai', 'claude-code', 'codex'],
         case_sensitive=False,
     ),
     help=(
         "LLM provider type (default: openai-compatible). "
+        "Use 'atlas-cloud' for Atlas Cloud (base URL auto-set; reads ATLASCLOUD_API_KEY). "
         "Use 'claude-code' or 'codex' to run on a CLI subscription instead of an API key."
     ),
 )
@@ -140,6 +142,11 @@ def config_set(
         --main-model claude-sonnet-4 --cluster-model claude-sonnet-4 --fallback-model glm-4p5
 
     \b
+    # Atlas Cloud (OpenAI-compatible) — base URL auto-set,
+    # API key read from ATLASCLOUD_API_KEY if --api-key is omitted
+    $ codewiki config set --provider atlas-cloud --main-model <atlas-model> --cluster-model <atlas-model>
+
+    \b
     # Subscription mode (Claude Code) — no API key needed,
     # authenticate via 'claude login' on the host first
     $ codewiki config set --provider claude-code --main-model claude-sonnet-4-5
@@ -169,7 +176,17 @@ def config_set(
         if not any([api_key, base_url, main_model, cluster_model, fallback_model, max_tokens, max_token_per_module, max_token_per_leaf_module, max_depth, provider, aws_region, api_version, azure_deployment]):
             click.echo("No options provided. Use --help for usage information.")
             sys.exit(EXIT_CONFIG_ERROR)
-        
+
+        # Atlas Cloud convenience defaults: it's an OpenAI-compatible endpoint, so
+        # auto-fill its base URL and pull the API key from ATLASCLOUD_API_KEY when the
+        # user does not pass them explicitly.
+        if provider and provider.lower() == "atlas-cloud":
+            from codewiki.src.config import ATLAS_CLOUD_BASE_URL
+            if not base_url:
+                base_url = ATLAS_CLOUD_BASE_URL
+            if not api_key:
+                api_key = os.getenv("ATLASCLOUD_API_KEY")
+
         # Validate inputs before saving
         validated_data = {}
         
