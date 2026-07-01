@@ -120,6 +120,63 @@ _patch_codex_tool_timeout()
 # --- end stopgap --------------------------------------------------------------
 
 
+# --- claude-code allowedTools stopgap -----------------------------------------
+# Custom MCP-server tools (added via `--mcp-config`) are not auto-approved under
+# `acceptEdits`, and `bypassPermissions` may be disabled by an org managed
+# policy (see the cwd note below), so caw's `--dangerously-skip-permissions`
+# alone is not enough: CodeWiki's own toolkit (str_replace_editor,
+# read_code_components, generate_sub_module_documentation) gets denied
+# ("you haven't granted it yet"), the agent writes nothing, and the run
+# "succeeds" with an empty module tree.  Grant the toolkit explicitly with
+# `--allowedTools` using the permission rule syntax:
+#   https://code.claude.com/docs/en/settings#permission-rule-syntax
+#   `--allowedTools` flag: https://code.claude.com/docs/en/cli-reference
+# caw's ClaudeCodeSession only ever emits `--disallowedTools`, so wrap
+# subprocess.Popen to inject `--allowedTools mcp__<server>` for every server in
+# the --mcp-config.  Belongs upstream in caw; remove once it grows a
+# first-class allowed_tools knob for its toolkit servers.
+_CLAUDE_ALLOWED_PATCH_APPLIED = False
+
+
+def _patch_claude_allowed_tools() -> None:
+    global _CLAUDE_ALLOWED_PATCH_APPLIED
+    if _CLAUDE_ALLOWED_PATCH_APPLIED:
+        return
+    import json as _json
+    import subprocess as _sp
+
+    _orig_popen = _sp.Popen
+
+    def _popen(cmd, *args, **kwargs):
+        try:
+            if (
+                isinstance(cmd, (list, tuple))
+                and cmd
+                and os.path.basename(str(cmd[0])) == "claude"
+                and "--mcp-config" in cmd
+                and "--allowedTools" not in cmd
+                and "--allowed-tools" not in cmd
+            ):
+                cfg_path = cmd[list(cmd).index("--mcp-config") + 1]
+                servers = list(
+                    _json.load(open(cfg_path)).get("mcpServers", {}).keys()
+                )
+                if servers:
+                    allowed = ",".join(f"mcp__{s}" for s in servers)
+                    cmd = list(cmd) + ["--allowedTools", allowed]
+                    logger.info("Injected --allowedTools for MCP servers: %s", servers)
+        except Exception as e:  # never break the spawn on a patch hiccup
+            logger.warning("claude allowedTools patch skipped: %s", e)
+        return _orig_popen(cmd, *args, **kwargs)
+
+    _sp.Popen = _popen
+    _CLAUDE_ALLOWED_PATCH_APPLIED = True
+
+
+_patch_claude_allowed_tools()
+# --- end stopgap --------------------------------------------------------------
+
+
 class CawBackend(LLMBackend):
     """Routes LLM operations through the claude / codex CLI subscription."""
 
@@ -304,9 +361,34 @@ class CawBackend(LLMBackend):
         # they're cwd-independent.  Safe to mutate process-wide cwd because
         # documentation_generator processes modules sequentially and recursive
         # _run_module_agent_sync calls chdir to the same absolute_docs_path.
+        # caw runs claude with `--dangerously-skip-permissions`, expecting
+        # bypassPermissions ("Everything" runs without asking).  But an org
+        # managed policy can DISABLE bypass mode, in which case the flag is
+        # downgraded to `acceptEdits` — observed here: both
+        # `--dangerously-skip-permissions` and `--permission-mode
+        # bypassPermissions` report permissionMode=acceptEdits.
+        #   permission modes: https://code.claude.com/docs/en/permission-modes
+        #   (see #skip-all-checks-with-bypasspermissions-mode and its
+        #    disableBypassPermissionsMode managed setting).
+        # Under acceptEdits, auto-approval is limited to reads/edits INSIDE the
+        # working directory or additionalDirectories; paths outside that scope
+        # still prompt (== denied in non-interactive `-p`):
+        #   https://code.claude.com/docs/en/permission-modes#auto-approve-file-edits-with-acceptedits-mode
+        # caw chdir's into the output subdir (for codex's native file_change),
+        # so the source tree in the PARENT repo is out-of-scope and every
+        # source Read is denied -> empty docs.  claude writes via CodeWiki's
+        # str_replace_editor (absolute deps path), so it does NOT need cwd
+        # pinned to the output dir.  Pin cwd to the repo root so BOTH the source
+        # tree and the output dir fall inside the workspace (alt: --add-dir,
+        # https://code.claude.com/docs/en/cli-reference).  Codex keeps the
+        # output-dir chdir because its file_change resolves relative paths.
         original_cwd = os.getcwd()
+        if self._caw_provider == "codex":
+            run_cwd = working_dir
+        else:
+            run_cwd = str(os.path.abspath(config.repo_path))
         try:
-            os.chdir(working_dir)
+            os.chdir(run_cwd)
             try:
                 traj = agent.completion(user_prompt)
             finally:
