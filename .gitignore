@@ -72,3 +72,4 @@ Thumbs.db
 *.tmp
 *.log
 *.bak
+.codewiki/

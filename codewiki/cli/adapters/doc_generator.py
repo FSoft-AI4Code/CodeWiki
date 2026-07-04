@@ -37,7 +37,8 @@ class CLIDocumentationGenerator:
         output_dir: Path,
         config: Dict[str, Any],
         verbose: bool = False,
-        generate_html: bool = False
+        generate_html: bool = False,
+        commit_id: str = None,
     ):
         """
         Initialize the CLI documentation generator.
@@ -48,12 +49,14 @@ class CLIDocumentationGenerator:
             config: LLM configuration
             verbose: Enable verbose output
             generate_html: Whether to generate HTML viewer
+            commit_id: Git commit SHA for incremental update tracking
         """
         self.repo_path = repo_path
         self.output_dir = output_dir
         self.config = config
         self.verbose = verbose
         self.generate_html = generate_html
+        self.commit_id = commit_id
         self.progress_tracker = ProgressTracker(total_stages=5, verbose=verbose)
         self.job = DocumentationJob()
         
@@ -178,7 +181,7 @@ class CLIDocumentationGenerator:
             self.progress_tracker.update_stage(0.2, "Initializing dependency analyzer...")
         
         # Create documentation generator
-        doc_generator = DocumentationGenerator(backend_config)
+        doc_generator = DocumentationGenerator(backend_config, commit_id=self.commit_id)
         
         if self.verbose:
             self.progress_tracker.update_stage(0.5, "Parsing source files...")

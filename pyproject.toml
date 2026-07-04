@@ -57,7 +57,8 @@ dependencies = [
     "python-multipart>=0.0.20",
     "colorama>=0.4.6",
     "logfire>=4.1.0",
-    "coding-agent-wrapper>=0.1.2"
+    "coding-agent-wrapper>=0.1.2",
+    "mcp>=1.0.0"
 ]
 
 [external]
@@ -101,7 +102,9 @@ packages = [
     "codewiki.src.be.dependency_analyzer.analyzers",
     "codewiki.src.be.dependency_analyzer.models",
     "codewiki.src.be.dependency_analyzer.utils",
-    "codewiki.src.fe"
+    "codewiki.src.fe",
+    "codewiki.mcp",
+    "codewiki.mcp.tools"
 ]
 
 [tool.setuptools.package-data]

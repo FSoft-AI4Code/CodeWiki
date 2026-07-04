@@ -1,4 +1,5 @@
 import asyncio
+import os
 import re
 import sys
 import threading
@@ -150,6 +151,12 @@ def extract_mermaid_blocks(content: str) -> List[Tuple[int, str]]:
 # Skip it proactively so SpiderMonkey is never loaded into the process.
 _PYTHONMONKEY_BROKEN = sys.version_info >= (3, 12)
 
+# mermaid-py spawns a Node.js subprocess that can hang indefinitely (e.g. when
+# Node.js is missing or the mermaid CLI is misconfigured).  Enabled by default;
+# set MERMAID_VALIDATE=0 to disable.
+_MERMAID_PY_BROKEN = os.environ.get("MERMAID_VALIDATE", "1") == "0"
+_MERMAID_PY_PROBED = True  # Skip probing — rely on env var
+
 
 async def _try_pythonmonkey_parse(diagram_content: str) -> str | None:
     """Attempt to parse via PythonMonkey/mermaid-parser-py.
@@ -230,10 +237,27 @@ async def validate_single_diagram(diagram_content: str, diagram_num: int, line_s
     Returns:
         Error message if invalid, empty string if valid
     """
+    global _MERMAID_PY_BROKEN
     core_error = await _try_pythonmonkey_parse(diagram_content)
     if core_error is None:
+        if _MERMAID_PY_BROKEN:
+            # Validation disabled/unavailable is not a syntax error — a
+            # non-empty return here would make callers report valid diagrams
+            # as broken and send agents into fix loops.
+            logger.debug("Diagram %d: validation skipped (mermaid-py disabled or unavailable)", diagram_num)
+            return ""
         try:
-            core_error = _parse_via_mermaid_py(diagram_content)
+            core_error = await asyncio.wait_for(
+                asyncio.to_thread(_parse_via_mermaid_py, diagram_content),
+                timeout=15.0,
+            )
+        except asyncio.TimeoutError:
+            # Inconclusive, not a parse failure. Latch so the remaining
+            # diagrams (and later calls) don't each block 15s on the same
+            # broken Node.js setup.
+            _MERMAID_PY_BROKEN = True
+            logger.warning("Diagram %d: mermaid validation timed out (15s); skipping further validation", diagram_num)
+            return ""
         except Exception as e:
             return f"  Diagram {diagram_num}: Exception during validation - {str(e)}"
 
