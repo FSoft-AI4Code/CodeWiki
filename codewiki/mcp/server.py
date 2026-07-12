@@ -513,7 +513,12 @@ async def _legacy_generate_docs(arguments: dict[str, Any]) -> list[TextContent]:
 async def _legacy_get_module_tree(arguments: dict[str, Any]) -> list[TextContent]:
     """Legacy get_module_tree."""
     repo_path = Path(arguments["repo_path"]).expanduser().resolve()
-    output_dir = Path(arguments.get("output_dir", "docs")).expanduser().resolve()
+    output_dir_arg = arguments.get("output_dir")
+    if output_dir_arg:
+        output_dir = Path(output_dir_arg).expanduser().resolve()
+    else:
+        # Default docs live next to the repo, not relative to the MCP process cwd.
+        output_dir = (repo_path / "docs").resolve()
 
     module_tree_path = output_dir / "module_tree.json"
     if not module_tree_path.exists():
