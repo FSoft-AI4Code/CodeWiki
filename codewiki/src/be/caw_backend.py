@@ -131,45 +131,72 @@ _patch_codex_tool_timeout()
 # `--allowedTools` using the permission rule syntax:
 #   https://code.claude.com/docs/en/settings#permission-rule-syntax
 #   `--allowedTools` flag: https://code.claude.com/docs/en/cli-reference
-# caw's ClaudeCodeSession only ever emits `--disallowedTools`, so wrap
-# subprocess.Popen to inject `--allowedTools mcp__<server>` for every server in
-# the --mcp-config.  Belongs upstream in caw; remove once it grows a
-# first-class allowed_tools knob for its toolkit servers.
+# caw's ClaudeCodeSession only ever emits `--disallowedTools`, so rewrite its
+# `claude` command to add `--allowedTools mcp__<server>` for every server in
+# the --mcp-config.  The patch swaps the `subprocess` module reference INSIDE
+# caw.providers.claude_code for a thin proxy — the global subprocess.Popen
+# class stays untouched (isinstance / subclass safe) and no other claude
+# invocation in this process is affected.  Belongs upstream in caw; remove
+# once it grows a first-class allowed_tools knob for its toolkit servers.
 _CLAUDE_ALLOWED_PATCH_APPLIED = False
+
+
+def _with_allowed_tools(cmd):
+    """Append ``--allowedTools mcp__<server>,...`` to a ``claude`` command.
+
+    Pure ``list -> list`` transform.  Applies only when *cmd* is a claude
+    invocation carrying ``--mcp-config`` and no explicit allow-list already;
+    otherwise (or on any error) *cmd* is returned unchanged.
+    """
+    import json
+
+    try:
+        if not (
+            isinstance(cmd, (list, tuple))
+            and cmd
+            and os.path.basename(str(cmd[0])) == "claude"
+            and "--mcp-config" in cmd
+            and "--allowedTools" not in cmd
+            and "--allowed-tools" not in cmd
+        ):
+            return cmd
+        # caw emits a single `--mcp-config <path>`; only the first occurrence
+        # is considered.
+        cfg_path = cmd[list(cmd).index("--mcp-config") + 1]
+        with open(cfg_path) as f:
+            servers = list(json.load(f).get("mcpServers", {}).keys())
+        if not servers:
+            return cmd
+        allowed = ",".join(f"mcp__{s}" for s in servers)
+        logger.info("Injected --allowedTools for MCP servers: %s", servers)
+        return list(cmd) + ["--allowedTools", allowed]
+    except Exception as e:  # never break the spawn on a patch hiccup
+        logger.warning("claude allowedTools patch skipped: %s", e)
+        return cmd
 
 
 def _patch_claude_allowed_tools() -> None:
     global _CLAUDE_ALLOWED_PATCH_APPLIED
     if _CLAUDE_ALLOWED_PATCH_APPLIED:
         return
-    import json as _json
-    import subprocess as _sp
+    import subprocess
 
-    _orig_popen = _sp.Popen
+    from caw.providers import claude_code as _caw_claude
 
-    def _popen(cmd, *args, **kwargs):
-        try:
-            if (
-                isinstance(cmd, (list, tuple))
-                and cmd
-                and os.path.basename(str(cmd[0])) == "claude"
-                and "--mcp-config" in cmd
-                and "--allowedTools" not in cmd
-                and "--allowed-tools" not in cmd
-            ):
-                cfg_path = cmd[list(cmd).index("--mcp-config") + 1]
-                servers = list(
-                    _json.load(open(cfg_path)).get("mcpServers", {}).keys()
-                )
-                if servers:
-                    allowed = ",".join(f"mcp__{s}" for s in servers)
-                    cmd = list(cmd) + ["--allowedTools", allowed]
-                    logger.info("Injected --allowedTools for MCP servers: %s", servers)
-        except Exception as e:  # never break the spawn on a patch hiccup
-            logger.warning("claude allowedTools patch skipped: %s", e)
-        return _orig_popen(cmd, *args, **kwargs)
+    class _SubprocessProxy:
+        """``subprocess`` stand-in that rewrites Popen commands.
 
-    _sp.Popen = _popen
+        Every other attribute (PIPE, run, ...) delegates to the real module.
+        """
+
+        @staticmethod
+        def Popen(cmd, *args, **kwargs):
+            return subprocess.Popen(_with_allowed_tools(cmd), *args, **kwargs)
+
+        def __getattr__(self, name):
+            return getattr(subprocess, name)
+
+    _caw_claude.subprocess = _SubprocessProxy()
     _CLAUDE_ALLOWED_PATCH_APPLIED = True
 
 
@@ -185,6 +212,10 @@ class CawBackend(LLMBackend):
         self._caw_provider = _resolve_caw_provider(config.provider)
         # main_model is passed straight through; empty string → caw default.
         self._model: str | None = config.main_model or None
+        # Resolve once, before any agent-run chdir can move the cwd —
+        # os.path.abspath is cwd-relative and _run_module_agent_sync recurses
+        # (via generate_sub_module_documentation) while the cwd is pinned.
+        self._repo_root = str(os.path.abspath(config.repo_path))
 
         # Fail loudly here rather than producing a confusing caw error mid-run.
         cli = _CLI_BINARY[config.provider]
@@ -321,7 +352,7 @@ class CawBackend(LLMBackend):
 
         deps = CodeWikiDeps(
             absolute_docs_path=working_dir,
-            absolute_repo_path=str(os.path.abspath(config.repo_path)),
+            absolute_repo_path=self._repo_root,
             registry={},
             components=components,
             path_to_current_module=list(module_path),
@@ -386,7 +417,7 @@ class CawBackend(LLMBackend):
         if self._caw_provider == "codex":
             run_cwd = working_dir
         else:
-            run_cwd = str(os.path.abspath(config.repo_path))
+            run_cwd = self._repo_root
         try:
             os.chdir(run_cwd)
             try:
