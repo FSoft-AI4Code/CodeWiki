@@ -15,6 +15,7 @@ from codewiki.cli.utils.errors import (
     ConfigurationError,
     RepositoryError,
     APIError,
+    IncompleteGenerationError,
     handle_error,
     EXIT_SUCCESS,
 )
@@ -613,6 +614,15 @@ def generate_command(
     except APIError as e:
         logger.error(e.message)
         logger.error(f"Traceback: {traceback.format_exc()}")
+        sys.exit(e.exit_code)
+    except IncompleteGenerationError as e:
+        click.secho(f"\n✗ {e.message}", fg="red", err=True)
+        for module_name in e.missing_modules:
+            click.secho(f"  - {module_name}.md", fg="red", err=True)
+        click.echo(
+            "Re-run the same command to resume generation for the missing modules.",
+            err=True,
+        )
         sys.exit(e.exit_code)
     except KeyboardInterrupt:
         click.echo("\n\nInterrupted by user")

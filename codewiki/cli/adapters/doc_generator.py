@@ -16,7 +16,7 @@ import sys
 
 from codewiki.cli.utils.progress import ProgressTracker
 from codewiki.cli.models.job import DocumentationJob, LLMConfig
-from codewiki.cli.utils.errors import APIError
+from codewiki.cli.utils.errors import APIError, IncompleteGenerationError
 
 # Import backend modules
 from codewiki.src.be.documentation_generator import DocumentationGenerator
@@ -257,6 +257,10 @@ class CLIDocumentationGenerator:
                     backend_config,
                     completer=lambda p: doc_generator.backend.complete(p, model=cluster_model),
                 )
+                # Only freshly clustered trees are deduped: renaming a cached
+                # key whose .md already exists would orphan the doc.
+                from codewiki.src.be.module_naming import dedupe_module_tree_names
+                module_tree = dedupe_module_tree_names(module_tree)
                 file_manager.save_json(module_tree, first_module_tree_path)
 
             file_manager.save_json(module_tree, module_tree_path)
@@ -303,10 +307,21 @@ class CLIDocumentationGenerator:
             for file_path in os.listdir(working_dir):
                 if file_path.endswith('.md') or file_path.endswith('.json'):
                     self.job.files_generated.append(file_path)
-            
+
         except Exception as e:
             raise APIError(f"Documentation generation failed: {e}")
-        
+
+        # Reconcile the final module tree against the docs on disk so name
+        # collisions or failed sub-agents can't pass as success (issue #76).
+        # Outside the try/except above so it is not reported as an API error.
+        missing_docs = doc_generator.validate_generated_docs(working_dir)
+        if missing_docs:
+            raise IncompleteGenerationError(
+                "Documentation generation finished but these module docs are missing: "
+                + ", ".join(f"{name}.md" for name in missing_docs),
+                missing_modules=missing_docs,
+            )
+
         self.progress_tracker.complete_stage()
     
     def _run_html_generation(self):

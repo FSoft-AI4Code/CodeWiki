@@ -56,9 +56,17 @@ class APIError(CodeWikiError):
 
 class FileSystemError(CodeWikiError):
     """File system-related errors."""
-    
+
     def __init__(self, message: str):
         super().__init__(message, EXIT_FILESYSTEM_ERROR)
+
+
+class IncompleteGenerationError(CodeWikiError):
+    """Generation finished but some module docs are missing on disk."""
+
+    def __init__(self, message: str, missing_modules: list = None):
+        self.missing_modules = missing_modules or []
+        super().__init__(message, EXIT_GENERAL_ERROR)
 
 
 def handle_error(error: Exception, verbose: bool = False) -> int:

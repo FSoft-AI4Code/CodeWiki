@@ -25,7 +25,23 @@ from codewiki.src.config import (
     MODULE_TREE_FILENAME,
     OVERVIEW_FILENAME
 )
+from codewiki.src.be.module_naming import (
+    dedupe_module_tree_names,
+    find_missing_module_docs,
+    resolve_module_doc_path,
+)
 from codewiki.src.utils import file_manager
+
+
+class IncompleteDocumentationError(Exception):
+    """Raised when generation finishes but some modules have no doc file on disk."""
+
+    def __init__(self, missing_modules: List[str]):
+        self.missing_modules = missing_modules
+        super().__init__(
+            f"Documentation generation finished but {len(missing_modules)} module doc(s) "
+            f"are missing: {', '.join(missing_modules)}"
+        )
 
 
 class DocumentationGenerator:
@@ -134,25 +150,19 @@ class DocumentationGenerator:
         before giving up so the overview prompt still gets the children's
         content as context.
         """
-        candidates = []
-        seen = set()
-        base_variants = [
-            child_name,
-            child_name.replace(" ", "_"),
-            child_name.replace(" ", "-"),
-            child_name.replace(" ", ""),
-        ]
-        for variant in base_variants:
-            for cased in (variant, variant.lower()):
-                if cased not in seen:
-                    seen.add(cased)
-                    candidates.append(f"{cased}.md")
+        return resolve_module_doc_path(working_dir, child_name)
 
-        for filename in candidates:
-            candidate_path = os.path.join(working_dir, filename)
-            if os.path.exists(candidate_path):
-                return candidate_path
-        return None
+    def validate_generated_docs(self, working_dir: str) -> List[str]:
+        """Check the final module tree against the docs on disk.
+
+        Returns the names of modules whose .md file is missing (plus
+        "overview" if overview.md was never written).
+        """
+        module_tree_path = os.path.join(working_dir, MODULE_TREE_FILENAME)
+        if not os.path.exists(module_tree_path):
+            return []
+        module_tree = file_manager.load_json(module_tree_path)
+        return find_missing_module_docs(module_tree, working_dir)
 
     async def generate_module_documentation(self, components: Dict[str, Any], leaf_nodes: List[str]) -> str:
         """Generate documentation for all modules using dynamic programming approach."""
@@ -341,6 +351,9 @@ class DocumentationGenerator:
                     self.config,
                     completer=lambda p: self.backend.complete(p, model=cluster_model),
                 )
+                # Only freshly clustered trees are deduped: renaming a cached
+                # key whose .md already exists would orphan the doc.
+                module_tree = dedupe_module_tree_names(module_tree)
                 file_manager.save_json(module_tree, first_module_tree_path)
             
             file_manager.save_json(module_tree, module_tree_path)
@@ -362,7 +375,15 @@ class DocumentationGenerator:
             
             # Create documentation metadata
             self.create_documentation_metadata(working_dir, components, len(leaf_nodes))
-            
+
+            # Reconcile the final module tree against the docs on disk so
+            # name collisions or failed sub-agents can't pass silently (issue #76)
+            missing_docs = self.validate_generated_docs(working_dir)
+            if missing_docs:
+                for module_name in missing_docs:
+                    logger.error(f"Module doc missing after generation: {module_name}.md")
+                raise IncompleteDocumentationError(missing_docs)
+
             logger.debug(f"Documentation generation completed successfully using dynamic programming!")
             logger.debug(f"Processing order: leaf modules → parent modules → repository overview")
             logger.debug(f"Documentation saved to: {working_dir}")

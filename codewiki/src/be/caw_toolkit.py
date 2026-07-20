@@ -28,6 +28,7 @@ from caw import ToolKit, tool
 from mcp.server.fastmcp import Context
 
 from codewiki.src.be.agent_tools.deps import CodeWikiDeps
+from codewiki.src.be.module_naming import normalize_sub_module_specs
 
 if TYPE_CHECKING:
     from codewiki.src.be.caw_backend import CawBackend
@@ -232,7 +233,10 @@ class CawToolKit(
             "is documented separately.\n"
             "sub_module_specs: a dictionary mapping sub-module names to their core component IDs. "
             "Example: {'authentication': ['auth_handler.py::AuthHandler'], "
-            "'database': ['db_client.py::DBClient']}"
+            "'database': ['db_client.py::DBClient']}\n"
+            "Sub-module names must be unique across the whole wiki; a name already used by another "
+            "module is automatically prefixed with the current module name, and the tool result "
+            "reports the final file names actually saved."
         )
     )
     async def generate_sub_module_documentation(
@@ -272,15 +276,28 @@ class CawToolKit(
         deps = self._deps
         previous_module_name = deps.current_module_name
 
+        # Resolve name collisions against the module tree and files already on
+        # disk before touching the tree (issue #76): docs live in one flat directory.
+        name_map = normalize_sub_module_specs(
+            sub_module_specs,
+            previous_module_name,
+            deps.module_tree,
+            deps.absolute_docs_path,
+        )
+        final_specs = {
+            name_map[requested_name]: core_ids
+            for requested_name, core_ids in sub_module_specs.items()
+        }
+
         # Add sub-modules to the in-memory module tree.
         value = deps.module_tree
         for key in deps.path_to_current_module:
             value = value[key]["children"]
-        for sub_name, core_ids in sub_module_specs.items():
+        for sub_name, core_ids in final_specs.items():
             value[sub_name] = {"components": core_ids, "children": {}}
 
         try:
-            for sub_name, core_ids in sub_module_specs.items():
+            for sub_name, core_ids in final_specs.items():
                 indent = "  " * deps.current_depth
                 arrow = "└─" if deps.current_depth > 0 else "→"
                 logger.info("%s%s Generating documentation for sub-module: %s", indent, arrow, sub_name)
@@ -309,8 +326,20 @@ class CawToolKit(
         finally:
             deps.current_module_name = previous_module_name
 
-        return (
-            "Generate successfully. Documentations: "
-            + ", ".join(key + ".md" for key in sub_module_specs.keys())
-            + " are saved in the working directory."
-        )
+        # Report what actually landed on disk so the parent agent links real filenames.
+        saved = []
+        missing = []
+        for requested_name, final_name in name_map.items():
+            entry = f"{final_name}.md"
+            if final_name != requested_name:
+                entry += f" (requested '{requested_name}', renamed to avoid a collision)"
+            if os.path.exists(os.path.join(deps.absolute_docs_path, f"{final_name}.md")):
+                saved.append(entry)
+            else:
+                missing.append(entry)
+
+        report = f"Saved documentations: {', '.join(saved) if saved else 'none'}."
+        if missing:
+            report += f" MISSING (generation did not produce these files): {', '.join(missing)}."
+            logger.warning("Sub-module documentation missing after generation: %s", ", ".join(missing))
+        return report
