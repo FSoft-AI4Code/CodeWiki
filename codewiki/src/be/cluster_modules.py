@@ -12,6 +12,10 @@ from codewiki.src.be.prompt_template import format_cluster_prompt
 
 Completer = Callable[[str], str]
 
+# When whole-repo mode is chosen but leaf entry points touch fewer than this
+# fraction of parsed files, warn that coverage depends on agent exploration.
+LOW_COVERAGE_RATIO = 0.5
+
 
 def format_potential_core_components(leaf_nodes: List[str], components: Dict[str, Node]) -> tuple[str, str]:
     """
@@ -95,6 +99,22 @@ def cluster_modules(
             input_tokens,
             threshold,
         )
+        if current_module_name is None:
+            leaf_files = {
+                components[leaf_node].relative_path
+                for leaf_node in leaf_nodes
+                if leaf_node in components
+            }
+            all_files = {c.relative_path for c in components.values()}
+            if all_files and len(leaf_files) / len(all_files) < LOW_COVERAGE_RATIO:
+                logger.warning(
+                    "Leaf-node entry points cover only %d of %d parsed files (%.0f%%). "
+                    "Whole-repository documentation will start from these entry points and "
+                    "rely on agent exploration to reach the rest of the codebase.",
+                    len(leaf_files),
+                    len(all_files),
+                    100 * len(leaf_files) / len(all_files),
+                )
         return {}
 
     prompt = format_cluster_prompt(potential_core_components, current_module_tree, current_module_name)

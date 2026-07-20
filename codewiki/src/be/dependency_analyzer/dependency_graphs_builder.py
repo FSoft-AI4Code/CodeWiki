@@ -3,6 +3,7 @@ import os
 from codewiki.src.config import Config
 from codewiki.src.be.dependency_analyzer.ast_parser import DependencyParser
 from codewiki.src.be.dependency_analyzer.topo_sort import build_graph_from_components, get_leaf_nodes
+from codewiki.src.be.dependency_analyzer.leaf_selection import compute_valid_leaf_types, filter_leaf_nodes
 from codewiki.src.utils import file_manager
 
 import logging
@@ -70,33 +71,9 @@ class DependencyGraphBuilder:
         leaf_nodes = get_leaf_nodes(graph, components)
 
         # check if leaf_nodes are in components, only keep the ones that are in components
-        # and type is one of the following: class, interface, struct (or function for C-based projects)
-        
-        # Determine if we should include functions based on available component types
-        available_types = set()
-        for comp in components.values():
-            available_types.add(comp.component_type)
-        
-        # Valid types for leaf nodes - include functions for C-based codebases
-        valid_types = {"class", "interface", "struct"}
-        # If no classes/interfaces/structs are found, include functions
-        if not available_types.intersection(valid_types):
-            valid_types.add("function")
-        
-        keep_leaf_nodes = []
-        for leaf_node in leaf_nodes:
-            # Skip any leaf nodes that are clearly error strings or invalid identifiers
-            if not isinstance(leaf_node, str) or leaf_node.strip() == "" or any(err_keyword in leaf_node.lower() for err_keyword in ['error', 'exception', 'failed', 'invalid']):
-                logger.warning(f"Skipping invalid leaf node identifier: '{leaf_node}'")
-                continue
-                
-            if leaf_node in components:
-                if components[leaf_node].component_type in valid_types:
-                    keep_leaf_nodes.append(leaf_node)
-                else:
-                    # logger.debug(f"Leaf node {leaf_node} is a {components[leaf_node].component_type}, removing it")
-                    pass
-            else:
-                logger.warning(f"Leaf node {leaf_node} not found in components, removing it")
-        
+        # and type is one of the following: class, interface, struct (or function when
+        # functions carry the architecture — see leaf_selection)
+        valid_types = compute_valid_leaf_types(components)
+        keep_leaf_nodes = filter_leaf_nodes(leaf_nodes, components, valid_types)
+
         return components, keep_leaf_nodes
