@@ -9,10 +9,9 @@ Supports multiple providers: openai-compatible, anthropic, bedrock, azure-openai
 import logging
 from openai.types import chat
 
-from pydantic_ai.models.openai import OpenAIModel
-from pydantic_ai.providers.openai import OpenAIProvider
-from pydantic_ai.models.openai import OpenAIModelSettings
+from pydantic_ai.models.openai import OpenAIChatModel, OpenAIChatModelSettings
 from pydantic_ai.models.fallback import FallbackModel
+from pydantic_ai.providers.openai import OpenAIProvider
 from openai import OpenAI, BadRequestError
 
 from codewiki.src.config import Config
@@ -38,14 +37,14 @@ def _should_use_max_completion_tokens(model_name: str, base_url: str) -> bool:
     return False
 
 
-def _build_model_settings(config: Config, model_name: str) -> OpenAIModelSettings:
+def _build_model_settings(config: Config, model_name: str) -> OpenAIChatModelSettings:
     """Build model settings with the correct token parameter."""
     if _should_use_max_completion_tokens(model_name, config.llm_base_url):
-        return OpenAIModelSettings(
+        return OpenAIChatModelSettings(
             temperature=0.0,
             max_completion_tokens=config.max_tokens
         )
-    return OpenAIModelSettings(
+    return OpenAIChatModelSettings(
         temperature=0.0,
         max_tokens=config.max_tokens
     )
@@ -67,8 +66,8 @@ def _get_litellm_model_name(model_name: str, provider: str) -> str:
     return model_name
 
 
-class CompatibleOpenAIModel(OpenAIModel):
-    """OpenAIModel subclass that patches non-standard API proxy responses.
+class CompatibleOpenAIModel(OpenAIChatModel):
+    """OpenAIChatModel subclass that patches non-standard API proxy responses.
 
     Some OpenAI-compatible proxies return responses with fields like
     choices[].index set to None instead of an integer. This subclass
@@ -90,7 +89,6 @@ def _create_litellm_openai_client(config: Config) -> OpenAI:
 
     litellm translates OpenAI API calls to Bedrock, Anthropic, etc.
     """
-    import litellm
     # Configure litellm for the provider
     if config.provider == "bedrock":
         import os
