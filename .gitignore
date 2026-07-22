@@ -38,7 +38,8 @@ MANIFEST
 htmlcov/
 .tox/
 .hypothesis/
-tests/
+tests/*
+!tests/test_gitignore_filtering.py
 
 # Jupyter
 *.ipynb

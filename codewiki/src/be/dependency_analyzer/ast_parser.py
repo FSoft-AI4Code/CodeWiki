@@ -18,7 +18,13 @@ logger.setLevel(logging.DEBUG)
 class DependencyParser:
     """Parser for extracting code components from multi-language repositories."""
     
-    def __init__(self, repo_path: str, include_patterns: List[str] = None, exclude_patterns: List[str] = None):
+    def __init__(
+        self,
+        repo_path: str,
+        include_patterns: List[str] = None,
+        exclude_patterns: List[str] = None,
+        use_gitignore: bool = True,
+    ):
         """
         Initialize the dependency parser.
         
@@ -26,12 +32,14 @@ class DependencyParser:
             repo_path: Path to the repository
             include_patterns: File patterns to include (e.g., ["*.cs", "*.py"])
             exclude_patterns: File/directory patterns to exclude (e.g., ["*Tests*"])
+            use_gitignore: Whether to apply Git ignore rules
         """
         self.repo_path = os.path.abspath(repo_path)
         self.components: Dict[str, Node] = {}
         self.modules: Set[str] = set()
         self.include_patterns = include_patterns
         self.exclude_patterns = exclude_patterns
+        self.use_gitignore = use_gitignore
         
         self.analysis_service = AnalysisService()
 
@@ -47,7 +55,8 @@ class DependencyParser:
         structure_result = self.analysis_service._analyze_structure(
             self.repo_path, 
             include_patterns=self.include_patterns,
-            exclude_patterns=self.exclude_patterns
+            exclude_patterns=self.exclude_patterns,
+            use_gitignore=self.use_gitignore,
         )
         
         call_graph_result = self.analysis_service._analyze_call_graph(

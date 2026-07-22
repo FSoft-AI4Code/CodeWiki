@@ -267,6 +267,11 @@ def _invalidate_affected_modules(
     help="Custom instructions for the documentation agent",
 )
 @click.option(
+    "--use-gitignore/--no-gitignore",
+    default=None,
+    help="Apply Git ignore rules during analysis (default: enabled)",
+)
+@click.option(
     "--verbose",
     "-v",
     is_flag=True,
@@ -319,6 +324,7 @@ def generate_command(
     focus: Optional[str],
     doc_type: Optional[str],
     instructions: Optional[str],
+    use_gitignore: Optional[bool],
     verbose: bool,
     max_tokens: Optional[int],
     max_token_per_module: Optional[int],
@@ -346,6 +352,10 @@ def generate_command(
     \b
     # Force full regeneration
     $ codewiki generate --no-cache
+
+    \b
+    # Analyze ignored files as well
+    $ codewiki generate --no-gitignore
     
     \b
     # C# project: only .cs files, exclude tests
@@ -521,10 +531,12 @@ def generate_command(
             effective_max_token_per_module = max_token_per_module if max_token_per_module is not None else config.max_token_per_module
             effective_max_token_per_leaf = max_token_per_leaf_module if max_token_per_leaf_module is not None else config.max_token_per_leaf_module
             effective_max_depth = max_depth if max_depth is not None else config.max_depth
+            effective_use_gitignore = use_gitignore if use_gitignore is not None else config.use_gitignore
             logger.debug(f"Max tokens: {effective_max_tokens}")
             logger.debug(f"Max token/module: {effective_max_token_per_module}")
             logger.debug(f"Max token/leaf module: {effective_max_token_per_leaf}")
             logger.debug(f"Max depth: {effective_max_depth}")
+            logger.debug(f"Use gitignore: {effective_use_gitignore}")
         
         # Get agent instructions (merge runtime with persistent)
         agent_instructions_dict = None
@@ -562,6 +574,8 @@ def generate_command(
                 'max_token_per_leaf_module': max_token_per_leaf_module if max_token_per_leaf_module is not None else config.max_token_per_leaf_module,
                 # Max depth setting (runtime override takes precedence)
                 'max_depth': max_depth if max_depth is not None else config.max_depth,
+                # Gitignore setting (runtime override takes precedence)
+                'use_gitignore': use_gitignore if use_gitignore is not None else config.use_gitignore,
             },
             verbose=verbose,
             generate_html=github_pages,
@@ -629,4 +643,3 @@ def generate_command(
         sys.exit(130)
     except Exception as e:
         sys.exit(handle_error(e, verbose=verbose))
-

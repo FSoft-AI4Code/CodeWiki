@@ -102,6 +102,11 @@ def _fine_grained_tools() -> list[Tool]:
                         "type": "string",
                         "description": "Comma-separated patterns to exclude (e.g., '*test*,*spec*')",
                     },
+                    "use_gitignore": {
+                        "type": "boolean",
+                        "description": "Apply Git ignore rules before analysis (default: true)",
+                        "default": True,
+                    },
                 },
                 "required": ["repo_path"],
             },
@@ -320,6 +325,11 @@ def _legacy_tools() -> list[Tool]:
                         "type": "string",
                         "description": "Comma-separated patterns to exclude",
                     },
+                    "use_gitignore": {
+                        "type": "boolean",
+                        "description": "Apply Git ignore rules before analysis (default: true)",
+                        "default": True,
+                    },
                 },
                 "required": ["repo_path"],
             },
@@ -489,6 +499,7 @@ async def _legacy_generate_docs(arguments: dict[str, Any]) -> list[TextContent]:
         aws_region=getattr(config, "aws_region", "us-east-1"),
         max_tokens=config.max_tokens,
         agent_instructions=agent_instructions or None,
+        use_gitignore=arguments.get("use_gitignore", True),
     )
 
     from codewiki.cli.utils.repo_validator import get_git_commit_hash

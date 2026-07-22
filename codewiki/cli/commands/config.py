@@ -111,6 +111,11 @@ def config_group():
     type=str,
     help="Azure OpenAI deployment name"
 )
+@click.option(
+    "--use-gitignore/--no-gitignore",
+    default=None,
+    help="Apply Git ignore rules during repository analysis (default: enabled)",
+)
 def config_set(
     api_key: Optional[str],
     base_url: Optional[str],
@@ -124,7 +129,8 @@ def config_set(
     provider: Optional[str] = None,
     aws_region: Optional[str] = None,
     api_version: Optional[str] = None,
-    azure_deployment: Optional[str] = None
+    azure_deployment: Optional[str] = None,
+    use_gitignore: Optional[bool] = None,
 ):
     """
     Set configuration values for CodeWiki.
@@ -170,10 +176,14 @@ def config_set(
     \b
     # Set max depth for hierarchical decomposition
     $ codewiki config set --max-depth 3
+
+    \b
+    # Persistently disable Git ignore filtering
+    $ codewiki config set --no-gitignore
     """
     try:
         # Check if at least one option is provided
-        if not any([api_key, base_url, main_model, cluster_model, fallback_model, max_tokens, max_token_per_module, max_token_per_leaf_module, max_depth, provider, aws_region, api_version, azure_deployment]):
+        if not any([api_key, base_url, main_model, cluster_model, fallback_model, max_tokens, max_token_per_module, max_token_per_leaf_module, max_depth, provider, aws_region, api_version, azure_deployment, use_gitignore is not None]):
             click.echo("No options provided. Use --help for usage information.")
             sys.exit(EXIT_CONFIG_ERROR)
 
@@ -237,6 +247,9 @@ def config_set(
         if azure_deployment is not None:
             validated_data['azure_deployment'] = azure_deployment
 
+        if use_gitignore is not None:
+            validated_data['use_gitignore'] = use_gitignore
+
         # Create config manager and save
         manager = ConfigManager()
         manager.load()  # Load existing config if present
@@ -254,7 +267,8 @@ def config_set(
             provider=validated_data.get('provider'),
             aws_region=validated_data.get('aws_region'),
             api_version=validated_data.get('api_version'),
-            azure_deployment=validated_data.get('azure_deployment')
+            azure_deployment=validated_data.get('azure_deployment'),
+            use_gitignore=validated_data.get('use_gitignore'),
         )
         
         # Display success messages
@@ -314,6 +328,9 @@ def config_set(
 
         if azure_deployment:
             click.secho(f"✓ Azure Deployment: {azure_deployment}", fg="green")
+
+        if use_gitignore is not None:
+            click.secho(f"✓ Use gitignore: {use_gitignore}", fg="green")
 
         click.echo("\n" + click.style("Configuration updated successfully.", fg="green", bold=True))
         
@@ -375,6 +392,7 @@ def config_show(output_json: bool):
                 "max_token_per_module": config.max_token_per_module if config else 36369,
                 "max_token_per_leaf_module": config.max_token_per_leaf_module if config else 16000,
                 "max_depth": config.max_depth if config else 2,
+                "use_gitignore": config.use_gitignore if config else True,
                 "agent_instructions": config.agent_instructions.to_dict() if config and config.agent_instructions else {},
                 "config_file": str(manager.config_file_path)
             }
@@ -435,6 +453,7 @@ def config_show(output_json: bool):
             click.secho("Decomposition Settings", fg="cyan", bold=True)
             if config:
                 click.echo(f"  Max Depth:               {config.max_depth}")
+                click.echo(f"  Use Gitignore:           {config.use_gitignore}")
             
             click.echo()
             click.secho("Agent Instructions", fg="cyan", bold=True)
@@ -859,4 +878,3 @@ def config_agent(
         sys.exit(e.exit_code)
     except Exception as e:
         sys.exit(handle_error(e))
-
