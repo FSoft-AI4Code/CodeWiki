@@ -42,7 +42,8 @@ class AnalysisService:
         self,
         repo_path: str,
         max_files: int = 100,
-        languages: Optional[List[str]] = None
+        languages: Optional[List[str]] = None,
+        use_gitignore: bool = True,
     ) -> Dict[str, Any]:
         """
         Analyze a local repository folder.
@@ -51,6 +52,7 @@ class AnalysisService:
             repo_path: Path to local repository folder
             max_files: Maximum number of files to analyze
             languages: List of languages to include (e.g., ['python', 'javascript'])
+            use_gitignore: Whether to apply Git ignore rules
             
         Returns:
             Dict with analysis results including nodes and relationships
@@ -59,7 +61,7 @@ class AnalysisService:
             logger.debug(f"Analyzing local repository at {repo_path}")
             
             # Get repo analyzer to find files
-            repo_analyzer = RepoAnalyzer()
+            repo_analyzer = RepoAnalyzer(use_gitignore=use_gitignore)
             structure_result = repo_analyzer.analyze_repository_structure(repo_path)
             
             # Extract code files
@@ -98,6 +100,7 @@ class AnalysisService:
         github_url: str,
         include_patterns: Optional[List[str]] = None,
         exclude_patterns: Optional[List[str]] = None,
+        use_gitignore: bool = True,
     ) -> AnalysisResult:
         """
         Perform complete repository analysis including call graph generation.
@@ -106,6 +109,7 @@ class AnalysisService:
             github_url: GitHub repository URL to analyze
             include_patterns: File patterns to include (e.g., ['*.py', '*.js'])
             exclude_patterns: Additional patterns to exclude
+            use_gitignore: Whether to apply Git ignore rules
 
         Returns:
             AnalysisResult: Complete analysis with functions, relationships, and visualization
@@ -122,7 +126,9 @@ class AnalysisService:
             repo_info = self._parse_repository_info(github_url)
 
             logger.debug("Analyzing repository file structure...")
-            structure_result = self._analyze_structure(temp_dir, include_patterns, exclude_patterns)
+            structure_result = self._analyze_structure(
+                temp_dir, include_patterns, exclude_patterns, use_gitignore
+            )
             logger.debug(f"Found {structure_result['summary']['total_files']} files to analyze.")
 
             logger.debug("Starting call graph analysis...")
@@ -172,6 +178,7 @@ class AnalysisService:
         github_url: str,
         include_patterns: Optional[List[str]] = None,
         exclude_patterns: Optional[List[str]] = None,
+        use_gitignore: bool = True,
     ) -> Dict[str, Any]:
         """
         Perform lightweight structure-only analysis without call graph generation.
@@ -180,6 +187,7 @@ class AnalysisService:
             github_url: GitHub repository URL to analyze
             include_patterns: File patterns to include
             exclude_patterns: Additional patterns to exclude
+            use_gitignore: Whether to apply Git ignore rules
 
         Returns:
             Dict: Repository structure with file tree and summary statistics
@@ -191,7 +199,9 @@ class AnalysisService:
             temp_dir = self._clone_repository(github_url)
             repo_info = self._parse_repository_info(github_url)
 
-            structure_result = self._analyze_structure(temp_dir, include_patterns, exclude_patterns)
+            structure_result = self._analyze_structure(
+                temp_dir, include_patterns, exclude_patterns, use_gitignore
+            )
 
             result = {
                 "repository": repo_info,
@@ -233,12 +243,16 @@ class AnalysisService:
         repo_dir: str,
         include_patterns: Optional[List[str]],
         exclude_patterns: Optional[List[str]],
+        use_gitignore: bool = True,
     ) -> Dict[str, Any]:
         """Analyze repository file structure with filtering."""
         logger.debug(
-            f"Initializing RepoAnalyzer with include: {include_patterns}, exclude: {exclude_patterns}"
+            "Initializing RepoAnalyzer with include: %s, exclude: %s, use_gitignore: %s",
+            include_patterns,
+            exclude_patterns,
+            use_gitignore,
         )
-        repo_analyzer = RepoAnalyzer(include_patterns, exclude_patterns)
+        repo_analyzer = RepoAnalyzer(include_patterns, exclude_patterns, use_gitignore)
         return repo_analyzer.analyze_repository_structure(repo_dir)
 
     def _read_readme_file(self, repo_dir: str) -> Optional[str]:
@@ -341,7 +355,7 @@ class AnalysisService:
 
 
 def analyze_repository(
-    github_url: str, include_patterns=None, exclude_patterns=None
+    github_url: str, include_patterns=None, exclude_patterns=None, use_gitignore=True
 ) -> tuple[AnalysisResult, None]:
     """
     Backward compatibility function.
@@ -350,12 +364,14 @@ def analyze_repository(
         tuple: (AnalysisResult, None) - None instead of temp_dir since cleanup is handled internally
     """
     service = AnalysisService()
-    result = service.analyze_repository_full(github_url, include_patterns, exclude_patterns)
+    result = service.analyze_repository_full(
+        github_url, include_patterns, exclude_patterns, use_gitignore
+    )
     return result, None
 
 
 def analyze_repository_structure_only(
-    github_url: str, include_patterns=None, exclude_patterns=None
+    github_url: str, include_patterns=None, exclude_patterns=None, use_gitignore=True
 ) -> tuple[Dict, None]:
     """
     Backward compatibility function.
@@ -365,6 +381,6 @@ def analyze_repository_structure_only(
     """
     service = AnalysisService()
     result = service.analyze_repository_structure_only(
-        github_url, include_patterns, exclude_patterns
+        github_url, include_patterns, exclude_patterns, use_gitignore
     )
     return result, None

@@ -304,6 +304,7 @@ def handle_analyze_repo(
         llm_api_key="not-needed",
         main_model="unused",
         cluster_model="unused",
+        use_gitignore=arguments.get("use_gitignore", True),
     )
 
     # Apply optional include/exclude patterns

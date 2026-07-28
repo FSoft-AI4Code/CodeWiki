@@ -46,6 +46,7 @@ dependencies = [
     "pydantic-ai>=1.0.6",
     "requests>=2.32.4",
     "python-dotenv>=1.1.1",
+    "pathspec>=0.12.1",
     "rich>=14.1.0",
     "networkx>=3.5",
     "psutil>=7.0.0",
@@ -132,4 +133,3 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --cov=codewiki --cov-report=term-missing"
-

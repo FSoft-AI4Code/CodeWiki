@@ -135,7 +135,8 @@ class ConfigManager:
         provider: Optional[str] = None,
         aws_region: Optional[str] = None,
         api_version: Optional[str] = None,
-        azure_deployment: Optional[str] = None
+        azure_deployment: Optional[str] = None,
+        use_gitignore: Optional[bool] = None,
     ):
         """
         Save configuration to file and keyring.
@@ -155,6 +156,7 @@ class ConfigManager:
             aws_region: AWS region for Bedrock provider
             api_version: Azure OpenAI API version
             azure_deployment: Azure OpenAI deployment name
+            use_gitignore: Apply Git ignore rules during repository analysis
         """
         # Ensure config directory exists
         try:
@@ -204,6 +206,8 @@ class ConfigManager:
             self._config.api_version = api_version
         if azure_deployment is not None:
             self._config.azure_deployment = azure_deployment
+        if use_gitignore is not None:
+            self._config.use_gitignore = use_gitignore
 
         # Validate configuration whenever the minimum required fields are set.
         # Caw providers only need main_model; API providers need base_url +
@@ -330,4 +334,3 @@ class ConfigManager:
     def config_file_path(self) -> Path:
         """Get configuration file path."""
         return CONFIG_FILE
-

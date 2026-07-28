@@ -221,6 +221,9 @@ codewiki generate --focus "src/core,src/api" --doc-type architecture
 
 # Add custom instructions for the AI agent
 codewiki generate --instructions "Focus on public APIs and include usage examples"
+
+# Analyze files ignored by Git (Git ignore filtering is enabled by default)
+codewiki generate --no-gitignore
 ```
 
 #### Pattern Behavior (Important!)
@@ -237,6 +240,12 @@ codewiki generate --instructions "Focus on public APIs and include usage example
     - Exact names: `Tests`, `.env`, `config.local`
     - Glob patterns: `*.test.js`, `*_test.py`, `*.min.*`
     - Directory patterns: `build/`, `dist/`, `coverage/`
+
+- **`--use-gitignore/--no-gitignore`**: Git ignore rules are applied by default
+  - Root and nested `.gitignore` files are respected before call-graph analysis
+  - Tracked files remain included, matching Git behavior
+  - Built-in and explicit `--exclude` patterns still apply when Git includes a path
+  - Use `codewiki config set --no-gitignore` to persistently disable this behavior
 
 #### Setting Persistent Defaults
 
@@ -266,6 +275,7 @@ codewiki config agent --clear
 |--------|-------------|----------|---------|
 | `--include` | File patterns to include | **Replaces** defaults | `*.cs`, `*.py`, `src/**/*.ts` |
 | `--exclude` | Patterns to exclude | **Merges** with defaults | `Tests,Specs`, `*.test.js`, `build/` |
+| `--use-gitignore/--no-gitignore` | Apply Git ignore rules | Enabled by default | `--no-gitignore` |
 | `--focus` | Modules to document in detail | Standalone option | `src/core,src/api` |
 | `--doc-type` | Documentation style | Standalone option | `api`, `architecture`, `user-guide`, `developer` |
 | `--instructions` | Custom agent instructions | Standalone option | Free-form text |
