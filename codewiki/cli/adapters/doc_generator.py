@@ -148,6 +148,7 @@ class CLIDocumentationGenerator:
                 max_depth=self.config.get('max_depth', 2),
                 agent_instructions=self.config.get('agent_instructions'),
                 use_gitignore=self.config.get('use_gitignore', True),
+                prompt_caching=self.config.get('prompt_caching', True),
             )
             
             # Run backend documentation generation

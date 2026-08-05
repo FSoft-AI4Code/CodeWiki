@@ -49,9 +49,8 @@ class PydanticAIBackend(LLMBackend):
         prompt: str,
         *,
         model: str | None = None,
-        temperature: float = 0.0,
     ) -> str:
-        return call_llm(prompt, self._config, model=model, temperature=temperature)
+        return call_llm(prompt, self._config, model=model)
 
     async def run_module_agent(
         self,

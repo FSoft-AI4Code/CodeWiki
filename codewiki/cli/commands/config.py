@@ -116,6 +116,12 @@ def config_group():
     default=None,
     help="Apply Git ignore rules during repository analysis (default: enabled)",
 )
+@click.option(
+    "--prompt-caching/--no-prompt-caching",
+    default=None,
+    help="Add prompt-cache breakpoints to agentic LLM calls; auto-falls back to "
+         "normal calls if the provider rejects them (default: enabled)",
+)
 def config_set(
     api_key: Optional[str],
     base_url: Optional[str],
@@ -131,6 +137,7 @@ def config_set(
     api_version: Optional[str] = None,
     azure_deployment: Optional[str] = None,
     use_gitignore: Optional[bool] = None,
+    prompt_caching: Optional[bool] = None,
 ):
     """
     Set configuration values for CodeWiki.
@@ -183,7 +190,7 @@ def config_set(
     """
     try:
         # Check if at least one option is provided
-        if not any([api_key, base_url, main_model, cluster_model, fallback_model, max_tokens, max_token_per_module, max_token_per_leaf_module, max_depth, provider, aws_region, api_version, azure_deployment, use_gitignore is not None]):
+        if not any([api_key, base_url, main_model, cluster_model, fallback_model, max_tokens, max_token_per_module, max_token_per_leaf_module, max_depth, provider, aws_region, api_version, azure_deployment, use_gitignore is not None, prompt_caching is not None]):
             click.echo("No options provided. Use --help for usage information.")
             sys.exit(EXIT_CONFIG_ERROR)
 
@@ -250,6 +257,9 @@ def config_set(
         if use_gitignore is not None:
             validated_data['use_gitignore'] = use_gitignore
 
+        if prompt_caching is not None:
+            validated_data['prompt_caching'] = prompt_caching
+
         # Create config manager and save
         manager = ConfigManager()
         manager.load()  # Load existing config if present
@@ -269,6 +279,7 @@ def config_set(
             api_version=validated_data.get('api_version'),
             azure_deployment=validated_data.get('azure_deployment'),
             use_gitignore=validated_data.get('use_gitignore'),
+            prompt_caching=validated_data.get('prompt_caching'),
         )
         
         # Display success messages
@@ -332,6 +343,9 @@ def config_set(
         if use_gitignore is not None:
             click.secho(f"✓ Use gitignore: {use_gitignore}", fg="green")
 
+        if prompt_caching is not None:
+            click.secho(f"✓ Prompt caching: {prompt_caching}", fg="green")
+
         click.echo("\n" + click.style("Configuration updated successfully.", fg="green", bold=True))
         
     except ConfigurationError as e:
@@ -393,6 +407,7 @@ def config_show(output_json: bool):
                 "max_token_per_leaf_module": config.max_token_per_leaf_module if config else 16000,
                 "max_depth": config.max_depth if config else 2,
                 "use_gitignore": config.use_gitignore if config else True,
+                "prompt_caching": config.prompt_caching if config else True,
                 "agent_instructions": config.agent_instructions.to_dict() if config and config.agent_instructions else {},
                 "config_file": str(manager.config_file_path)
             }
@@ -448,6 +463,7 @@ def config_show(output_json: bool):
                 click.echo(f"  Max Tokens:              {config.max_tokens}")
                 click.echo(f"  Max Token/Module:        {config.max_token_per_module}")
                 click.echo(f"  Max Token/Leaf Module:   {config.max_token_per_leaf_module}")
+                click.echo(f"  Prompt Caching:          {config.prompt_caching}")
             
             click.echo()
             click.secho("Decomposition Settings", fg="cyan", bold=True)
