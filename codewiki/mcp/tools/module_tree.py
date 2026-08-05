@@ -56,6 +56,43 @@ def _get_processing_order(module_tree: Dict[str, Any], parent_path: List[str] | 
     return order
 
 
+def _collect_component_ids(module_tree: Dict[str, Any]) -> set[str]:
+    """Return the set of all component ids referenced across the module tree.
+
+    Walks every module (and nested ``children``) and collects the entries of
+    each module's ``components`` list.
+    """
+    ids: set[str] = set()
+
+    def _walk(tree: Dict[str, Any]) -> None:
+        for module_info in tree.values():
+            ids.update(module_info.get("components", []) or [])
+            children = module_info.get("children", {})
+            if isinstance(children, dict) and children:
+                _walk(children)
+
+    _walk(module_tree)
+    return ids
+
+
+def _validate_module_tree(
+    module_tree: Dict[str, Any],
+    known_ids: set[str],
+) -> Tuple[List[str], List[str]]:
+    """Check the tree's component ids against the analysis index.
+
+    Returns ``(unmatched_ids, leftover_ids)``:
+      * ``unmatched_ids``: ids referenced by the tree that do not exist in the
+        index (typos / drift) -- they will be silently omitted from docs.
+      * ``leftover_ids``: ids that exist in the index but are not assigned to
+        any module (a coverage gap -- they get no module doc).
+    """
+    assigned = _collect_component_ids(module_tree)
+    unmatched = sorted(assigned - known_ids)
+    leftover = sorted(known_ids - assigned)
+    return unmatched, leftover
+
+
 def handle_save_module_tree(
     arguments: Dict[str, Any],
     store: SessionStore,
@@ -68,6 +105,7 @@ def handle_save_module_tree(
 
     module_tree = arguments["module_tree"]
     output_dir = session.output_dir
+    known_ids = set(session.components.keys())
 
     # Save both immutable snapshot and mutable working copy
     first_path = os.path.join(output_dir, FIRST_MODULE_TREE_FILENAME)
@@ -83,6 +121,40 @@ def handle_save_module_tree(
     # Cache in session
     session.module_tree = module_tree
 
+    # Validate the tree against the analysis component index so orphaned /
+    # stale ids surface loudly instead of being silently dropped from docs.
+    unmatched_ids, leftover_ids = _validate_module_tree(module_tree, known_ids)
+    validation = {
+        "unmatched_ids": unmatched_ids,
+        "unmatched_count": len(unmatched_ids),
+        "leftover_component_ids": leftover_ids,
+        "leftover_component_count": len(leftover_ids),
+    }
+    if session.workspace is not None:
+        session.workspace.write_json("module_tree_validation.json", validation)
+
+    if unmatched_ids or leftover_ids:
+        warnings: List[str] = []
+        if unmatched_ids:
+            warnings.append(
+                f"{len(unmatched_ids)} component id(s) in the module tree do not "
+                f"exist in the analysis index and will be omitted from docs: "
+                f"{unmatched_ids}"
+            )
+        if leftover_ids:
+            warnings.append(
+                f"{len(leftover_ids)} indexed component(s) are assigned to no "
+                f"module and will receive no documentation: {leftover_ids}"
+            )
+        warning = " ".join(warnings)
+        logger.warning(
+            "save_module_tree for session %s: %s",
+            session_id,
+            warning,
+        )
+    else:
+        warning = ""
+
     # Compute processing order and write to workspace file
     order = _get_processing_order(module_tree)
     order_file = None
@@ -96,6 +168,7 @@ def handle_save_module_tree(
         "tree_path": working_path,
         "first_tree_path": first_path,
         "processing_order_file": order_file,
+        "validation": validation,
         "hint": (
             "Read the processing_order.json file for the leaf-first generation order. "
             "Process leaf modules first (is_leaf=true), then parent modules. "
@@ -103,6 +176,8 @@ def handle_save_module_tree(
             "For each parent module: get_prompt('overview_module') + write_doc_file."
         ),
     }
+    if warning:
+        result["warning"] = warning
     return json.dumps(result, indent=2, ensure_ascii=False)
 
 

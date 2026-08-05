@@ -205,7 +205,10 @@ def _fine_grained_tools() -> list[Tool]:
                 "Save the IDE agent's module clustering result. "
                 "Accepts a JSON module tree and persists it to disk. "
                 "Computes the leaf-first processing order and writes it to a workspace file. "
-                "Returns the file path for the processing order."
+                "Returns the file path for the processing order. "
+                "Validates each component id against the analysis index and reports "
+                "unmatched (orphaned) ids and unassigned (leftover) components in the "
+                "response 'validation' field plus a 'warning' when gaps exist."
             ),
             inputSchema={
                 "type": "object",

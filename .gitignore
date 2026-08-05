@@ -40,6 +40,7 @@ htmlcov/
 .hypothesis/
 tests/*
 !tests/test_gitignore_filtering.py
+!tests/test_module_tree_validation.py
 
 # Jupyter
 *.ipynb
