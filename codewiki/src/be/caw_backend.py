@@ -245,7 +245,6 @@ class CawBackend(LLMBackend):
         prompt: str,
         *,
         model: str | None = None,
-        temperature: float = 0.0,  # unused: subscription CLIs don't expose temperature
     ) -> str:
         # Blocks the calling thread for the lifetime of the claude/codex
         # subprocess.  Callers running this from an async context (e.g. the

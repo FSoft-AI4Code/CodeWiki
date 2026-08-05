@@ -41,7 +41,6 @@ class LLMBackend(abc.ABC):
         prompt: str,
         *,
         model: str | None = None,
-        temperature: float = 0.0,
     ) -> str:
         """Single-shot text completion."""
 

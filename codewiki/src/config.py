@@ -70,6 +70,9 @@ class Config:
     max_tokens: int = DEFAULT_MAX_TOKENS
     max_token_per_module: int = DEFAULT_MAX_TOKEN_PER_MODULE
     max_token_per_leaf_module: int = DEFAULT_MAX_TOKEN_PER_LEAF_MODULE
+    # Prompt caching for agentic/multi-turn calls (auto-disables per model if
+    # the provider rejects cache_control markers)
+    prompt_caching: bool = True
     # Agent instructions for customization
     agent_instructions: Optional[Dict[str, Any]] = None
     # Apply Git ignore rules before dependency analysis
@@ -177,6 +180,7 @@ class Config:
         max_depth: int = MAX_DEPTH,
         agent_instructions: Optional[Dict[str, Any]] = None,
         use_gitignore: bool = True,
+        prompt_caching: bool = True,
     ) -> 'Config':
         """
         Create configuration for CLI context.
@@ -199,6 +203,7 @@ class Config:
             max_depth: Maximum depth for hierarchical decomposition
             agent_instructions: Custom agent instructions dict
             use_gitignore: Whether to apply Git ignore rules
+            prompt_caching: Whether to add prompt-cache breakpoints to agentic calls
 
         Returns:
             Config instance
@@ -226,4 +231,5 @@ class Config:
             max_token_per_leaf_module=max_token_per_leaf_module,
             agent_instructions=agent_instructions,
             use_gitignore=use_gitignore,
+            prompt_caching=prompt_caching,
         )
