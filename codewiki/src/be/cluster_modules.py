@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Callable, Optional
 from collections import defaultdict
+import ast
 import logging
 import traceback
 logger = logging.getLogger(__name__)
@@ -7,8 +8,8 @@ logger = logging.getLogger(__name__)
 from codewiki.src.be.dependency_analyzer.models.core import Node
 from codewiki.src.be.llm_services import call_llm
 from codewiki.src.be.utils import count_tokens
-from codewiki.src.config import Config
-from codewiki.src.be.prompt_template import format_cluster_prompt
+from codewiki.src.config import Config, DEFAULT_MIN_MODULES_FOR_SUPER_GROUPING
+from codewiki.src.be.prompt_template import format_cluster_prompt, format_super_group_prompt
 
 Completer = Callable[[str], str]
 
@@ -209,3 +210,171 @@ def cluster_modules(
         current_module_path.pop()
 
     return module_tree
+
+
+def _common_path_prefix(paths: List[str]) -> str:
+    """Longest common directory prefix of the given relative paths."""
+    split_paths = [p.strip("/").split("/") for p in paths if p]
+    if not split_paths:
+        return ""
+    common = []
+    for parts in zip(*split_paths):
+        if all(part == parts[0] for part in parts):
+            common.append(parts[0])
+        else:
+            break
+    return "/".join(common)
+
+
+def _parse_super_group_response(response: str) -> Optional[Dict[str, Any]]:
+    if "<GROUPED_MODULES>" not in response or "</GROUPED_MODULES>" not in response:
+        logger.warning(
+            "Invalid super-grouping response: missing <GROUPED_MODULES> tags; "
+            "keeping the flat module tree. Response preview: %s...",
+            response[:200],
+        )
+        return None
+    try:
+        grouping = ast.literal_eval(
+            response.split("<GROUPED_MODULES>")[1].split("</GROUPED_MODULES>")[0]
+        )
+    except Exception as e:
+        logger.warning(
+            "Failed to parse super-grouping response; keeping the flat module "
+            "tree. Error: %s. Response preview: %s...",
+            e,
+            response[:200],
+        )
+        return None
+    if not isinstance(grouping, dict):
+        logger.warning(
+            "Invalid super-grouping format - expected dict, got %s; keeping the "
+            "flat module tree.",
+            type(grouping),
+        )
+        return None
+    return grouping
+
+
+def super_group_modules(
+    module_tree: Dict[str, Any],
+    config: Config,
+    completer: Optional[Completer] = None,
+) -> Dict[str, Any]:
+    """
+    Group a flat top level of modules into higher-level architectural subsystems.
+
+    Runs one extra LLM pass over the top-level module names (with their paths
+    and components) and nests the flat modules as children of the subsystems it
+    proposes. Any invalid or non-consolidating response leaves the tree
+    unchanged, so this pass can never make the structure worse.
+    """
+    min_modules = getattr(
+        config, "min_modules_for_super_grouping", DEFAULT_MIN_MODULES_FOR_SUPER_GROUPING
+    )
+    if min_modules <= 0:
+        logger.info(
+            "Super-grouping disabled (min_modules_for_super_grouping=%d).", min_modules
+        )
+        return module_tree
+    if len(module_tree) <= min_modules:
+        logger.info(
+            "Skipping super-grouping: %d top-level modules fit within the "
+            "%d-module threshold.",
+            len(module_tree),
+            min_modules,
+        )
+        return module_tree
+
+    prompt = format_super_group_prompt(module_tree)
+    logger.info(
+        "Requesting super-grouping of %d top-level modules into architectural "
+        "subsystems.",
+        len(module_tree),
+    )
+    if completer is not None:
+        response = completer(prompt)
+    else:
+        response = call_llm(prompt, config, model=config.cluster_model)
+
+    grouping = _parse_super_group_response(response)
+    if grouping is None:
+        return module_tree
+
+    # Validate assignments: unknown modules are dropped, duplicates keep their
+    # first assignment, unassigned modules stay at the top level.
+    assigned = set()
+    subsystems: Dict[str, List[str]] = {}
+    for subsystem_name, info in grouping.items():
+        members = info.get("modules") if isinstance(info, dict) else None
+        if not isinstance(members, list):
+            logger.warning(
+                "Skipping subsystem '%s' in super-grouping response: no valid "
+                "'modules' list.",
+                subsystem_name,
+            )
+            continue
+        valid_members = []
+        for member in members:
+            if member not in module_tree:
+                logger.warning(
+                    "Skipping unknown module '%s' in subsystem '%s'.",
+                    member,
+                    subsystem_name,
+                )
+                continue
+            if member in assigned:
+                logger.warning(
+                    "Module '%s' assigned to multiple subsystems; keeping its "
+                    "first assignment.",
+                    member,
+                )
+                continue
+            assigned.add(member)
+            valid_members.append(member)
+        if valid_members:
+            subsystems[subsystem_name] = valid_members
+
+    unassigned = [name for name in module_tree if name not in assigned]
+
+    # A single-module subsystem is just a rename; keep the module itself.
+    top_level_count = len(subsystems) + len(unassigned)
+    if len(subsystems) <= 1 or top_level_count >= len(module_tree):
+        logger.info(
+            "Skipping super-grouping result: %d subsystem(s) over %d modules "
+            "provide no real consolidation.",
+            len(subsystems),
+            len(module_tree),
+        )
+        return module_tree
+
+    result: Dict[str, Any] = {}
+    for subsystem_name, members in subsystems.items():
+        if len(members) == 1:
+            result[members[0]] = module_tree[members[0]]
+            continue
+        components = []
+        seen = set()
+        for member in members:
+            for component in module_tree[member].get("components", []):
+                if component not in seen:
+                    seen.add(component)
+                    components.append(component)
+        result[subsystem_name] = {
+            "path": _common_path_prefix(
+                [module_tree[member].get("path", "") for member in members]
+            ),
+            "components": components,
+            "children": {member: module_tree[member] for member in members},
+        }
+    for name in unassigned:
+        result[name] = module_tree[name]
+
+    logger.info(
+        "Super-grouping consolidated %d top-level modules into %d entries "
+        "(%d subsystems).",
+        len(module_tree),
+        len(result),
+        len(subsystems),
+    )
+    return result

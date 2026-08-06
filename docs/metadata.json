@@ -9,12 +9,15 @@
     "statistics": {
         "total_components": 768,
         "leaf_nodes": 62,
-        "max_depth": 3
+        "max_depth": 4
     },
     "files_generated": [
         "overview.md",
         "module_tree.json",
         "first_module_tree.json",
+        "Code_Analysis_Engine.md",
+        "Documentation_Generation_Engine.md",
+        "User_Interfaces.md",
         "Backend_LLM_&_Documentation_Services_caw_backend.md",
         "Dependency_Analyzer_Core_models.md",
         "Backend_LLM_&_Documentation_Services_documentation_generator.md",
