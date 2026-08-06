@@ -1,9 +1,12 @@
 """Tests for save_module_tree validation of component ids.
 
 Verifies that a module tree referencing unknown/stale component ids is
-surfaced in the response (unmatched_ids) and that indexed components left
-out of the tree are reported as a coverage gap (leftover_component_ids),
-without breaking the save itself.
+surfaced in the response (unmatched_ids) and that clustering-candidate
+components (leaf nodes) left out of the tree are reported as an
+informational coverage gap (leftover_component_ids), without breaking the
+save itself. Leftover ids are computed against the leaf-node candidate set,
+never the full index, because the cluster prompt intentionally excludes
+non-essential components.
 """
 
 from __future__ import annotations
@@ -31,13 +34,16 @@ def _make_session(
     store: SessionStore,
     tmp_path,
     component_ids: list[str],
+    leaf_nodes: list[str] | None = None,
 ) -> SessionState:
     components = {cid: _make_node(cid) for cid in component_ids}
+    if leaf_nodes is None:
+        leaf_nodes = list(component_ids)
     session = store.create(
         repo_path=str(tmp_path),
         output_dir=str(tmp_path),
         components=components,
-        leaf_nodes=list(component_ids),
+        leaf_nodes=leaf_nodes,
     )
     session.workspace = SessionWorkspace(tmp_path, session.session_id)
     return session
@@ -73,8 +79,11 @@ def test_valid_tree_no_gaps(tmp_path):
     assert result["module_count"] == 2
     assert result["validation"]["unmatched_ids"] == []
     assert result["validation"]["unmatched_count"] == 0
+    assert result["validation"]["unmatched_truncated"] is False
     assert result["validation"]["leftover_component_count"] == 0
+    assert result["validation"]["leftover_truncated"] is False
     assert "warning" not in result
+    assert "note" not in result
 
     validation = _read_validation_file(session)
     assert validation["unmatched_ids"] == []
@@ -97,13 +106,14 @@ def test_orphaned_id_reported_but_saved(tmp_path):
     assert result["validation"]["unmatched_count"] == 1
     assert result["validation"]["leftover_component_count"] == 0
     assert "src/a.py::Typo" in result["warning"]
+    assert "note" not in result
 
     validation = _read_validation_file(session)
     assert validation["unmatched_ids"] == ["src/a.py::Typo"]
     assert validation["leftover_component_ids"] == []
 
 
-def test_unassigned_components_flagged(tmp_path):
+def test_unassigned_leaf_candidates_flagged_as_note(tmp_path):
     store = SessionStore()
     ids = ["src/a.py::A", "src/b.py::B"]
     session = _make_session(store, tmp_path, ids)
@@ -117,7 +127,8 @@ def test_unassigned_components_flagged(tmp_path):
     assert result["validation"]["unmatched_ids"] == []
     assert result["validation"]["leftover_component_count"] == 1
     assert "src/b.py::B" in result["validation"]["leftover_component_ids"]
-    assert "src/b.py::B" in result["warning"]
+    assert "warning" not in result
+    assert "src/b.py::B" in result["note"]
 
     validation = _read_validation_file(session)
     assert validation["leftover_component_ids"] == ["src/b.py::B"]
@@ -145,6 +156,43 @@ def test_nested_children_validated(tmp_path):
     assert "src/missing.py::X" in result["warning"]
 
 
+def test_non_leaf_component_not_flagged_as_leftover(tmp_path):
+    store = SessionStore()
+    ids = ["src/a.py::A", "src/b.py::B"]
+    session = _make_session(store, tmp_path, ids, leaf_nodes=["src/a.py::A"])
+    tree = {
+        "core": {"components": ["src/a.py::A"]},
+    }
+
+    result = _save(tree, session, store)
+
+    assert result["status"] == "saved"
+    assert result["validation"]["unmatched_ids"] == []
+    assert result["validation"]["leftover_component_count"] == 0
+    assert "warning" not in result
+    assert "note" not in result
+
+
+def test_leftover_counts_only_leaf_candidates(tmp_path):
+    store = SessionStore()
+    ids = ["src/a.py::A", "src/b.py::B", "src/c.py::C"]
+    session = _make_session(
+        store,
+        tmp_path,
+        ids,
+        leaf_nodes=["src/a.py::A", "src/b.py::B"],
+    )
+    tree = {
+        "core": {"components": ["src/a.py::A"]},
+    }
+
+    result = _save(tree, session, store)
+
+    assert result["validation"]["leftover_component_count"] == 1
+    assert result["validation"]["leftover_component_ids"] == ["src/b.py::B"]
+    assert "src/b.py::B" in result["note"]
+
+
 def test_multiple_unmatched_and_leftover(tmp_path):
     store = SessionStore()
     ids = ["src/a.py::A", "src/b.py::B", "src/c.py::C"]
@@ -167,7 +215,33 @@ def test_multiple_unmatched_and_leftover(tmp_path):
         "src/c.py::C",
     ]
     assert "src/typo.py::T1" in result["warning"]
-    assert "src/b.py::B" in result["warning"]
+    assert "src/b.py::B" in result["note"]
+
+
+def test_id_lists_capped_in_response(tmp_path):
+    store = SessionStore()
+    leaf_ids = [f"src/l{i}.py::L{i}" for i in range(25)]
+    session = _make_session(store, tmp_path, leaf_ids)
+    typo_ids = [f"src/x{i}.py::X{i}" for i in range(25)]
+    tree = {
+        "mod": {"components": typo_ids},
+    }
+
+    result = _save(tree, session, store)
+
+    validation = result["validation"]
+    assert validation["unmatched_count"] == 25
+    assert len(validation["unmatched_ids"]) == 20
+    assert validation["unmatched_truncated"] is True
+    assert validation["leftover_component_count"] == 25
+    assert len(validation["leftover_component_ids"]) == 20
+    assert validation["leftover_truncated"] is True
+    assert "module_tree_validation.json" in result["warning"]
+    assert "module_tree_validation.json" in result["note"]
+
+    full = _read_validation_file(session)
+    assert len(full["unmatched_ids"]) == 25
+    assert len(full["leftover_component_ids"]) == 25
 
 
 def test_missing_session_errors(tmp_path):

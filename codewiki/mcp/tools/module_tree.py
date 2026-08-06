@@ -18,6 +18,17 @@ from codewiki.src.config import FIRST_MODULE_TREE_FILENAME, MODULE_TREE_FILENAME
 
 logger = logging.getLogger(__name__)
 
+# Cap on ID lists embedded in the MCP response. Full lists live in the
+# workspace module_tree_validation.json file so stdio stays small.
+_MAX_IDS_IN_RESPONSE = 20
+
+
+def _cap(ids: List[str]) -> Tuple[List[str], bool]:
+    """Return (ids capped to _MAX_IDS_IN_RESPONSE, was_truncated)."""
+    if len(ids) <= _MAX_IDS_IN_RESPONSE:
+        return ids, False
+    return ids[:_MAX_IDS_IN_RESPONSE], True
+
 
 def _get_processing_order(module_tree: Dict[str, Any], parent_path: List[str] | None = None) -> List[Dict[str, Any]]:
     """Compute leaf-first processing order from a module tree.
@@ -68,7 +79,7 @@ def _collect_component_ids(module_tree: Dict[str, Any]) -> set[str]:
         for module_info in tree.values():
             ids.update(module_info.get("components", []) or [])
             children = module_info.get("children", {})
-            if isinstance(children, dict) and children:
+            if isinstance(children, dict):
                 _walk(children)
 
     _walk(module_tree)
@@ -78,18 +89,21 @@ def _collect_component_ids(module_tree: Dict[str, Any]) -> set[str]:
 def _validate_module_tree(
     module_tree: Dict[str, Any],
     known_ids: set[str],
+    candidate_ids: set[str],
 ) -> Tuple[List[str], List[str]]:
     """Check the tree's component ids against the analysis index.
 
     Returns ``(unmatched_ids, leftover_ids)``:
       * ``unmatched_ids``: ids referenced by the tree that do not exist in the
         index (typos / drift) -- they will be silently omitted from docs.
-      * ``leftover_ids``: ids that exist in the index but are not assigned to
-        any module (a coverage gap -- they get no module doc).
+      * ``leftover_ids``: clustering candidate ids (leaf nodes) that are not
+        assigned to any module -- a coverage gap for the current clustering.
+        Non-candidate components (excluded / non-essential) are intentionally
+        not reported as leftover.
     """
     assigned = _collect_component_ids(module_tree)
     unmatched = sorted(assigned - known_ids)
-    leftover = sorted(known_ids - assigned)
+    leftover = sorted(candidate_ids - assigned)
     return unmatched, leftover
 
 
@@ -106,6 +120,7 @@ def handle_save_module_tree(
     module_tree = arguments["module_tree"]
     output_dir = session.output_dir
     known_ids = set(session.components.keys())
+    candidate_ids = set(session.leaf_nodes)
 
     # Save both immutable snapshot and mutable working copy
     first_path = os.path.join(output_dir, FIRST_MODULE_TREE_FILENAME)
@@ -121,39 +136,54 @@ def handle_save_module_tree(
     # Cache in session
     session.module_tree = module_tree
 
-    # Validate the tree against the analysis component index so orphaned /
-    # stale ids surface loudly instead of being silently dropped from docs.
-    unmatched_ids, leftover_ids = _validate_module_tree(module_tree, known_ids)
-    validation = {
+    # Validate the tree so orphaned / stale ids surface instead of being
+    # silently dropped from docs. Unmatched ids are checked against the full
+    # index; leftovers only against the clustering candidate set (leaf nodes),
+    # since the cluster prompt deliberately excludes non-essential components.
+    unmatched_ids, leftover_ids = _validate_module_tree(
+        module_tree, known_ids, candidate_ids
+    )
+    full_validation = {
         "unmatched_ids": unmatched_ids,
         "unmatched_count": len(unmatched_ids),
         "leftover_component_ids": leftover_ids,
         "leftover_component_count": len(leftover_ids),
     }
     if session.workspace is not None:
-        session.workspace.write_json("module_tree_validation.json", validation)
+        session.workspace.write_json("module_tree_validation.json", full_validation)
 
-    if unmatched_ids or leftover_ids:
-        warnings: List[str] = []
-        if unmatched_ids:
-            warnings.append(
-                f"{len(unmatched_ids)} component id(s) in the module tree do not "
-                f"exist in the analysis index and will be omitted from docs: "
-                f"{unmatched_ids}"
-            )
-        if leftover_ids:
-            warnings.append(
-                f"{len(leftover_ids)} indexed component(s) are assigned to no "
-                f"module and will receive no documentation: {leftover_ids}"
-            )
-        warning = " ".join(warnings)
-        logger.warning(
-            "save_module_tree for session %s: %s",
-            session_id,
-            warning,
+    unmatched_capped, unmatched_truncated = _cap(unmatched_ids)
+    leftover_capped, leftover_truncated = _cap(leftover_ids)
+    validation = {
+        "unmatched_ids": unmatched_capped,
+        "unmatched_count": len(unmatched_ids),
+        "unmatched_truncated": unmatched_truncated,
+        "leftover_component_ids": leftover_capped,
+        "leftover_component_count": len(leftover_ids),
+        "leftover_truncated": leftover_truncated,
+    }
+
+    warning = ""
+    if unmatched_ids:
+        warning = (
+            f"{len(unmatched_ids)} component id(s) in the module tree do not "
+            f"exist in the analysis index and will be omitted from docs: "
+            f"{unmatched_capped}"
         )
-    else:
-        warning = ""
+        if unmatched_truncated:
+            warning += " ... (see module_tree_validation.json for the full list)"
+        logger.warning("save_module_tree for session %s: %s", session_id, warning)
+
+    note = ""
+    if leftover_ids:
+        note = (
+            f"{len(leftover_ids)} clustering candidate component(s) are not "
+            f"assigned to any module and will receive no documentation: "
+            f"{leftover_capped}"
+        )
+        if leftover_truncated:
+            note += " ... (see module_tree_validation.json for the full list)"
+        logger.info("save_module_tree for session %s: %s", session_id, note)
 
     # Compute processing order and write to workspace file
     order = _get_processing_order(module_tree)
@@ -178,6 +208,8 @@ def handle_save_module_tree(
     }
     if warning:
         result["warning"] = warning
+    if note:
+        result["note"] = note
     return json.dumps(result, indent=2, ensure_ascii=False)
 
 

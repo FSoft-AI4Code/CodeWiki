@@ -207,8 +207,10 @@ def _fine_grained_tools() -> list[Tool]:
                 "Computes the leaf-first processing order and writes it to a workspace file. "
                 "Returns the file path for the processing order. "
                 "Validates each component id against the analysis index and reports "
-                "unmatched (orphaned) ids and unassigned (leftover) components in the "
-                "response 'validation' field plus a 'warning' when gaps exist."
+                "orphaned (unmatched) ids as a 'warning' and unassigned leaf-node "
+                "candidates as an informational 'note' in the response; ID lists in "
+                "the response are capped at 20 and full lists go to "
+                "module_tree_validation.json."
             ),
             inputSchema={
                 "type": "object",
