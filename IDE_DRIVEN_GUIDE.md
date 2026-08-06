@@ -71,7 +71,7 @@ The server exposes **8 fine-grained tools** (zero LLM config) plus **2 legacy to
 | `read_code_components` | Write component source code to workspace `.src` files | Each component → `sources/{sanitized_id}.src`, returns file paths | No |
 | `write_doc_file` | Create .md documents with auto Mermaid validation | Writes file directly to output dir | No |
 | `edit_doc_file` | Edit documents: `str_replace` / `insert` / `undo` | Modifies file in place, keeps edit history (capped at 20/file) | No |
-| `save_module_tree` | Persist IDE agent's module clustering | Writes `module_tree.json` + `first_module_tree.json` + `processing_order.json` | No |
+| `save_module_tree` | Persist IDE agent's module clustering | Writes `module_tree.json` + `first_module_tree.json` + `processing_order.json` + `module_tree_validation.json`; returns `warning` for orphaned IDs and `note` for unassigned leaf candidates (IDs capped at 20) | No |
 | `get_processing_order` | Compute leaf-first processing order | Writes `processing_order.json` to workspace, returns path | No |
 | `get_prompt` | Retrieve prompt templates for each pipeline stage | Returns inline (small payload) | No |
 | `close_session` | Write `metadata.json`, clean up workspace files, free memory | Cleans workspace dir + prunes empty parent dirs | No |
@@ -311,6 +311,7 @@ Each `analyze_repo` call creates a session workspace at `{repo_path}/.codewiki/s
 ├── changes.json           # Incremental change info (optional)
 ├── summary.json           # Compact analysis summary
 ├── processing_order.json   # Leaf-first generation order (after save_module_tree)
+├── module_tree_validation.json  # Full unmatched/leftover ID lists (after save_module_tree)
 └── sources/
     └── {sanitized_id}.src # Individual component source files
 ```

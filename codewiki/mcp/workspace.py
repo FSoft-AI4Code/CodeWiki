@@ -14,6 +14,7 @@ Directory layout (relative to ``repo_path``)::
         changes.json
         summary.json
         processing_order.json
+        module_tree_validation.json
         sources/
             {sanitized_component_id}.src
 """
