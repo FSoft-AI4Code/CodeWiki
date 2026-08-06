@@ -18,6 +18,7 @@ from codewiki.src.be.prompt_template import (
 from codewiki.src.be.cluster_modules import (
     cluster_modules,
     get_clustering_input_token_count,
+    super_group_modules,
 )
 from codewiki.src.config import (
     Config,
@@ -351,6 +352,12 @@ class DocumentationGenerator:
                     self.config,
                     completer=lambda p: self.backend.complete(p, model=cluster_model),
                 )
+                if module_tree:
+                    module_tree = super_group_modules(
+                        module_tree,
+                        self.config,
+                        completer=lambda p: self.backend.complete(p, model=cluster_model),
+                    )
                 # Only freshly clustered trees are deduped: renaming a cached
                 # key whose .md already exists would orphan the doc.
                 module_tree = dedupe_module_tree_names(module_tree)

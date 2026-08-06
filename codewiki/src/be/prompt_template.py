@@ -202,6 +202,44 @@ Firstly reason based on given context and then group them and return the result 
 </GROUPED_COMPONENTS>
 """.strip()
 
+SUPER_GROUP_PROMPT = """
+Here is the flat list of top-level modules of a repository. Each module has a path and its core components:
+
+<MODULES>
+{formatted_modules}
+</MODULES>
+
+The module list is flat: conceptually related modules sit next to unrelated ones. Please group these modules into higher-level architectural subsystems so the repository reads as an architecture rather than a directory listing.
+
+Guidelines:
+- Each subsystem is a set of modules that together fulfil one architectural responsibility (e.g. a processing pipeline, a user-facing interface layer, a shared platform/foundation).
+- Name each subsystem by its architectural role, not by a directory name.
+- There must be significantly fewer subsystems than modules; do not simply mirror the module list back.
+- Subsystems should contain multiple modules. A single-module subsystem is just a rename — keep a module alone ONLY when it truly shares no architectural responsibility with any other module.
+- Every module must be assigned to exactly one subsystem.
+- Return the module names EXACTLY as given — do NOT rename or shorten them.
+
+Firstly reason about the modules' responsibilities and relationships and identify the architectural layers they form, then return a grouping that MATCHES your reasoning in the following format:
+<GROUPED_MODULES>
+{{
+    "subsystem_name_1": {{
+        "modules": [
+            <module_name_1>,
+            <module_name_2>,
+            ...
+        ]
+    }},
+    "subsystem_name_2": {{
+        "modules": [
+            <module_name_3>,
+            ...
+        ]
+    }},
+    ...
+}}
+</GROUPED_MODULES>
+""".strip()
+
 FILTER_FOLDERS_PROMPT = """
 Here is the list of relative paths of files, folders in 2-depth of project {project_name}:
 ```
@@ -372,6 +410,19 @@ def format_cluster_prompt(potential_core_components: str, module_tree: dict[str,
         return CLUSTER_REPO_PROMPT.format(potential_core_components=potential_core_components)
     else:
         return CLUSTER_MODULE_PROMPT.format(potential_core_components=potential_core_components, module_tree=formatted_module_tree, module_name=module_name)
+
+
+def format_super_group_prompt(module_tree: Dict[str, Any]) -> str:
+    """
+    Format the super-grouping prompt with the flat top-level modules of a tree.
+    """
+    lines = []
+    for name, info in module_tree.items():
+        path = info.get("path", "")
+        lines.append(f"{name} (path: {path})" if path else name)
+        for component in info.get("components", []):
+            lines.append(f"\t{component}")
+    return SUPER_GROUP_PROMPT.format(formatted_modules="\n".join(lines))
 
 
 def format_system_prompt(module_name: str, custom_instructions: str = None) -> str:

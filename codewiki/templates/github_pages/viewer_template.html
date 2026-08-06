@@ -147,6 +147,18 @@
             color: white;
         }
         
+        .nav-item.nav-parent {
+            font-weight: 600;
+            font-size: 13px;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .nav-item.nav-parent.active {
+            color: white;
+        }
+
         .nav-subsection {
             margin-left: 15px;
             margin-top: 5px;
@@ -466,17 +478,18 @@
         function buildNavItem(key, data, depth) {
             const indentClass = depth > 0 ? 'nav-subsection' : 'nav-section';
             const fileName = `${key}.md`;
-            
+            const hasChildren = data.children && Object.keys(data.children).length > 0;
+
             let html = `<div class="${indentClass}">`;
-            
-            if (data.components && data.components.length > 0) {
-                html += `<div class="nav-item" data-file="${fileName}">
-                    ${formatNavTitle(key)}
-                </div>`;
-            } else if (depth === 0) {
+
+            // Every module in the tree has a generated doc (parents get a
+            // synthesized overview), so render a link whenever the node has
+            // components or children. Only the synthetic fallback tree's bare
+            // top-level node stays a plain header.
+            if (depth === 0 && !hasChildren && !(data.components && data.components.length > 0)) {
                 html += `<h3>${formatNavTitle(key)}</h3>`;
             } else {
-                html += `<div class="nav-item" data-file="${fileName}">
+                html += `<div class="nav-item${depth === 0 && hasChildren ? ' nav-parent' : ''}" data-file="${fileName}">
                     ${formatNavTitle(key)}
                 </div>`;
             }

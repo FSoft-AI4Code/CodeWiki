@@ -17,7 +17,10 @@ MAX_DEPTH = 2
 # Default max token settings
 DEFAULT_MAX_TOKENS = 32_768
 DEFAULT_MAX_TOKEN_PER_MODULE = 36_369
-DEFAULT_MAX_TOKEN_PER_LEAF_MODULE = 16_000
+DEFAULT_MAX_TOKEN_PER_LEAF_MODULE = 4_000
+# Super-group the flat top level into architectural subsystems only when it
+# has more than this many modules; 0 or negative disables the pass.
+DEFAULT_MIN_MODULES_FOR_SUPER_GROUPING = 3
 # Legacy constants (for backward compatibility)
 MAX_TOKEN_PER_MODULE = DEFAULT_MAX_TOKEN_PER_MODULE
 MAX_TOKEN_PER_LEAF_MODULE = DEFAULT_MAX_TOKEN_PER_LEAF_MODULE
@@ -70,6 +73,7 @@ class Config:
     max_tokens: int = DEFAULT_MAX_TOKENS
     max_token_per_module: int = DEFAULT_MAX_TOKEN_PER_MODULE
     max_token_per_leaf_module: int = DEFAULT_MAX_TOKEN_PER_LEAF_MODULE
+    min_modules_for_super_grouping: int = DEFAULT_MIN_MODULES_FOR_SUPER_GROUPING
     # Prompt caching for agentic/multi-turn calls (auto-disables per model if
     # the provider rejects cache_control markers)
     prompt_caching: bool = True
@@ -177,6 +181,7 @@ class Config:
         max_tokens: int = DEFAULT_MAX_TOKENS,
         max_token_per_module: int = DEFAULT_MAX_TOKEN_PER_MODULE,
         max_token_per_leaf_module: int = DEFAULT_MAX_TOKEN_PER_LEAF_MODULE,
+        min_modules_for_super_grouping: int = DEFAULT_MIN_MODULES_FOR_SUPER_GROUPING,
         max_depth: int = MAX_DEPTH,
         agent_instructions: Optional[Dict[str, Any]] = None,
         use_gitignore: bool = True,
@@ -200,6 +205,9 @@ class Config:
             max_tokens: Maximum tokens for LLM response
             max_token_per_module: Maximum tokens per module for clustering
             max_token_per_leaf_module: Maximum tokens per leaf module
+            min_modules_for_super_grouping: Super-group the top level into
+                subsystems only when it has more than this many modules
+                (0 or negative disables the pass)
             max_depth: Maximum depth for hierarchical decomposition
             agent_instructions: Custom agent instructions dict
             use_gitignore: Whether to apply Git ignore rules
@@ -229,6 +237,7 @@ class Config:
             max_tokens=max_tokens,
             max_token_per_module=max_token_per_module,
             max_token_per_leaf_module=max_token_per_leaf_module,
+            min_modules_for_super_grouping=min_modules_for_super_grouping,
             agent_instructions=agent_instructions,
             use_gitignore=use_gitignore,
             prompt_caching=prompt_caching,
