@@ -4,36 +4,92 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{TITLE}}</title>
+    <script>
+        // Apply persisted theme before first paint to avoid a flash of the wrong theme
+        (function() {
+            try {
+                var theme = localStorage.getItem('codewiki-theme');
+                if (!theme) {
+                    theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                }
+                document.documentElement.setAttribute('data-theme', theme);
+            } catch (e) {
+                document.documentElement.setAttribute('data-theme', 'light');
+            }
+        })();
+    </script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css" id="hljs-theme-light">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css" id="hljs-theme-dark" disabled>
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@11.9.0/dist/mermaid.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked@11.0.0/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked-gfm-heading-id@3.1.3/lib/index.umd.js"></script>
     <style>
         :root {
             --primary-color: #2563eb;
+            --active-nav-bg: #2563eb;
+            --active-nav-text: #ffffff;
             --secondary-color: #f1f5f9;
             --text-color: #334155;
             --border-color: #e2e8f0;
             --hover-color: #f8fafc;
             --code-bg: #f8fafc;
+            --page-bg: #ffffff;
+            --panel-bg: #ffffff;
+            --heading-color: #1e293b;
+            --subheading-color: #475569;
+            --body-color: #475569;
+            --muted-color: #64748b;
+            --inline-code-color: #e11d48;
+            --error-bg: #fef2f2;
+            --error-border: #fecaca;
+            --error-color: #991b1b;
+            --backdrop-color: rgba(15, 23, 42, 0.5);
+            --lightbox-bg: rgba(255, 255, 255, 0.97);
         }
-        
+
+        html[data-theme="dark"] {
+            color-scheme: dark;
+            --primary-color: #60a5fa;
+            --active-nav-bg: #1d4ed8;
+            --active-nav-text: #ffffff;
+            --secondary-color: #111827;
+            --text-color: #cbd5e1;
+            --border-color: #334155;
+            --hover-color: #1e293b;
+            --code-bg: #0d1117;
+            --page-bg: #0f172a;
+            --panel-bg: #1e293b;
+            --heading-color: #f1f5f9;
+            --subheading-color: #cbd5e1;
+            --body-color: #94a3b8;
+            --muted-color: #94a3b8;
+            --inline-code-color: #f472b6;
+            --error-bg: rgba(127, 29, 29, 0.25);
+            --error-border: #7f1d1d;
+            --error-color: #fca5a5;
+            --backdrop-color: rgba(0, 0, 0, 0.6);
+            --lightbox-bg: rgba(15, 23, 42, 0.97);
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             line-height: 1.6;
             color: var(--text-color);
-            background-color: #ffffff;
+            background-color: var(--page-bg);
         }
-        
+
         .container {
             display: flex;
             min-height: 100vh;
         }
-        
+
         .sidebar {
             width: 320px;
             background-color: var(--secondary-color);
@@ -42,31 +98,77 @@
             overflow-y: auto;
             position: fixed;
             height: 100vh;
+            z-index: 200;
         }
-        
+
         .content {
             flex: 1;
             margin-left: 320px;
             padding: 40px 60px;
             max-width: calc(100% - 320px);
         }
-        
+
+        .content-inner {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 220px;
+            gap: 48px;
+            align-items: start;
+        }
+
+        .content-inner.no-toc {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .content-inner.no-toc .toc {
+            display: none;
+        }
+
+        .doc-column {
+            min-width: 0;
+            max-width: 920px;
+        }
+
+        .sidebar-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
         .logo {
             font-size: 20px;
             font-weight: bold;
             color: var(--primary-color);
-            margin-bottom: 15px;
             display: flex;
             align-items: center;
             gap: 8px;
+            min-width: 0;
         }
-        
+
+        .theme-toggle {
+            flex-shrink: 0;
+            width: 34px;
+            height: 34px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--panel-bg);
+            font-size: 15px;
+            line-height: 1;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        .theme-toggle:hover {
+            border-color: var(--primary-color);
+        }
+
         .repo-link {
             display: inline-flex;
             align-items: center;
             gap: 6px;
             padding: 8px 16px;
-            background: white;
+            background: var(--panel-bg);
             color: var(--primary-color);
             text-decoration: none;
             border-radius: 8px;
@@ -76,55 +178,77 @@
             margin-bottom: 20px;
             border: 1px solid var(--border-color);
         }
-        
+
         .repo-link:hover {
             background: var(--hover-color);
             border-color: var(--primary-color);
         }
-        
+
         .repo-info {
-            margin: 20px 0;
+            margin: 0 0 20px 0;
             padding: 15px;
-            background: #f8fafc;
+            background: var(--hover-color);
             border-radius: 8px;
             border: 1px solid var(--border-color);
         }
-        
+
         .repo-info h4 {
             margin: 0 0 10px 0;
             font-size: 12px;
-            color: #64748b;
+            color: var(--muted-color);
             text-transform: uppercase;
             letter-spacing: 0.05em;
         }
-        
+
         .info-row {
             font-size: 11px;
-            color: #475569;
+            color: var(--body-color);
             line-height: 1.6;
             margin-bottom: 4px;
         }
-        
+
         .info-row strong {
             font-weight: 600;
             min-width: 80px;
             display: inline-block;
         }
-        
-        .nav-section {
-            margin-bottom: 20px;
+
+        .nav-filter {
+            width: 100%;
+            padding: 8px 12px;
+            margin-bottom: 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 13px;
+            font-family: inherit;
+            background: var(--panel-bg);
+            color: var(--text-color);
+            outline: none;
+            transition: border-color 0.2s;
         }
-        
+
+        .nav-filter:focus {
+            border-color: var(--primary-color);
+        }
+
+        .nav-filter::placeholder {
+            color: var(--muted-color);
+        }
+
+        .nav-section {
+            margin-bottom: 12px;
+        }
+
         .nav-section h3 {
             font-size: 12px;
             font-weight: 600;
-            color: #64748b;
+            color: var(--muted-color);
             text-transform: uppercase;
             letter-spacing: 0.05em;
             margin-bottom: 8px;
             padding: 8px 12px;
         }
-        
+
         .nav-item {
             display: block;
             padding: 10px 12px;
@@ -136,117 +260,170 @@
             margin-bottom: 2px;
             cursor: pointer;
         }
-        
+
         .nav-item:hover {
-            background-color: white;
+            background-color: var(--panel-bg);
             color: var(--primary-color);
         }
-        
+
         .nav-item.active {
-            background-color: var(--primary-color);
-            color: white;
+            background-color: var(--active-nav-bg);
+            color: var(--active-nav-text);
         }
-        
+
         .nav-item.nav-parent {
             font-weight: 600;
             font-size: 13px;
-            color: #64748b;
+            color: var(--muted-color);
             text-transform: uppercase;
             letter-spacing: 0.05em;
         }
 
         .nav-item.nav-parent.active {
-            color: white;
+            color: var(--active-nav-text);
         }
 
-        .nav-subsection {
-            margin-left: 15px;
-            margin-top: 5px;
+        .nav-row {
+            display: flex;
+            align-items: center;
+            gap: 2px;
         }
-        
-        .nav-subsection .nav-item {
+
+        .nav-row .nav-item {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .nav-toggle {
+            flex-shrink: 0;
+            width: 22px;
+            height: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: none;
+            border: none;
+            padding: 0;
+            color: var(--muted-color);
+            font-size: 11px;
+            cursor: pointer;
+            transition: transform 0.15s ease;
+            transform: rotate(90deg);
+        }
+
+        .nav-group.collapsed > .nav-row .nav-toggle {
+            transform: none;
+        }
+
+        .nav-group.collapsed > .nav-children {
+            display: none;
+        }
+
+        .nav-children {
+            margin-left: 14px;
+        }
+
+        .nav-children .nav-item {
             font-size: 13px;
             padding: 8px 12px;
         }
-        
-        .nav-subsection .nav-subsection {
-            margin-left: 20px;
-        }
-        
-        .nav-subsection .nav-subsection .nav-item {
+
+        .nav-children .nav-children .nav-item {
             font-size: 12px;
             padding: 6px 10px;
         }
-        
+
+        .nav-hidden {
+            display: none !important;
+        }
+
+        #navigation.filtering .nav-group.filter-open > .nav-children {
+            display: block;
+        }
+
         .markdown-content {
             max-width: 100%;
             animation: fadeIn 0.3s ease-in;
         }
-        
+
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
-        
+
+        .markdown-content h1,
+        .markdown-content h2,
+        .markdown-content h3,
+        .markdown-content h4,
+        .markdown-content h5,
+        .markdown-content h6 {
+            scroll-margin-top: 1rem;
+        }
+
         .markdown-content h1 {
             font-size: 2.5rem;
             font-weight: 700;
-            color: #1e293b;
+            color: var(--heading-color);
             margin-bottom: 1rem;
             border-bottom: 2px solid var(--border-color);
             padding-bottom: 0.5rem;
         }
-        
+
         .markdown-content h2 {
             font-size: 2rem;
             font-weight: 600;
-            color: #334155;
+            color: var(--text-color);
             margin-top: 2.5rem;
             margin-bottom: 1rem;
             padding-top: 1rem;
             border-top: 1px solid var(--border-color);
         }
-        
+
         .markdown-content h3 {
             font-size: 1.5rem;
             font-weight: 600;
-            color: #475569;
+            color: var(--subheading-color);
             margin-top: 2rem;
             margin-bottom: 0.75rem;
         }
-        
+
         .markdown-content h4 {
             font-size: 1.25rem;
             font-weight: 600;
-            color: #475569;
+            color: var(--subheading-color);
             margin-top: 1.5rem;
             margin-bottom: 0.5rem;
         }
-        
+
         .markdown-content p {
             margin-bottom: 1rem;
-            color: #475569;
+            color: var(--body-color);
         }
-        
+
         .markdown-content ul, .markdown-content ol {
             margin-bottom: 1rem;
             padding-left: 2rem;
         }
-        
+
         .markdown-content li {
             margin-bottom: 0.5rem;
-            color: #475569;
+            color: var(--body-color);
         }
-        
+
         .markdown-content code {
             background-color: var(--code-bg);
             padding: 0.2em 0.4em;
             border-radius: 0.25rem;
             font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
             font-size: 0.9em;
-            color: #e11d48;
+            color: var(--inline-code-color);
         }
-        
+
+        .code-block {
+            position: relative;
+            margin-bottom: 1.5rem;
+        }
+
         .markdown-content pre {
             background-color: var(--code-bg);
             border: 1px solid var(--border-color);
@@ -256,84 +433,367 @@
             margin-bottom: 1.5rem;
             line-height: 1.5;
         }
-        
+
+        .code-block pre {
+            margin-bottom: 0;
+        }
+
         .markdown-content pre code {
             background-color: transparent;
             padding: 0;
-            color: var(--text-color);
             font-size: 0.875rem;
         }
-        
+
+        .copy-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            padding: 4px 10px;
+            font-size: 12px;
+            font-family: inherit;
+            color: var(--muted-color);
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.15s ease, border-color 0.15s ease;
+        }
+
+        .code-block:hover .copy-btn,
+        .copy-btn:focus {
+            opacity: 1;
+        }
+
+        @media (hover: none) {
+            .copy-btn {
+                opacity: 1;
+            }
+        }
+
+        .copy-btn:hover {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+
+        .copy-btn.copied {
+            color: #16a34a;
+            border-color: #16a34a;
+            opacity: 1;
+        }
+
         .markdown-content blockquote {
             border-left: 4px solid var(--primary-color);
             padding-left: 1rem;
             margin: 1.5rem 0;
             font-style: italic;
-            color: #64748b;
+            color: var(--muted-color);
             background: var(--hover-color);
             padding: 1rem 1rem 1rem 1.5rem;
             border-radius: 0 0.5rem 0.5rem 0;
         }
-        
+
         .markdown-content table {
             width: 100%;
             border-collapse: collapse;
             margin-bottom: 1.5rem;
             font-size: 0.9rem;
         }
-        
+
         .markdown-content th, .markdown-content td {
             border: 1px solid var(--border-color);
             padding: 0.75rem;
             text-align: left;
         }
-        
+
         .markdown-content th {
             background-color: var(--secondary-color);
             font-weight: 600;
             color: var(--text-color);
         }
-        
+
         .markdown-content tr:hover {
             background-color: var(--hover-color);
         }
-        
+
         .markdown-content a {
             color: var(--primary-color);
             text-decoration: none;
             border-bottom: 1px solid transparent;
             transition: border-color 0.2s;
         }
-        
+
         .markdown-content a:hover {
             border-bottom-color: var(--primary-color);
         }
-        
+
         .markdown-content img {
             max-width: 100%;
             height: auto;
             border-radius: 0.5rem;
             margin: 1rem 0;
         }
-        
+
         .mermaid {
+            position: relative;
             margin: 2rem 0;
             padding: 1.5rem;
-            background: white;
+            background: var(--panel-bg);
             border: 1px solid var(--border-color);
             border-radius: 0.5rem;
             overflow-x: auto;
         }
-        
+
+        .mermaid svg {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .mermaid.zoomable svg {
+            cursor: zoom-in;
+        }
+
+        .mermaid-expand {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 15px;
+            line-height: 1;
+            color: var(--muted-color);
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.15s ease, border-color 0.15s ease;
+        }
+
+        .mermaid:hover .mermaid-expand,
+        .mermaid-expand:focus {
+            opacity: 1;
+        }
+
+        @media (hover: none) {
+            .mermaid-expand {
+                opacity: 1;
+            }
+        }
+
+        .mermaid-expand:hover {
+            color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+        .mermaid-lightbox {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 400;
+            background: var(--lightbox-bg);
+        }
+
+        .mermaid-lightbox.open {
+            display: block;
+        }
+
+        .lightbox-canvas {
+            position: absolute;
+            inset: 0;
+            overflow: hidden;
+            cursor: grab;
+            touch-action: none;
+        }
+
+        .lightbox-canvas.dragging {
+            cursor: grabbing;
+        }
+
+        .lightbox-stage {
+            position: absolute;
+            top: 0;
+            left: 0;
+            transform-origin: 0 0;
+        }
+
+        .lightbox-toolbar {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            z-index: 2;
+            display: flex;
+            gap: 8px;
+        }
+
+        .lightbox-toolbar button {
+            min-width: 38px;
+            height: 38px;
+            padding: 0 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            font-family: inherit;
+            color: var(--text-color);
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+            transition: border-color 0.15s ease, color 0.15s ease;
+        }
+
+        .lightbox-toolbar button:hover {
+            color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+        .lightbox-hint {
+            position: absolute;
+            bottom: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 2;
+            padding: 6px 14px;
+            font-size: 12px;
+            color: var(--muted-color);
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 999px;
+            pointer-events: none;
+        }
+
+        .mermaid-error {
+            padding: 1rem;
+            background: var(--error-bg);
+            border: 1px solid var(--error-border);
+            border-radius: 0.5rem;
+            color: var(--error-color);
+            font-size: 0.875rem;
+        }
+
+        .mermaid-error details {
+            margin-top: 0.5rem;
+        }
+
+        .mermaid-error summary {
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .mermaid-error pre {
+            margin-top: 0.5rem;
+            padding: 0.75rem;
+            background: var(--code-bg);
+            border-radius: 0.375rem;
+            overflow-x: auto;
+            color: var(--text-color);
+            font-size: 0.8rem;
+        }
+
+        .toc {
+            position: sticky;
+            top: 40px;
+            max-height: calc(100vh - 80px);
+            overflow-y: auto;
+            font-size: 13px;
+            padding-bottom: 20px;
+        }
+
+        .toc-title {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--muted-color);
+            margin-bottom: 8px;
+        }
+
+        .toc-link {
+            display: block;
+            padding: 4px 0 4px 12px;
+            color: var(--muted-color);
+            text-decoration: none;
+            border-left: 2px solid var(--border-color);
+            line-height: 1.4;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .toc-link.toc-h3 {
+            padding-left: 24px;
+        }
+
+        .toc-link:hover {
+            color: var(--primary-color);
+        }
+
+        .toc-link.active {
+            color: var(--primary-color);
+            border-left-color: var(--primary-color);
+            font-weight: 500;
+        }
+
+        .pager {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            margin-top: 3rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .pager:empty {
+            display: none;
+        }
+
+        .pager-link {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding: 12px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            text-decoration: none;
+            max-width: 48%;
+            transition: border-color 0.2s, background 0.2s;
+        }
+
+        .pager-link:hover {
+            border-color: var(--primary-color);
+            background: var(--hover-color);
+        }
+
+        .pager-next {
+            margin-left: auto;
+            text-align: right;
+        }
+
+        .pager-label {
+            font-size: 12px;
+            color: var(--muted-color);
+        }
+
+        .pager-title {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--primary-color);
+        }
+
         .loading {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             min-height: 400px;
-            color: #64748b;
+            color: var(--muted-color);
         }
-        
+
         .loading-spinner {
             width: 50px;
             height: 50px;
@@ -343,167 +803,340 @@
             animation: spin 1s linear infinite;
             margin-bottom: 1rem;
         }
-        
+
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
-        
+
         .error {
             padding: 2rem;
-            background: #fef2f2;
-            border: 1px solid #fecaca;
+            background: var(--error-bg);
+            border: 1px solid var(--error-border);
             border-radius: 0.5rem;
-            color: #991b1b;
+            color: var(--error-color);
             margin: 2rem 0;
         }
-        
+
         .error h3 {
             margin-bottom: 0.5rem;
         }
-        
-        @media (max-width: 1024px) {
-            .sidebar {
-                width: 100%;
-                position: relative;
-                height: auto;
-                border-right: none;
-                border-bottom: 1px solid var(--border-color);
+
+        .menu-toggle {
+            display: none;
+            position: fixed;
+            top: 12px;
+            left: 12px;
+            z-index: 300;
+            width: 40px;
+            height: 40px;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--panel-bg);
+            color: var(--text-color);
+            font-size: 18px;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+        }
+
+        .backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: var(--backdrop-color);
+            z-index: 150;
+        }
+
+        .backdrop.visible {
+            display: block;
+        }
+
+        @media (max-width: 1280px) {
+            .content-inner {
+                grid-template-columns: minmax(0, 1fr);
             }
-            
+
+            .toc {
+                display: none;
+            }
+        }
+
+        @media (max-width: 1024px) {
+            .menu-toggle {
+                display: flex;
+            }
+
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.25s ease;
+                box-shadow: 0 0 24px rgba(0, 0, 0, 0.2);
+            }
+
+            .sidebar.open {
+                transform: none;
+            }
+
             .content {
                 margin-left: 0;
-                padding: 20px;
+                padding: 72px 20px 20px;
                 max-width: 100%;
+            }
+
+            .markdown-content h1,
+            .markdown-content h2,
+            .markdown-content h3,
+            .markdown-content h4,
+            .markdown-content h5,
+            .markdown-content h6 {
+                scroll-margin-top: 64px;
             }
         }
     </style>
 </head>
 <body>
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">☰</button>
+    <div class="backdrop" id="backdrop"></div>
+
     <div class="container">
-        <nav class="sidebar">
+        <nav class="sidebar" id="sidebar">
+            <div class="sidebar-top">
+                <div class="logo">📚 {{TITLE}}</div>
+                <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle dark mode">🌙</button>
+            </div>
             {{REPO_LINK}}
-            <div class="logo">📚 {{TITLE}}</div>
-            
+
             <div class="repo-info" id="repo-info" style="display: {{SHOW_INFO}};">
                 <h4>Generation Info</h4>
                 <div id="info-content">{{INFO_CONTENT}}</div>
             </div>
-            
+
+            <input type="search" class="nav-filter" id="nav-filter" placeholder="Filter pages…" aria-label="Filter pages" autocomplete="off">
+
             <div class="nav-section">
                 <div class="nav-item active" data-file="overview.md">
                     📄 Overview
                 </div>
             </div>
-            
+
             <div id="navigation"></div>
         </nav>
-        
+
         <main class="content">
-            <div id="loading" class="loading">
-                <div class="loading-spinner"></div>
-                <p>Loading documentation...</p>
+            <div class="content-inner no-toc">
+                <div class="doc-column">
+                    <div id="loading" class="loading">
+                        <div class="loading-spinner"></div>
+                        <p>Loading documentation...</p>
+                    </div>
+
+                    <div id="content" class="markdown-content" style="display: none;"></div>
+
+                    <nav id="pager" class="pager" aria-label="Previous and next page"></nav>
+                </div>
+
+                <aside class="toc" id="toc" aria-label="Table of contents"></aside>
             </div>
-            
-            <div id="content" class="markdown-content" style="display: none;"></div>
         </main>
     </div>
-    
+
     <script>
         // Embedded configuration
         const CONFIG = {{CONFIG_JSON}};
         const MODULE_TREE = {{MODULE_TREE_JSON}};
         const METADATA = {{METADATA_JSON}};
         const DOCS_BASE_PATH = '{{DOCS_BASE_PATH}}';
-        
-        // Initialize marked with options
+
+        // Router / rendering state
+        let currentFile = null;
+        let loadToken = 0;
+        let scrollSpyObserver = null;
+
+        // Initialize marked. headerIds/mangle were removed in marked v5+;
+        // GitHub-compatible heading ids come from the marked-gfm-heading-id
+        // extension (wraps github-slugger), matching the anchors used in
+        // cross-document links inside the generated docs.
         marked.setOptions({
             breaks: true,
-            gfm: true,
-            headerIds: true,
-            mangle: false
+            gfm: true
         });
-        
-        // Initialize mermaid
-        mermaid.initialize({
-            startOnLoad: false,
-            theme: 'default',
-            themeVariables: {
-                primaryColor: '#2563eb',
-                primaryTextColor: '#334155',
-                primaryBorderColor: '#e2e8f0',
-                lineColor: '#64748b',
-                secondaryColor: '#f1f5f9',
-                tertiaryColor: '#f8fafc'
-            },
-            flowchart: { htmlLabels: true, curve: 'basis' },
-            sequence: { mirrorActors: true, useMaxWidth: true }
-        });
-        
+        if (typeof markedGfmHeadingId !== 'undefined') {
+            marked.use(markedGfmHeadingId.gfmHeadingId());
+        }
+
+        if (typeof hljs !== 'undefined') {
+            hljs.configure({ ignoreUnescapedHTML: true });
+        }
+
+        function isDarkTheme() {
+            return document.documentElement.getAttribute('data-theme') === 'dark';
+        }
+
+        function initMermaid() {
+            const config = {
+                startOnLoad: false,
+                suppressErrorRendering: true,
+                theme: isDarkTheme() ? 'dark' : 'default',
+                flowchart: { htmlLabels: true, curve: 'basis' },
+                sequence: { mirrorActors: true, useMaxWidth: true }
+            };
+            if (!isDarkTheme()) {
+                config.themeVariables = {
+                    primaryColor: '#2563eb',
+                    primaryTextColor: '#334155',
+                    primaryBorderColor: '#e2e8f0',
+                    lineColor: '#64748b',
+                    secondaryColor: '#f1f5f9',
+                    tertiaryColor: '#f8fafc'
+                };
+            }
+            mermaid.initialize(config);
+        }
+
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
             if (MODULE_TREE) {
                 buildNavigation();
             }
-            
-            // Load overview by default
-            loadDocument('overview.md');
+
+            setupNavFilter();
+            setupThemeToggle();
+            setupMobileDrawer();
+            setupLinkInterception();
+            initMermaid();
+
+            window.addEventListener('hashchange', onHashChange);
+            if (!location.hash) {
+                history.replaceState(null, '', buildHash('overview.md'));
+            }
+            onHashChange();
         });
-        
+
+        // ---------- Hash routing ----------
+        // URL scheme: #/<encodeURIComponent(filename)> or
+        //             #/<encodeURIComponent(filename)>:<heading-slug>
+        // encodeURIComponent escapes both '&' and ':' in filenames, and GitHub
+        // slugs never contain ':', so splitting on the first ':' is unambiguous.
+        // The leading '#/' distinguishes router hashes from plain in-page anchors.
+
+        function buildHash(file, anchor) {
+            return '#/' + encodeURIComponent(file) + (anchor ? ':' + anchor : '');
+        }
+
+        function parseHash() {
+            const hash = location.hash;
+            if (hash && hash.indexOf('#/') === 0) {
+                const raw = hash.slice(2);
+                const sep = raw.indexOf(':');
+                const filePart = sep === -1 ? raw : raw.slice(0, sep);
+                const anchor = sep === -1 ? null : raw.slice(sep + 1);
+                try {
+                    const file = decodeURIComponent(filePart);
+                    if (file) {
+                        return { file: file, anchor: anchor || null };
+                    }
+                } catch (e) {
+                    // Malformed hash: fall through to the overview
+                }
+            }
+            return { file: 'overview.md', anchor: null };
+        }
+
+        function navigateTo(file, anchor) {
+            closeDrawer();
+            const target = buildHash(file, anchor);
+            if (location.hash === target) {
+                // Same URL (e.g. clicking the current link again): re-run manually
+                onHashChange();
+            } else {
+                location.hash = target;
+            }
+        }
+
+        function onHashChange() {
+            const route = parseHash();
+            if (route.file !== currentFile) {
+                loadDocument(route.file, route.anchor);
+            } else if (route.anchor) {
+                scrollToAnchor(route.anchor);
+            } else {
+                window.scrollTo(0, 0);
+            }
+            setActiveNav(route.file);
+        }
+
+        function scrollToAnchor(anchor) {
+            if (!anchor) return;
+            const el = document.getElementById(anchor);
+            if (el) {
+                el.scrollIntoView({ block: 'start' });
+            }
+        }
+
+        // ---------- Sidebar navigation ----------
+
         function buildNavigation() {
             const nav = document.getElementById('navigation');
             let html = '';
-            
+
             for (const [key, data] of Object.entries(MODULE_TREE)) {
                 html += buildNavItem(key, data, 0);
             }
-            
+
             nav.innerHTML = html;
-            
-            // Add click handlers
-            document.querySelectorAll('.nav-item').forEach(item => {
-                item.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    const file = this.getAttribute('data-file');
+
+            // Delegated handlers for nav items and collapse toggles
+            document.getElementById('sidebar').addEventListener('click', function(e) {
+                const toggle = e.target.closest('.nav-toggle');
+                if (toggle) {
+                    toggle.closest('.nav-group').classList.toggle('collapsed');
+                    return;
+                }
+                const item = e.target.closest('.nav-item');
+                if (item) {
+                    const file = item.getAttribute('data-file');
                     if (file) {
-                        loadDocument(file);
-                        
-                        // Update active state
-                        document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-                        this.classList.add('active');
+                        navigateTo(file);
                     }
-                });
+                }
             });
         }
-        
-        function buildNavItem(key, data, depth) {
-            const indentClass = depth > 0 ? 'nav-subsection' : 'nav-section';
-            const fileName = `${key}.md`;
-            const hasChildren = data.children && Object.keys(data.children).length > 0;
 
-            let html = `<div class="${indentClass}">`;
+        function buildNavItem(key, data, depth) {
+            const fileName = key + '.md';
+            const hasChildren = data.children && Object.keys(data.children).length > 0;
+            const hasComponents = data.components && data.components.length > 0;
 
             // Every module in the tree has a generated doc (parents get a
             // synthesized overview), so render a link whenever the node has
             // components or children. Only the synthetic fallback tree's bare
             // top-level node stays a plain header.
-            if (depth === 0 && !hasChildren && !(data.components && data.components.length > 0)) {
-                html += `<h3>${formatNavTitle(key)}</h3>`;
+            let inner;
+            if (depth === 0 && !hasChildren && !hasComponents) {
+                inner = '<h3>' + escapeHtml(formatNavTitle(key)) + '</h3>';
             } else {
-                html += `<div class="nav-item${depth === 0 && hasChildren ? ' nav-parent' : ''}" data-file="${fileName}">
-                    ${formatNavTitle(key)}
-                </div>`;
+                const parentClass = depth === 0 && hasChildren ? ' nav-parent' : '';
+                inner = '<div class="nav-item' + parentClass + '" data-file="' + escapeHtml(fileName) + '">' +
+                    escapeHtml(formatNavTitle(key)) + '</div>';
             }
-            
-            if (data.children) {
-                for (const [childKey, childData] of Object.entries(data.children)) {
-                    html += buildNavItem(childKey, childData, depth + 1);
-                }
+
+            if (!hasChildren) {
+                return '<div class="nav-leaf">' + inner + '</div>';
             }
-            
-            html += '</div>';
-            return html;
+
+            let childrenHtml = '';
+            for (const [childKey, childData] of Object.entries(data.children)) {
+                childrenHtml += buildNavItem(childKey, childData, depth + 1);
+            }
+
+            // Top-level groups start expanded, deeper groups collapsed
+            const collapsed = depth >= 1 ? ' collapsed' : '';
+            return '<div class="nav-group' + collapsed + '">' +
+                '<div class="nav-row">' + inner +
+                '<button class="nav-toggle" type="button" aria-label="Toggle section">▸</button></div>' +
+                '<div class="nav-children">' + childrenHtml + '</div></div>';
         }
-        
+
         function formatNavTitle(key) {
             return key
                 .replace(/_/g, ' ')
@@ -511,97 +1144,156 @@
                 .map(word => word.charAt(0).toUpperCase() + word.slice(1))
                 .join(' ');
         }
-        
-        async function loadDocument(filename) {
-            const loading = document.getElementById('loading');
-            const content = document.getElementById('content');
-            
-            loading.style.display = 'flex';
-            content.style.display = 'none';
-            
-            try {
-                const docPath = DOCS_BASE_PATH ? `${DOCS_BASE_PATH}/${filename}` : filename;
-                const response = await fetch(docPath);
-                if (!response.ok) {
-                    throw new Error(`Failed to load ${filename}`);
-                }
-                
-                const markdown = await response.text();
-                const html = await renderMarkdown(markdown);
-                
-                content.innerHTML = html;
-                loading.style.display = 'none';
-                content.style.display = 'block';
-                
-                // Render mermaid diagrams
-                await renderMermaidDiagrams();
-                
-                // Add click handlers for internal markdown links
-                setupMarkdownLinks();
-                
-                // Scroll to top
-                window.scrollTo(0, 0);
-                
-            } catch (error) {
-                console.error('Error loading document:', error);
-                showError(`Failed to load document: ${filename}`);
+
+        function setActiveNav(filename) {
+            let active = null;
+            document.querySelectorAll('.nav-item').forEach(item => {
+                const isActive = item.getAttribute('data-file') === filename;
+                item.classList.toggle('active', isActive);
+                if (isActive) active = item;
+            });
+
+            // Reveal the active item by expanding its ancestor groups
+            let group = active && active.closest('.nav-group');
+            while (group) {
+                group.classList.remove('collapsed');
+                group = group.parentElement && group.parentElement.closest('.nav-group');
             }
         }
-        
-        function setupMarkdownLinks() {
-            // Use event delegation to intercept all link clicks in markdown content
+
+        function setupNavFilter() {
+            const input = document.getElementById('nav-filter');
+            const nav = document.getElementById('navigation');
+
+            input.addEventListener('input', function() {
+                const query = this.value.trim().toLowerCase();
+                nav.classList.toggle('filtering', !!query);
+
+                nav.querySelectorAll('.nav-group, .nav-leaf').forEach(node => {
+                    if (!query) {
+                        node.classList.remove('nav-hidden', 'filter-open');
+                        return;
+                    }
+                    // A node stays visible if its own title or any descendant
+                    // title matches; matching groups are force-expanded.
+                    const items = node.querySelectorAll('.nav-item');
+                    let anyMatch = false;
+                    items.forEach(item => {
+                        if (item.textContent.toLowerCase().includes(query)) {
+                            anyMatch = true;
+                        }
+                    });
+                    node.classList.toggle('nav-hidden', !anyMatch);
+                    if (node.classList.contains('nav-group')) {
+                        node.classList.toggle('filter-open', anyMatch);
+                    }
+                });
+            });
+        }
+
+        // ---------- Document loading & rendering ----------
+
+        async function loadDocument(filename, anchor) {
+            const token = ++loadToken;
+            const loading = document.getElementById('loading');
             const content = document.getElementById('content');
-            
-            // Remove any existing listener to avoid duplicates
-            const oldListener = content._markdownLinkListener;
-            if (oldListener) {
-                content.removeEventListener('click', oldListener);
+
+            closeMermaidLightbox();
+
+            loading.style.display = 'flex';
+            content.style.display = 'none';
+
+            try {
+                const docPath = DOCS_BASE_PATH ? DOCS_BASE_PATH + '/' + filename : filename;
+                const response = await fetch(docPath);
+                if (!response.ok) {
+                    throw new Error('Failed to load ' + filename);
+                }
+
+                const markdown = await response.text();
+                if (token !== loadToken) return; // superseded by a newer navigation
+
+                content.innerHTML = renderMarkdown(markdown);
+                loading.style.display = 'none';
+                content.style.display = 'block';
+                currentFile = filename;
+
+                highlightCodeBlocks();
+                addCopyButtons();
+
+                await renderMermaidDiagrams();
+                if (token !== loadToken) return;
+
+                buildTOC();
+                renderPagerLinks(filename);
+
+                // Scroll after diagrams render, since they shift the layout
+                if (anchor) {
+                    scrollToAnchor(anchor);
+                } else {
+                    window.scrollTo(0, 0);
+                }
+
+            } catch (error) {
+                console.error('Error loading document:', error);
+                if (token === loadToken) {
+                    showError('Failed to load document: ' + filename);
+                }
             }
-            
-            // Create new listener
-            const listener = function(e) {
-                // Find the closest anchor tag
+        }
+
+        function setupLinkInterception() {
+            // One delegated listener covers markdown content, the TOC and
+            // any other internal links.
+            document.addEventListener('click', function(e) {
                 const link = e.target.closest('a');
                 if (!link) return;
-                
+
                 const href = link.getAttribute('href');
                 if (!href) return;
-                
-                // Check if it's a markdown file link (ends with .md or .MD)
-                // Also handle cases with anchors like "file.md#section"
-                const mdMatch = href.match(/([^\/]*\.md(?:#.*)?$)/i);
+
+                // Router hashes (e.g. pager links): let the browser update the
+                // hash and the hashchange handler do the rest.
+                if (href.indexOf('#/') === 0) return;
+
+                // Plain in-page anchors (TOC, intra-document links): scroll and
+                // keep the URL shareable without triggering a reload.
+                if (href.charAt(0) === '#') {
+                    e.preventDefault();
+                    const slug = safeDecode(href.slice(1));
+                    scrollToAnchor(slug);
+                    if (currentFile && slug) {
+                        history.replaceState(null, '', buildHash(currentFile, slug));
+                    }
+                    return;
+                }
+
+                // Relative markdown links, optionally with an anchor
+                // (e.g. "Other_Module.md#some-section")
+                if (/^https?:/i.test(href)) return;
+                const mdMatch = href.match(/([^\/]*\.md)(?:#(.*))?$/i);
                 if (mdMatch) {
                     e.preventDefault();
                     e.stopPropagation();
-                    
-                    // Extract filename without anchor
-                    const fullMatch = mdMatch[1];
-                    const filename = fullMatch.split('#')[0];
-                    
-                    // Load the document
-                    loadDocument(filename);
-                    
-                    // Update active state in sidebar
-                    document.querySelectorAll('.nav-item').forEach(item => {
-                        if (item.getAttribute('data-file') === filename) {
-                            document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-                            item.classList.add('active');
-                        }
-                    });
+                    const filename = safeDecode(mdMatch[1]);
+                    const anchor = mdMatch[2] ? safeDecode(mdMatch[2]) : null;
+                    navigateTo(filename, anchor);
                 }
-            };
-            
-            // Store listener reference for cleanup
-            content._markdownLinkListener = listener;
-            
-            // Attach listener
-            content.addEventListener('click', listener);
+            });
         }
-        
-        async function renderMarkdown(markdown) {
+
+        function safeDecode(text) {
+            try {
+                return decodeURIComponent(text);
+            } catch (e) {
+                return text;
+            }
+        }
+
+        function renderMarkdown(markdown) {
             // Convert markdown to HTML using marked
             let html = marked.parse(markdown);
-            
+
             // Process mermaid code blocks
             html = html.replace(
                 /<pre><code class="language-mermaid">([\s\S]*?)<\/code><\/pre>/g,
@@ -612,45 +1304,446 @@
                         .replace(/&amp;/g, '&')
                         .replace(/&quot;/g, '"')
                         .replace(/&#39;/g, "'");
-                    return `<div class="mermaid">${decodedCode}</div>`;
+                    return '<div class="mermaid">' + decodedCode + '</div>';
                 }
             );
-            
+
             return html;
         }
-        
+
+        function highlightCodeBlocks() {
+            if (typeof hljs === 'undefined') return;
+            // Only highlight fences with an explicit language tag —
+            // auto-detection miscolors untagged output/log blocks.
+            document.querySelectorAll('#content pre code[class*="language-"]').forEach(el => {
+                if (el.classList.contains('language-mermaid')) return;
+                hljs.highlightElement(el);
+            });
+        }
+
+        function addCopyButtons() {
+            if (!navigator.clipboard) return; // requires a secure context
+
+            document.querySelectorAll('#content pre').forEach(pre => {
+                if (pre.closest('.mermaid') || pre.closest('.mermaid-error') || pre.closest('.code-block')) return;
+
+                // Wrap so the button doesn't scroll with wide code
+                const wrapper = document.createElement('div');
+                wrapper.className = 'code-block';
+                pre.parentNode.insertBefore(wrapper, pre);
+                wrapper.appendChild(pre);
+
+                const btn = document.createElement('button');
+                btn.className = 'copy-btn';
+                btn.type = 'button';
+                btn.textContent = 'Copy';
+                btn.addEventListener('click', function() {
+                    const code = pre.querySelector('code');
+                    const text = code ? code.innerText : pre.innerText;
+                    navigator.clipboard.writeText(text).then(() => {
+                        btn.textContent = 'Copied!';
+                        btn.classList.add('copied');
+                        setTimeout(() => {
+                            btn.textContent = 'Copy';
+                            btn.classList.remove('copied');
+                        }, 1500);
+                    });
+                });
+                wrapper.appendChild(btn);
+            });
+        }
+
         async function renderMermaidDiagrams() {
-            const mermaidElements = document.querySelectorAll('.mermaid');
-            
+            const mermaidElements = document.querySelectorAll('#content .mermaid');
+
             for (let i = 0; i < mermaidElements.length; i++) {
                 const element = mermaidElements[i];
-                const id = `mermaid-${Date.now()}-${i}`;
-                element.id = id;
-                
+                // Keep the source around so diagrams can re-render on theme change
+                if (!element.dataset.src) {
+                    element.dataset.src = element.textContent;
+                }
+
                 try {
-                    const { svg } = await mermaid.render(id + '-svg', element.textContent);
+                    const renderId = 'mermaid-svg-' + Date.now() + '-' + i;
+                    const { svg } = await mermaid.render(renderId, element.dataset.src);
                     element.innerHTML = svg;
+                    makeMermaidZoomable(element);
                 } catch (error) {
                     console.error('Mermaid rendering error:', error);
-                    element.innerHTML = `<pre>Error rendering diagram:\n${element.textContent}</pre>`;
+                    element.innerHTML = '<div class="mermaid-error">⚠️ Diagram failed to render' +
+                        '<details><summary>Show source</summary><pre>' +
+                        escapeHtml(element.dataset.src) + '</pre></details></div>';
                 }
             }
         }
-        
+
+        // ---------- Mermaid full-screen lightbox with pan & zoom ----------
+
+        let lightboxEl = null;
+        const lightboxState = { scale: 1, tx: 0, ty: 0, width: 0, height: 0 };
+
+        function makeMermaidZoomable(element) {
+            element.classList.add('zoomable');
+
+            const btn = document.createElement('button');
+            btn.className = 'mermaid-expand';
+            btn.type = 'button';
+            btn.title = 'Expand diagram';
+            btn.setAttribute('aria-label', 'Expand diagram');
+            btn.textContent = '⛶';
+            element.appendChild(btn);
+
+            element.addEventListener('click', function(e) {
+                if (e.target.closest('a')) return; // keep links inside diagrams working
+                openMermaidLightbox(element);
+            });
+        }
+
+        function ensureLightbox() {
+            if (lightboxEl) return lightboxEl;
+
+            lightboxEl = document.createElement('div');
+            lightboxEl.className = 'mermaid-lightbox';
+            lightboxEl.setAttribute('role', 'dialog');
+            lightboxEl.setAttribute('aria-label', 'Diagram viewer');
+            lightboxEl.innerHTML =
+                '<div class="lightbox-canvas"><div class="lightbox-stage"></div></div>' +
+                '<div class="lightbox-toolbar">' +
+                '<button type="button" data-action="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>' +
+                '<button type="button" data-action="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>' +
+                '<button type="button" data-action="reset" title="Reset view" aria-label="Reset view">Fit</button>' +
+                '<button type="button" data-action="close" title="Close (Esc)" aria-label="Close">✕</button>' +
+                '</div>' +
+                '<div class="lightbox-hint">Scroll to zoom · drag to pan · Esc to close</div>';
+            document.body.appendChild(lightboxEl);
+
+            const canvas = lightboxEl.querySelector('.lightbox-canvas');
+
+            lightboxEl.querySelector('.lightbox-toolbar').addEventListener('click', function(e) {
+                const button = e.target.closest('button');
+                if (!button) return;
+                const action = button.getAttribute('data-action');
+                const cx = canvas.clientWidth / 2;
+                const cy = canvas.clientHeight / 2;
+                if (action === 'zoom-in') zoomLightboxAt(cx, cy, 1.4);
+                else if (action === 'zoom-out') zoomLightboxAt(cx, cy, 1 / 1.4);
+                else if (action === 'reset') fitLightbox();
+                else if (action === 'close') closeMermaidLightbox();
+            });
+
+            // Wheel zoom centred on the cursor (trackpad pinch arrives as
+            // ctrl+wheel and is covered by the same handler)
+            canvas.addEventListener('wheel', function(e) {
+                e.preventDefault();
+                const rect = canvas.getBoundingClientRect();
+                const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+                zoomLightboxAt(e.clientX - rect.left, e.clientY - rect.top, factor);
+            }, { passive: false });
+
+            // Drag to pan; two pointers pinch to zoom (touch)
+            const pointers = new Map();
+            let lastPinchDist = 0;
+
+            canvas.addEventListener('pointerdown', function(e) {
+                canvas.setPointerCapture(e.pointerId);
+                pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+                if (pointers.size === 1) canvas.classList.add('dragging');
+                if (pointers.size === 2) {
+                    const pts = Array.from(pointers.values());
+                    lastPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+                }
+            });
+
+            canvas.addEventListener('pointermove', function(e) {
+                if (!pointers.has(e.pointerId)) return;
+                const prev = pointers.get(e.pointerId);
+                pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+                if (pointers.size === 1) {
+                    lightboxState.tx += e.clientX - prev.x;
+                    lightboxState.ty += e.clientY - prev.y;
+                    applyLightboxTransform();
+                } else if (pointers.size === 2) {
+                    const pts = Array.from(pointers.values());
+                    const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+                    if (lastPinchDist > 0) {
+                        const rect = canvas.getBoundingClientRect();
+                        const midX = (pts[0].x + pts[1].x) / 2 - rect.left;
+                        const midY = (pts[0].y + pts[1].y) / 2 - rect.top;
+                        zoomLightboxAt(midX, midY, dist / lastPinchDist);
+                    }
+                    lastPinchDist = dist;
+                }
+            });
+
+            function releasePointer(e) {
+                pointers.delete(e.pointerId);
+                lastPinchDist = 0;
+                if (pointers.size === 0) canvas.classList.remove('dragging');
+            }
+            canvas.addEventListener('pointerup', releasePointer);
+            canvas.addEventListener('pointercancel', releasePointer);
+
+            // Double-click to zoom in on a spot
+            canvas.addEventListener('dblclick', function(e) {
+                const rect = canvas.getBoundingClientRect();
+                zoomLightboxAt(e.clientX - rect.left, e.clientY - rect.top, 2);
+            });
+
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && lightboxEl.classList.contains('open')) {
+                    closeMermaidLightbox();
+                }
+            });
+
+            return lightboxEl;
+        }
+
+        function openMermaidLightbox(element) {
+            const svg = element.querySelector('svg');
+            if (!svg) return;
+
+            const lb = ensureLightbox();
+            const stage = lb.querySelector('.lightbox-stage');
+            stage.innerHTML = '';
+
+            const clone = svg.cloneNode(true);
+            let width = 800;
+            let height = 600;
+            const vb = clone.viewBox && clone.viewBox.baseVal;
+            if (vb && vb.width && vb.height) {
+                width = vb.width;
+                height = vb.height;
+            }
+            // Give the clone its natural size; scaling happens via transform
+            clone.style.maxWidth = 'none';
+            clone.style.width = width + 'px';
+            clone.style.height = height + 'px';
+            clone.setAttribute('width', width);
+            clone.setAttribute('height', height);
+            stage.style.width = width + 'px';
+            stage.style.height = height + 'px';
+            stage.appendChild(clone);
+
+            lightboxState.width = width;
+            lightboxState.height = height;
+
+            lb.classList.add('open');
+            document.body.style.overflow = 'hidden';
+            fitLightbox();
+        }
+
+        function fitLightbox() {
+            const canvas = lightboxEl.querySelector('.lightbox-canvas');
+            const cw = canvas.clientWidth;
+            const ch = canvas.clientHeight;
+            // Fill most of the screen — small diagrams get scaled UP
+            const fit = Math.min(cw * 0.9 / lightboxState.width, ch * 0.85 / lightboxState.height);
+            lightboxState.scale = Math.min(Math.max(fit, 0.1), 10);
+            lightboxState.tx = (cw - lightboxState.width * lightboxState.scale) / 2;
+            lightboxState.ty = (ch - lightboxState.height * lightboxState.scale) / 2;
+            applyLightboxTransform();
+        }
+
+        function zoomLightboxAt(x, y, factor) {
+            const newScale = Math.min(Math.max(lightboxState.scale * factor, 0.1), 12);
+            const applied = newScale / lightboxState.scale;
+            lightboxState.tx = x - (x - lightboxState.tx) * applied;
+            lightboxState.ty = y - (y - lightboxState.ty) * applied;
+            lightboxState.scale = newScale;
+            applyLightboxTransform();
+        }
+
+        function applyLightboxTransform() {
+            const stage = lightboxEl.querySelector('.lightbox-stage');
+            stage.style.transform = 'translate(' + lightboxState.tx + 'px, ' + lightboxState.ty + 'px) scale(' + lightboxState.scale + ')';
+        }
+
+        function closeMermaidLightbox() {
+            if (!lightboxEl) return;
+            lightboxEl.classList.remove('open');
+            lightboxEl.querySelector('.lightbox-stage').innerHTML = '';
+            document.body.style.overflow = '';
+        }
+
+        // ---------- On-page table of contents ----------
+
+        function buildTOC() {
+            const toc = document.getElementById('toc');
+            const contentInner = document.querySelector('.content-inner');
+            const headings = Array.from(document.querySelectorAll('#content h2, #content h3'))
+                .filter(h => h.id);
+
+            if (scrollSpyObserver) {
+                scrollSpyObserver.disconnect();
+                scrollSpyObserver = null;
+            }
+
+            if (headings.length < 3) {
+                toc.innerHTML = '';
+                contentInner.classList.add('no-toc');
+                return;
+            }
+
+            contentInner.classList.remove('no-toc');
+            let html = '<div class="toc-title">On this page</div>';
+            headings.forEach(h => {
+                html += '<a class="toc-link toc-' + h.tagName.toLowerCase() + '" href="#' +
+                    escapeHtml(h.id) + '">' + escapeHtml(h.textContent) + '</a>';
+            });
+            toc.innerHTML = html;
+
+            setupScrollSpy(headings);
+        }
+
+        function setupScrollSpy(headings) {
+            scrollSpyObserver = new IntersectionObserver(entries => {
+                entries.forEach(entry => {
+                    if (!entry.isIntersecting) return;
+                    const id = entry.target.id;
+                    document.querySelectorAll('.toc-link').forEach(a => {
+                        a.classList.toggle('active', a.getAttribute('href') === '#' + id);
+                    });
+                });
+            }, { rootMargin: '0px 0px -70% 0px' });
+
+            headings.forEach(h => scrollSpyObserver.observe(h));
+        }
+
+        // ---------- Prev/next pager ----------
+
+        function flattenModuleTree() {
+            const order = ['overview.md'];
+
+            function walk(tree, depth) {
+                for (const [key, data] of Object.entries(tree)) {
+                    const hasChildren = data.children && Object.keys(data.children).length > 0;
+                    const hasComponents = data.components && data.components.length > 0;
+                    // Mirror buildNavItem: skip bare headers without a doc
+                    if (depth > 0 || hasChildren || hasComponents) {
+                        order.push(key + '.md');
+                    }
+                    if (hasChildren) {
+                        walk(data.children, depth + 1);
+                    }
+                }
+            }
+
+            if (MODULE_TREE) {
+                walk(MODULE_TREE, 0);
+            }
+            return order;
+        }
+
+        const DOC_ORDER = flattenModuleTree();
+
+        function pageTitleFor(filename) {
+            const base = filename.replace(/\.md$/i, '');
+            return base === 'overview' ? 'Overview' : formatNavTitle(base);
+        }
+
+        function renderPagerLinks(filename) {
+            const pager = document.getElementById('pager');
+            const idx = DOC_ORDER.indexOf(filename);
+
+            if (idx === -1) {
+                pager.innerHTML = '';
+                return;
+            }
+
+            const prev = idx > 0 ? DOC_ORDER[idx - 1] : null;
+            const next = idx < DOC_ORDER.length - 1 ? DOC_ORDER[idx + 1] : null;
+
+            let html = '';
+            if (prev) {
+                html += '<a class="pager-link pager-prev" href="' + buildHash(prev) + '">' +
+                    '<span class="pager-label">← Previous</span>' +
+                    '<span class="pager-title">' + escapeHtml(pageTitleFor(prev)) + '</span></a>';
+            }
+            if (next) {
+                html += '<a class="pager-link pager-next" href="' + buildHash(next) + '">' +
+                    '<span class="pager-label">Next →</span>' +
+                    '<span class="pager-title">' + escapeHtml(pageTitleFor(next)) + '</span></a>';
+            }
+            pager.innerHTML = html;
+        }
+
+        // ---------- Theme ----------
+
+        function setupThemeToggle() {
+            syncThemeAssets();
+
+            document.getElementById('theme-toggle').addEventListener('click', async function() {
+                const dark = !isDarkTheme();
+                document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+                try {
+                    localStorage.setItem('codewiki-theme', dark ? 'dark' : 'light');
+                } catch (e) {
+                    // Storage unavailable (private mode etc.) — theme just won't persist
+                }
+
+                syncThemeAssets();
+                initMermaid();
+                closeMermaidLightbox();
+
+                // Re-render diagrams from their stored source in the new theme
+                document.querySelectorAll('#content .mermaid').forEach(el => {
+                    if (el.dataset.src) el.innerHTML = '';
+                });
+                await renderMermaidDiagrams();
+            });
+        }
+
+        function syncThemeAssets() {
+            const dark = isDarkTheme();
+            document.getElementById('theme-toggle').textContent = dark ? '☀️' : '🌙';
+
+            const lightCss = document.getElementById('hljs-theme-light');
+            const darkCss = document.getElementById('hljs-theme-dark');
+            if (lightCss) lightCss.disabled = dark;
+            if (darkCss) darkCss.disabled = !dark;
+        }
+
+        // ---------- Mobile drawer ----------
+
+        function setupMobileDrawer() {
+            document.getElementById('menu-toggle').addEventListener('click', function() {
+                const sidebar = document.getElementById('sidebar');
+                sidebar.classList.toggle('open');
+                document.getElementById('backdrop').classList.toggle('visible', sidebar.classList.contains('open'));
+            });
+
+            document.getElementById('backdrop').addEventListener('click', closeDrawer);
+        }
+
+        function closeDrawer() {
+            document.getElementById('sidebar').classList.remove('open');
+            document.getElementById('backdrop').classList.remove('visible');
+        }
+
+        // ---------- Utilities ----------
+
+        function escapeHtml(text) {
+            return String(text)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
         function showError(message) {
             const loading = document.getElementById('loading');
             const content = document.getElementById('content');
-            
+
             loading.style.display = 'none';
             content.style.display = 'block';
-            content.innerHTML = `
-                <div class="error">
-                    <h3>⚠️ Error</h3>
-                    <p>${message}</p>
-                </div>
-            `;
+            content.innerHTML = '<div class="error"><h3>⚠️ Error</h3><p>' +
+                escapeHtml(message) + '</p></div>';
+            document.getElementById('pager').innerHTML = '';
+            document.getElementById('toc').innerHTML = '';
+            document.querySelector('.content-inner').classList.add('no-toc');
         }
     </script>
 </body>
 </html>
-

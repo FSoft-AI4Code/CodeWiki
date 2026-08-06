@@ -215,6 +215,7 @@ class CLIDocumentationGenerator:
         from codewiki.src.be.cluster_modules import (
             cluster_modules,
             get_clustering_input_token_count,
+            super_group_modules,
         )
         from codewiki.src.utils import file_manager
         from codewiki.src.config import FIRST_MODULE_TREE_FILENAME, MODULE_TREE_FILENAME
@@ -227,6 +228,12 @@ class CLIDocumentationGenerator:
         try:
             if os.path.exists(first_module_tree_path):
                 module_tree = file_manager.load_json(first_module_tree_path)
+                # Never clobber an existing module_tree.json with the cached
+                # first tree: it carries sub-modules inserted by agents in
+                # earlier (resumed) runs, and those modules short-circuit on
+                # their existing .md without re-inserting their children.
+                if not os.path.exists(module_tree_path):
+                    file_manager.save_json(module_tree, module_tree_path)
                 if self.verbose:
                     self.progress_tracker.update_stage(0.5, "Loaded cached module tree")
             else:
@@ -259,13 +266,19 @@ class CLIDocumentationGenerator:
                     backend_config,
                     completer=lambda p: doc_generator.backend.complete(p, model=cluster_model),
                 )
+                if module_tree:
+                    module_tree = super_group_modules(
+                        module_tree,
+                        backend_config,
+                        completer=lambda p: doc_generator.backend.complete(p, model=cluster_model),
+                    )
                 # Only freshly clustered trees are deduped: renaming a cached
                 # key whose .md already exists would orphan the doc.
                 from codewiki.src.be.module_naming import dedupe_module_tree_names
                 module_tree = dedupe_module_tree_names(module_tree)
                 file_manager.save_json(module_tree, first_module_tree_path)
+                file_manager.save_json(module_tree, module_tree_path)
 
-            file_manager.save_json(module_tree, module_tree_path)
             self.job.module_count = len(module_tree)
 
             if self.verbose:

@@ -330,6 +330,12 @@ class DocumentationGenerator:
             if os.path.exists(first_module_tree_path):
                 logger.debug(f"Module tree found at {first_module_tree_path}")
                 module_tree = file_manager.load_json(first_module_tree_path)
+                # Never clobber an existing module_tree.json with the cached
+                # first tree: it carries sub-modules inserted by agents in
+                # earlier (resumed) runs, and those modules short-circuit on
+                # their existing .md without re-inserting their children.
+                if not os.path.exists(module_tree_path):
+                    file_manager.save_json(module_tree, module_tree_path)
             else:
                 logger.debug(f"Module tree not found at {module_tree_path}, clustering modules")
                 clustering_tokens = get_clustering_input_token_count(
@@ -362,8 +368,7 @@ class DocumentationGenerator:
                 # key whose .md already exists would orphan the doc.
                 module_tree = dedupe_module_tree_names(module_tree)
                 file_manager.save_json(module_tree, first_module_tree_path)
-            
-            file_manager.save_json(module_tree, module_tree_path)
+                file_manager.save_json(module_tree, module_tree_path)
             
             if len(module_tree) == 0:
                 logger.info(
