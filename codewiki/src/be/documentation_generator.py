@@ -287,6 +287,11 @@ class DocumentationGenerator:
         
         try:
             parent_docs = self.backend.complete(prompt)
+            if not parent_docs:
+                raise RuntimeError(
+                    f"LLM returned empty content for {module_name} overview "
+                    f"(possible output truncation at max_tokens)"
+                )
 
             # Parse and save parent documentation. Subscription-CLI backends
             # (claude-code / codex) sometimes ignore the <OVERVIEW> wrapper and

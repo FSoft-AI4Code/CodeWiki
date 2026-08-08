@@ -21,6 +21,11 @@ DEFAULT_MAX_TOKEN_PER_LEAF_MODULE = 4_000
 # Super-group the flat top level into architectural subsystems only when it
 # has more than this many modules; 0 or negative disables the pass.
 DEFAULT_MIN_MODULES_FOR_SUPER_GROUPING = 3
+# A single clustering call must re-emit every component ID in its output, so
+# huge inputs are partitioned by directory structure into batches of at most
+# this many leaf nodes (and further bounded by an output-token budget derived
+# from max_tokens).
+DEFAULT_MAX_LEAF_NODES_PER_CLUSTER = 600
 # Legacy constants (for backward compatibility)
 MAX_TOKEN_PER_MODULE = DEFAULT_MAX_TOKEN_PER_MODULE
 MAX_TOKEN_PER_LEAF_MODULE = DEFAULT_MAX_TOKEN_PER_LEAF_MODULE
@@ -74,6 +79,7 @@ class Config:
     max_token_per_module: int = DEFAULT_MAX_TOKEN_PER_MODULE
     max_token_per_leaf_module: int = DEFAULT_MAX_TOKEN_PER_LEAF_MODULE
     min_modules_for_super_grouping: int = DEFAULT_MIN_MODULES_FOR_SUPER_GROUPING
+    max_leaf_nodes_per_cluster: int = DEFAULT_MAX_LEAF_NODES_PER_CLUSTER
     # Prompt caching for agentic/multi-turn calls (auto-disables per model if
     # the provider rejects cache_control markers)
     prompt_caching: bool = True
@@ -182,6 +188,7 @@ class Config:
         max_token_per_module: int = DEFAULT_MAX_TOKEN_PER_MODULE,
         max_token_per_leaf_module: int = DEFAULT_MAX_TOKEN_PER_LEAF_MODULE,
         min_modules_for_super_grouping: int = DEFAULT_MIN_MODULES_FOR_SUPER_GROUPING,
+        max_leaf_nodes_per_cluster: int = DEFAULT_MAX_LEAF_NODES_PER_CLUSTER,
         max_depth: int = MAX_DEPTH,
         agent_instructions: Optional[Dict[str, Any]] = None,
         use_gitignore: bool = True,
@@ -208,6 +215,8 @@ class Config:
             min_modules_for_super_grouping: Super-group the top level into
                 subsystems only when it has more than this many modules
                 (0 or negative disables the pass)
+            max_leaf_nodes_per_cluster: Partition clustering inputs into
+                structure-based batches of at most this many leaf nodes
             max_depth: Maximum depth for hierarchical decomposition
             agent_instructions: Custom agent instructions dict
             use_gitignore: Whether to apply Git ignore rules
@@ -238,6 +247,7 @@ class Config:
             max_token_per_module=max_token_per_module,
             max_token_per_leaf_module=max_token_per_leaf_module,
             min_modules_for_super_grouping=min_modules_for_super_grouping,
+            max_leaf_nodes_per_cluster=max_leaf_nodes_per_cluster,
             agent_instructions=agent_instructions,
             use_gitignore=use_gitignore,
             prompt_caching=prompt_caching,
