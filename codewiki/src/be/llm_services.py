@@ -7,6 +7,8 @@ return slightly non-standard responses (e.g. choices[].index = None).
 Supports multiple providers: openai-compatible, anthropic, bedrock, azure-openai.
 """
 import logging
+from typing import Optional
+
 from openai.types import chat
 
 from pydantic_ai.exceptions import ModelHTTPError
@@ -260,11 +262,37 @@ def create_openai_client(config: Config) -> OpenAI:
     )
 
 
+def _extract_content(response, model: str) -> Optional[str]:
+    """Return the message content of *response*, or None if the provider gave none.
+
+    Logs the finish_reason so output truncation (finish_reason == "length",
+    which some proxies pair with ``content: null``) is visible in the logs
+    instead of surfacing later as an opaque NoneType error.
+    """
+    choice = response.choices[0]
+    content = choice.message.content
+    finish_reason = getattr(choice, "finish_reason", None)
+    if finish_reason == "length":
+        logger.warning(
+            "LLM response from %s stopped at the max_tokens limit "
+            "(finish_reason=length); output is truncated%s.",
+            model,
+            " and empty" if not content else "",
+        )
+    if content is None:
+        logger.warning(
+            "LLM returned no content (model=%s, finish_reason=%s); returning None.",
+            model,
+            finish_reason,
+        )
+    return content
+
+
 def call_llm(
     prompt: str,
     config: Config,
     model: str = None
-) -> str:
+) -> Optional[str]:
     """
     Call LLM with the given prompt.
 
@@ -280,7 +308,8 @@ def call_llm(
         model: Model name (defaults to config.main_model)
 
     Returns:
-        LLM response text
+        LLM response text, or None when the provider returned no content
+        (e.g. output truncated at max_tokens before any text was emitted).
     """
     if model is None:
         model = config.main_model
@@ -324,7 +353,7 @@ def call_llm(
             )
         else:
             raise
-    return response.choices[0].message.content
+    return _extract_content(response, model)
 
 
 def _is_unsupported_token_param_error(err: BadRequestError, param: str) -> bool:
@@ -344,7 +373,7 @@ def _call_llm_via_litellm(
     prompt: str,
     config: Config,
     model: str
-) -> str:
+) -> Optional[str]:
     """
     Call LLM via litellm for Bedrock/Anthropic providers.
 
@@ -368,14 +397,14 @@ def _call_llm_via_litellm(
         max_tokens=config.max_tokens,
         api_key=config.llm_api_key if config.provider != "bedrock" else None,
     )
-    return response.choices[0].message.content
+    return _extract_content(response, litellm_model)
 
 
 def _call_llm_via_azure(
     prompt: str,
     config: Config,
     model: str
-) -> str:
+) -> Optional[str]:
     """
     Call LLM via Azure OpenAI.
 
@@ -398,4 +427,4 @@ def _call_llm_via_azure(
         messages=[{"role": "user", "content": prompt}],
         max_tokens=config.max_tokens,
     )
-    return response.choices[0].message.content
+    return _extract_content(response, deployment)
