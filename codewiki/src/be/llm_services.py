@@ -6,6 +6,7 @@ return slightly non-standard responses (e.g. choices[].index = None).
 
 Supports multiple providers: openai-compatible, anthropic, bedrock, azure-openai.
 """
+import inspect
 import logging
 from typing import Optional
 
@@ -148,10 +149,16 @@ class CachingOpenAIModel(CompatibleOpenAIModel):
     def _prompt_caching_active(self) -> bool:
         return self._prompt_caching_enabled and self._cache_registry_key not in _CACHE_UNSUPPORTED
 
-    async def _map_messages(self, messages, model_request_parameters, *, model_settings=None):
-        openai_messages = await super()._map_messages(
-            messages, model_request_parameters, model_settings=model_settings
-        )
+    async def _map_messages(self, messages, model_request_parameters=None, *, model_settings=None):
+        base = OpenAIChatModel._map_messages
+        base_params = set(inspect.signature(base).parameters)
+        if "model_request_parameters" in base_params:
+            openai_messages = await super()._map_messages(
+                messages, model_request_parameters, model_settings=model_settings
+            )
+        else:
+            # pydantic-ai < 1.107: base _map_messages accepts only messages.
+            openai_messages = await super()._map_messages(messages)
         if self._prompt_caching_active:
             # Breakpoint 1: last system/developer message (covers tools + system).
             for message in reversed(openai_messages):
