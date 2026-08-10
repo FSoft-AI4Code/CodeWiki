@@ -57,6 +57,50 @@ def _map(model: CachingOpenAIModel) -> list:
     )
 
 
+def test_map_messages_adapts_to_all_base_signatures():
+    """Forward only the arguments supported by each pydantic-ai API era."""
+    model = _make_model(prompt_caching=False)
+    history = _history()
+    request_parameters = ModelRequestParameters()
+    model_settings = {"temperature": 0}
+    calls = []
+
+    async def one_argument(self, messages):
+        calls.append(("one", messages))
+        return []
+
+    async def two_arguments(self, messages, model_request_parameters):
+        calls.append(("two", messages, model_request_parameters))
+        return []
+
+    async def three_arguments(
+        self, messages, model_request_parameters, *, model_settings=None
+    ):
+        calls.append(("three", messages, model_request_parameters, model_settings))
+        return []
+
+    original = OpenAIChatModel._map_messages
+    try:
+        for base_method in (one_argument, two_arguments, three_arguments):
+            OpenAIChatModel._map_messages = base_method
+            result = asyncio.run(
+                model._map_messages(
+                    history,
+                    request_parameters,
+                    model_settings=model_settings,
+                )
+            )
+            assert result == []
+    finally:
+        OpenAIChatModel._map_messages = original
+
+    assert calls == [
+        ("one", history),
+        ("two", history, request_parameters),
+        ("three", history, request_parameters, model_settings),
+    ]
+
+
 def test_injects_breakpoints_on_system_and_final_message():
     _CACHE_UNSUPPORTED.clear()
     messages = _map(_make_model())
