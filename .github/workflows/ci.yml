@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov ruff
+          pip install -e . --no-deps
+
+      - name: Run tests
+        run: pytest -p no:cacheprovider -o addopts="" tests/ -q
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Collect changed Python files
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BASE_SHA: ${{ github.event.before }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            diff_range="${PR_BASE_SHA}...${PR_HEAD_SHA}"
+          else
+            diff_range="${PUSH_BASE_SHA}..${GITHUB_SHA}"
+          fi
+
+          git diff --name-only --diff-filter=ACMR -z "$diff_range" -- '*.py' \
+            > "$RUNNER_TEMP/changed-python-files"
+
+      - name: Ruff check changed files
+        run: |
+          xargs -0 -r ruff check --output-format=github \
+            < "$RUNNER_TEMP/changed-python-files"
+
+      - name: Ruff format check changed files
+        run: |
+          xargs -0 -r ruff format --check \
+            < "$RUNNER_TEMP/changed-python-files"
