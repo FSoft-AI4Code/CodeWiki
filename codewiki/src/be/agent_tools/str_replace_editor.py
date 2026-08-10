@@ -1,19 +1,16 @@
-#!/usr/bin/env python3
-
 """Source: https://github.com/SWE-agent/SWE-agent/blob/main/tools/edit_anthropic/bin/str_replace_editor
 This tool is used to view the given source code and view/edit the documentation files in the separate docs directory.
 """
 
+import io
 import json
+import logging
 import re
 import subprocess
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Annotated, List, Literal, Optional, Tuple
-import io
-
-import logging
+from typing import Annotated, Literal
 
 # Configure logging and monitoring
 
@@ -22,8 +19,8 @@ logger = logging.getLogger(__name__)
 from pydantic import BeforeValidator
 from pydantic_ai import RunContext, Tool
 
-from .deps import CodeWikiDeps
 from ..utils import validate_mermaid_diagrams
+from .deps import CodeWikiDeps
 
 
 def _coerce_json_string(value):
@@ -45,8 +42,8 @@ def _coerce_json_string(value):
     return value
 
 
-ViewRange = Annotated[Optional[List[int]], BeforeValidator(_coerce_json_string)]
-InsertLine = Annotated[Optional[int], BeforeValidator(_coerce_json_string)]
+ViewRange = Annotated[list[int] | None, BeforeValidator(_coerce_json_string)]
+InsertLine = Annotated[int | None, BeforeValidator(_coerce_json_string)]
 
 
 # There are some super strange "ascii can't decode x" errors,
@@ -55,8 +52,7 @@ InsertLine = Annotated[Optional[int], BeforeValidator(_coerce_json_string)]
 # Only re-wrap a real TextIOWrapper whose encoding is not already utf-8,
 # so pytest's capture object (EncodedFile) is never clobbered.
 if isinstance(sys.stdout, io.TextIOWrapper) and (
-    sys.stdout.encoding is None
-    or sys.stdout.encoding.lower() not in ("utf-8", "utf8")
+    sys.stdout.encoding is None or sys.stdout.encoding.lower() not in ("utf-8", "utf8")
 ):
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
@@ -90,7 +86,7 @@ Edit the file again if necessary.
 """
 
 
-def maybe_truncate(content: str, truncate_after: Optional[int] = MAX_RESPONSE_LEN):
+def maybe_truncate(content: str, truncate_after: int | None = MAX_RESPONSE_LEN):
     """Truncate content and append a notice if content exceeds the specified length."""
     return (
         content
@@ -133,8 +129,10 @@ class Flake8Error:
 
 
 def _update_previous_errors(
-    previous_errors: List[Flake8Error], replacement_window: Tuple[int, int], replacement_n_lines: int
-) -> List[Flake8Error]:
+    previous_errors: list[Flake8Error],
+    replacement_window: tuple[int, int],
+    replacement_n_lines: int,
+) -> list[Flake8Error]:
     """Update the line numbers of the previous errors to what they would be after the edit window.
     This is a helper function for `_filter_previous_errors`.
 
@@ -161,7 +159,11 @@ def _update_previous_errors(
             # either way (we wouldn't know how to adjust the line number anyway)
             continue
         # We're out of the edit window, so we need to adjust the line number
-        updated.append(Flake8Error(error.filename, error.line_number + lines_added, error.col_number, error.problem))
+        updated.append(
+            Flake8Error(
+                error.filename, error.line_number + lines_added, error.col_number, error.problem
+            )
+        )
     return updated
 
 
@@ -170,8 +172,8 @@ def format_flake8_output(
     show_line_numbers: bool = False,
     *,
     previous_errors_string: str = "",
-    replacement_window: Optional[Tuple[int, int]] = None,
-    replacement_n_lines: Optional[int] = None,
+    replacement_window: tuple[int, int] | None = None,
+    replacement_n_lines: int | None = None,
 ) -> str:
     """Filter flake8 output for previous errors and print it for a given file.
 
@@ -189,17 +191,23 @@ def format_flake8_output(
     # print("Replacement n lines:", replacement_n_lines)
     # print("Previous errors string:", previous_errors_string)
     # print("Input string:", input_string)
-    errors = [Flake8Error.from_line(line.strip()) for line in input_string.split("\n") if line.strip()]
+    errors = [
+        Flake8Error.from_line(line.strip()) for line in input_string.split("\n") if line.strip()
+    ]
     # print(f"New errors before filtering: {errors=}")
     lines = []
     if previous_errors_string:
         assert replacement_window is not None
         assert replacement_n_lines is not None
         previous_errors = [
-            Flake8Error.from_line(line.strip()) for line in previous_errors_string.split("\n") if line.strip()
+            Flake8Error.from_line(line.strip())
+            for line in previous_errors_string.split("\n")
+            if line.strip()
         ]
         # print(f"Previous errors before updating: {previous_errors=}")
-        previous_errors = _update_previous_errors(previous_errors, replacement_window, replacement_n_lines)
+        previous_errors = _update_previous_errors(
+            previous_errors, replacement_window, replacement_n_lines
+        )
         # print(f"Previous errors after updating: {previous_errors=}")
         errors = [error for error in errors if error not in previous_errors]
         # Sometimes new errors appear above the replacement window that were 'shadowed' by the previous errors
@@ -219,8 +227,9 @@ def flake8(file_path: str) -> str:
     if Path(file_path).suffix != ".py":
         return ""
     cmd = "flake8 --isolated --select=F821,F822,F831,E111,E112,E113,E999,E902 {file_path}"
-    # don't use capture_output because it's not compatible with python3.6
-    out = subprocess.run(cmd.format(file_path=file_path), shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    out = subprocess.run(
+        cmd.format(file_path=file_path), shell=True, capture_output=True, check=False
+    )
     # Use errors="replace" so non-UTF-8 bytes (e.g. GBK-encoded paths on Windows) don't crash decoding.
     return out.stdout.decode("utf-8", errors="replace")
 
@@ -228,6 +237,7 @@ def flake8(file_path: str) -> str:
 class Filemap:
     def show_filemap(self, file_contents: str, encoding: str = "utf8"):
         import warnings
+
         from tree_sitter_languages import get_language, get_parser
 
         warnings.simplefilter("ignore", category=FutureWarning)
@@ -254,12 +264,20 @@ class Filemap:
         ]
         # Note that tree-sitter line numbers are 0-indexed, but we display 1-indexed.
         elide_lines = {line for start, end in elide_line_ranges for line in range(start, end + 1)}
-        elide_messages = [(start, f"... eliding lines {start+1}-{end+1} ...") for start, end in elide_line_ranges]
+        elide_messages = [
+            (start, f"... eliding lines {start + 1}-{end + 1} ...")
+            for start, end in elide_line_ranges
+        ]
         out = []
         for i, line in sorted(
-            elide_messages + [(i, line) for i, line in enumerate(file_contents.splitlines()) if i not in elide_lines]
+            elide_messages
+            + [
+                (i, line)
+                for i, line in enumerate(file_contents.splitlines())
+                if i not in elide_lines
+            ]
         ):
-            out.append(f"{i+1:6d} {line}")
+            out.append(f"{i + 1:6d} {line}")
         return "\n".join(out)
 
 
@@ -275,7 +293,9 @@ class WindowExpander:
         if self.suffix:
             assert self.suffix.startswith(".")
 
-    def _find_breakpoints(self, lines: List[str], current_line: int, direction=1, max_added_lines: int = 30) -> int:
+    def _find_breakpoints(
+        self, lines: list[str], current_line: int, direction=1, max_added_lines: int = 30
+    ) -> int:
         """Returns 1-based line number of breakpoint. This line is meant to still be included in the viewport.
 
         Args:
@@ -342,13 +362,20 @@ class WindowExpander:
             # print(f"Score {score} for line {i_line} ({line})")
 
         # print(f"Best score {best_score} for line {best_breakpoint} ({lines[best_breakpoint-1]})")
-        if direction == 1 and best_breakpoint < current_line or direction == -1 and best_breakpoint > current_line:
+        if (
+            direction == 1
+            and best_breakpoint < current_line
+            or direction == -1
+            and best_breakpoint > current_line
+        ):
             # We don't want to shrink the view port, so we return the current line
             return current_line
 
         return best_breakpoint
 
-    def expand_window(self, lines: List[str], start: int, stop: int, max_added_lines: int) -> Tuple[int, int]:
+    def expand_window(
+        self, lines: list[str], start: int, stop: int, max_added_lines: int
+    ) -> tuple[int, int]:
         """
 
         Args:
@@ -366,7 +393,9 @@ class WindowExpander:
         if max_added_lines <= 0:
             # Already at max range, no expansion
             return start, stop
-        new_start = self._find_breakpoints(lines, start, direction=-1, max_added_lines=max_added_lines)
+        new_start = self._find_breakpoints(
+            lines, start, direction=-1, max_added_lines=max_added_lines
+        )
         new_stop = self._find_breakpoints(lines, stop, direction=1, max_added_lines=max_added_lines)
         # print(f"Expanded window is {new_start} to {new_stop}")
         assert new_start <= new_stop, (new_start, new_stop)
@@ -415,11 +444,11 @@ class EditTool:
         *,
         command: Command,
         path: str,
-        file_text: Optional[str] = None,
-        view_range: Optional[List[int]] = None,
-        old_str: Optional[str] = None,
-        new_str: Optional[str] = None,
-        insert_line: Optional[int] = None,
+        file_text: str | None = None,
+        view_range: list[int] | None = None,
+        old_str: str | None = None,
+        new_str: str | None = None,
+        insert_line: int | None = None,
         **kwargs,
     ):
         _path = Path(path)
@@ -466,38 +495,47 @@ class EditTool:
             return False
         # Check if path exists
         if not path.exists() and command != "create":
-            self.logs.append(f"The path {self._get_display_path(path)} does not exist. Please provide a valid path.")
+            self.logs.append(
+                f"The path {self._get_display_path(path)} does not exist. Please provide a valid path."
+            )
             return False
         if path.exists() and command == "create":
-            self.logs.append(f"File already exists at: {self._get_display_path(path)}. Cannot overwrite files using command `create`.")
+            self.logs.append(
+                f"File already exists at: {self._get_display_path(path)}. Cannot overwrite files using command `create`."
+            )
             return False
         # Check if the path points to a directory
-        if path.is_dir():
-            if command != "view":
-                self.logs.append(f"The path {self._get_display_path(path)} is a directory and only the `view` command can be used on directories")
-                return False
+        if path.is_dir() and command != "view":
+            self.logs.append(
+                f"The path {self._get_display_path(path)} is a directory and only the `view` command can be used on directories"
+            )
+            return False
         return True
 
     def create_file(self, path: Path, file_text: str):
         if not path.parent.exists():
-            self.logs.append(f"The parent directory {self._get_display_path(path.parent)} does not exist. Please create it first.")
+            self.logs.append(
+                f"The parent directory {self._get_display_path(path.parent)} does not exist. Please create it first."
+            )
             return
         self.write_file(path, file_text)
         self._file_history[path].append(file_text)
         self.logs.append(f"File created successfully at: {self._get_display_path(path)}")
 
-    def view(self, path: Path, view_range: Optional[List[int]] = None):
+    def view(self, path: Path, view_range: list[int] | None = None):
         """Implement the view command"""
         if path.is_dir():
             if view_range:
-                self.logs.append("The `view_range` parameter is not allowed when `path` points to a directory.")
+                self.logs.append(
+                    "The `view_range` parameter is not allowed when `path` points to a directory."
+                )
                 return
 
             out = subprocess.run(
                 rf"find {path} -maxdepth 2 -not -path '*/\.*'",
                 shell=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
+                check=False,
             )
             # Use errors="replace" so non-UTF-8 bytes (e.g. GBK-encoded filenames on Windows) don't crash decoding.
             stdout = out.stdout.decode("utf-8", errors="replace")
@@ -545,8 +583,10 @@ class EditTool:
         else:
             if path.suffix == ".py" and len(file_content) > MAX_RESPONSE_LEN and USE_FILEMAP:
                 try:
-                    filemap = Filemap().show_filemap(file_content, encoding=self._encoding or "utf-8")
-                except Exception:
+                    filemap = Filemap().show_filemap(
+                        file_content, encoding=self._encoding or "utf-8"
+                    )
+                except Exception:  # noqa: S110, BLE001
                     # If we fail to show the filemap, just show the truncated file content
                     pass
                 else:
@@ -564,9 +604,11 @@ class EditTool:
             init_line = 1
 
         # init_line is 1-based
-        self.logs.append(self._make_output(file_content, self._get_display_path(path), init_line=init_line))
+        self.logs.append(
+            self._make_output(file_content, self._get_display_path(path), init_line=init_line)
+        )
 
-    def str_replace(self, path: Path, old_str: str, new_str: Optional[str]):
+    def str_replace(self, path: Path, old_str: str, new_str: str | None):
         """Implement the str_replace command, which replaces old_str with new_str in the file content"""
         # Read the file content
         file_content = self.read_file(path).expandtabs()
@@ -576,7 +618,9 @@ class EditTool:
         # Check if old_str is unique in the file
         occurrences = file_content.count(old_str)
         if occurrences == 0:
-            self.logs.append(f"No replacement was performed, old_str `{old_str}` did not appear verbatim in {self._get_display_path(path)}.")
+            self.logs.append(
+                f"No replacement was performed, old_str `{old_str}` did not appear verbatim in {self._get_display_path(path)}."
+            )
             return
         elif occurrences > 1:
             file_content_lines = file_content.split("\n")
@@ -587,14 +631,16 @@ class EditTool:
             return
 
         if new_str == old_str:
-            self.logs.append(f"No replacement was performed, old_str `{old_str}` is the same as new_str `{new_str}`.")
+            self.logs.append(
+                f"No replacement was performed, old_str `{old_str}` is the same as new_str `{new_str}`."
+            )
             return
 
         pre_edit_lint = ""
         if USE_LINTER:
             try:
                 pre_edit_lint = flake8(str(path))
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 self.logs.append(f"Warning: Failed to run pre-edit linter on {path}: {e}")
 
         # Replace old_str with new_str
@@ -607,12 +653,11 @@ class EditTool:
         if USE_LINTER:
             try:
                 post_edit_lint = flake8(str(path))
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 self.logs.append(f"Warning: Failed to run post-edit linter on {path}: {e}")
 
         epilogue = ""
         if post_edit_lint:
-            ...
             replacement_window_start_line = file_content.split(old_str)[0].count("\n") + 1
             replacement_lines = len(new_str.split("\n"))
             replacement_window_end_line = replacement_window_start_line + replacement_lines - 1
@@ -632,15 +677,23 @@ class EditTool:
         # Create a snippet of the edited section
         replacement_line = file_content.split(old_str)[0].count("\n")
         start_line = max(1, replacement_line - SNIPPET_LINES)
-        end_line = min(replacement_line + SNIPPET_LINES + new_str.count("\n"), len(new_file_content.splitlines()))
+        end_line = min(
+            replacement_line + SNIPPET_LINES + new_str.count("\n"),
+            len(new_file_content.splitlines()),
+        )
         start_line, end_line = WindowExpander(suffix=path.suffix).expand_window(
-            new_file_content.split("\n"), start_line, end_line, max_added_lines=MAX_WINDOW_EXPANSION_EDIT_CONFIRM
+            new_file_content.split("\n"),
+            start_line,
+            end_line,
+            max_added_lines=MAX_WINDOW_EXPANSION_EDIT_CONFIRM,
         )
         snippet = "\n".join(new_file_content.split("\n")[start_line - 1 : end_line])
 
         # Prepare the success message
         success_msg = f"The file {self._get_display_path(path)} has been edited. "
-        success_msg += self._make_output(snippet, f"a snippet of {self._get_display_path(path)}", start_line)
+        success_msg += self._make_output(
+            snippet, f"a snippet of {self._get_display_path(path)}", start_line
+        )
         success_msg += "Review the changes and make sure they are as expected. Edit the file again if necessary."
         success_msg += epilogue
 
@@ -660,7 +713,9 @@ class EditTool:
             return
 
         new_str_lines = new_str.split("\n")
-        new_file_text_lines = file_text_lines[:insert_line] + new_str_lines + file_text_lines[insert_line:]
+        new_file_text_lines = (
+            file_text_lines[:insert_line] + new_str_lines + file_text_lines[insert_line:]
+        )
         snippet_lines = (
             file_text_lines[max(0, insert_line - SNIPPET_LINES) : insert_line]
             + new_str_lines
@@ -693,7 +748,9 @@ class EditTool:
         old_text = self._file_history[path].pop()
         self.write_file(path, old_text)
 
-        self.logs.append(f"Last edit to {self._get_display_path(path)} undone successfully. {self._make_output(old_text, self._get_display_path(path))}")
+        self.logs.append(
+            f"Last edit to {self._get_display_path(path)} undone successfully. {self._make_output(old_text, self._get_display_path(path))}"
+        )
 
     def read_file(self, path: Path):
         """Read the content of a file from a given path; raise a ToolError if an error occurs."""
@@ -712,7 +769,9 @@ class EditTool:
             else:
                 break
         else:
-            self.logs.append(f"Ran into UnicodeDecodeError {exception} while trying to read {self._get_display_path(path)}")
+            self.logs.append(
+                f"Ran into UnicodeDecodeError {exception} while trying to read {self._get_display_path(path)}"
+            )
             return
         return text
 
@@ -720,8 +779,10 @@ class EditTool:
         """Write the content of a file to a given path; raise a ToolError if an error occurs."""
         try:
             path.write_text(file, encoding=self._encoding or "utf-8")
-        except Exception as e:
-            self.logs.append(f"Ran into {e} while trying to write to {self._get_display_path(path)}")
+        except Exception as e:  # noqa: BLE001
+            self.logs.append(
+                f"Ran into {e} while trying to write to {self._get_display_path(path)}"
+            )
             return
 
     def _make_output(
@@ -735,19 +796,24 @@ class EditTool:
         file_content = maybe_truncate(file_content)
         if expand_tabs:
             file_content = file_content.expandtabs()
-        file_content = "\n".join([f"{i + init_line:6}\t{line}" for i, line in enumerate(file_content.split("\n"))])
-        return f"Here's the result of running `cat -n` on {file_descriptor}:\n" + file_content + "\n"
+        file_content = "\n".join(
+            [f"{i + init_line:6}\t{line}" for i, line in enumerate(file_content.split("\n"))]
+        )
+        return (
+            f"Here's the result of running `cat -n` on {file_descriptor}:\n" + file_content + "\n"
+        )
+
 
 async def str_replace_editor(
     ctx: RunContext[CodeWikiDeps],
     working_dir: Literal["repo", "docs"],
     command: Literal["view", "create", "str_replace", "insert", "undo_edit"],
-    path: Optional[str] = None,
-    file: Optional[str] = None,
-    file_text: Optional[str] = None,
+    path: str | None = None,
+    file: str | None = None,
+    file_text: str | None = None,
     view_range: ViewRange = None,
-    old_str: Optional[str] = None,
-    new_str: Optional[str] = None,
+    old_str: str | None = None,
+    new_str: str | None = None,
     insert_line: InsertLine = None,
 ) -> str:
     """
@@ -817,5 +883,5 @@ Custom editing tool for viewing, creating and editing files
     * The `undo_edit` command will revert the last edit made to the file at `path`
     * Only `view` command is allowed when `working_dir` is `repo`.
 """.strip(),
-    takes_ctx=True
+    takes_ctx=True,
 )
