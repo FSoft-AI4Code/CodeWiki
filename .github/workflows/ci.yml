@@ -49,12 +49,27 @@ jobs:
       - name: Install ruff
         run: pip install ruff
 
+      - name: Collect changed Python files
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BASE_SHA: ${{ github.event.before }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            diff_range="${PR_BASE_SHA}...${PR_HEAD_SHA}"
+          else
+            diff_range="${PUSH_BASE_SHA}..${GITHUB_SHA}"
+          fi
+
+          git diff --name-only --diff-filter=ACMR -z "$diff_range" -- '*.py' \
+            > "$RUNNER_TEMP/changed-python-files"
+
       - name: Ruff check changed files
         run: |
-          git diff --name-only "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" -- '*.py' \
-            | xargs -r ruff check --output-format=github
+          xargs -0 -r ruff check --output-format=github \
+            < "$RUNNER_TEMP/changed-python-files"
 
       - name: Ruff format check changed files
         run: |
-          git diff --name-only "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" -- '*.py' \
-            | xargs -r ruff format --check
+          xargs -0 -r ruff format --check \
+            < "$RUNNER_TEMP/changed-python-files"
