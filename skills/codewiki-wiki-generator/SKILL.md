@@ -30,7 +30,7 @@ If tools are unavailable, prompt the user to install and configure CodeWiki:
 
 ```bash
 git clone https://github.com/FSoft-AI4Code/CodeWiki.git
-cd CodeWiki && pip install -e .
+cd CodeWiki && uv sync --extra dev
 ```
 
 Then add to MCP configuration:

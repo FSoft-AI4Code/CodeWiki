@@ -59,13 +59,7 @@ dependencies = [
     "colorama>=0.4.6",
     "logfire>=4.1.0",
     "coding-agent-wrapper>=0.1.2",
-    "mcp>=1.0.0"
-]
-
-[external]
-# Node.js is required for mermaid-py which validates mermaid diagrams in generated documentation
-build-requires = [
-    { name = "nodejs", version = ">=14.0.0" }
+    "mcp>=1.0.0,<2"
 ]
 
 [project.optional-dependencies]

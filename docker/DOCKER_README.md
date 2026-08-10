@@ -143,9 +143,9 @@ The Dockerfile (`docker/Dockerfile`) builds the CodeWiki image with:
 - `nodejs` and `npm` - For mermaid diagram validation
 
 ### Application Setup
-1. Copies `requirements.txt` first (for better caching)
-2. Installs Python dependencies
-3. Copies entire application code
+1. Copies `pyproject.toml`, `README.md`, and the `codewiki` package
+2. Installs the package and its dependencies via `pip install .`
+3. Copies remaining assets (`img`)
 4. Creates output directories:
    - `output/cache`
    - `output/temp`

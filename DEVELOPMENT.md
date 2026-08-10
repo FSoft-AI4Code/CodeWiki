@@ -38,9 +38,8 @@ codewiki/
 ├── paper/                    # Research paper source
 ├── tests/                    # Test suite
 ├── output/                   # Generated documentation output
-├── pyproject.toml           # Project metadata
-├── requirements.txt         # Python dependencies
-└── README.md                # Main documentation
+├── pyproject.toml            # Project metadata + dependencies
+└── README.md                 # Main documentation
 ```
 
 ## Development Setup
@@ -59,15 +58,15 @@ codewiki/
 git clone https://github.com/FSoft-AI4Code/CodeWiki.git
 cd CodeWiki
 
-# Create virtual environment
-python3.12 -m venv .venv
+# Install uv (if not already installed)
+# curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Create virtual environment and install dependencies (reads .python-version)
+uv sync --extra dev
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
-# Install in development mode
-pip install -e .
-
-# Install development dependencies
-pip install -r requirements.txt
+# Run the test suite
+uv run pytest
 ```
 
 ## Core Components

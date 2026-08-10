@@ -51,8 +51,14 @@ InsertLine = Annotated[Optional[int], BeforeValidator(_coerce_json_string)]
 
 # There are some super strange "ascii can't decode x" errors,
 # that can be solved with setting the default encoding for stdout
-# (note that python3.6 doesn't have the reconfigure method)
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+# (note that python3.6 doesn't have the reconfigure method).
+# Only re-wrap a real TextIOWrapper whose encoding is not already utf-8,
+# so pytest's capture object (EncodedFile) is never clobbered.
+if isinstance(sys.stdout, io.TextIOWrapper) and (
+    sys.stdout.encoding is None
+    or sys.stdout.encoding.lower() not in ("utf-8", "utf8")
+):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
 TRUNCATED_MESSAGE: str = "<response clipped><NOTE>To save on context only part of this file has been shown to you. You should retry this tool after you have searched inside the file with `grep -n` in order to find the line numbers of what you are looking for.</NOTE>"
 MAX_RESPONSE_LEN: int = 16000

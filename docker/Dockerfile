@@ -12,17 +12,16 @@ RUN apt-get update && apt-get install -y \
     npm \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
-COPY requirements.txt .
-
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application code
-COPY codewiki ./codewiki
-COPY img ./img
+# Copy package source and metadata, then install
 COPY pyproject.toml .
 COPY README.md .
+COPY codewiki ./codewiki
+
+# Install Python dependencies and package
+RUN pip install --no-cache-dir .
+
+# Copy remaining assets
+COPY img ./img
 
 # Create output directories
 RUN mkdir -p output/cache output/temp output/docs output/dependency_graphs

@@ -107,10 +107,10 @@ git clone https://github.com/FSoft-AI4Code/CodeWiki.git
 cd CodeWiki
 
 # 2. Install dependencies
-pip install -e .
+uv sync --extra dev
 
 # 3. Verify
-python -c "from codewiki.mcp.server import server; print('MCP Server OK')"
+uv run python -c "from codewiki.mcp.server import server; print('MCP Server OK')"
 ```
 
 ### CodeBuddy Configuration
@@ -359,7 +359,7 @@ See the Quick Start section in [README.md](README.md) for details.
 ## FAQ
 
 **Q: MCP Server fails to start with missing dependencies?**
-A: Make sure you have run `pip install -e .` to install CodeWiki and its dependencies. The MCP Server no longer requires CLI-specific packages like `keyring` or `click`.
+A: Make sure you have run `uv sync --extra dev` to install CodeWiki and its dependencies. The MCP Server no longer requires CLI-specific packages like `keyring` or `click`.
 
 **Q: analyze_repo is slow?**
 A: Tree-sitter parsing for large repositories (>100K lines) takes some time, usually completing within 30 seconds. Use `include_patterns` / `exclude_patterns` to narrow the analysis scope. There are no component count or source code length truncation limits.

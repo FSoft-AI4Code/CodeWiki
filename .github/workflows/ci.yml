@@ -19,19 +19,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v6
         with:
-          python-version: "3.12"
-          cache: pip
+          enable-cache: true
 
       - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pytest pytest-asyncio pytest-cov ruff
-          pip install -e . --no-deps
+        run: uv sync --frozen --extra dev
 
       - name: Run tests
-        run: pytest -p no:cacheprovider -o addopts="" tests/ -q
+        run: uv run pytest -p no:cacheprovider -o addopts="" tests/ -q
 
   lint:
     name: Lint
@@ -42,12 +38,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v6
         with:
-          python-version: "3.12"
+          enable-cache: true
 
-      - name: Install ruff
-        run: pip install ruff
+      - name: Install dependencies
+        run: uv sync --frozen --extra dev
 
       - name: Collect changed Python files
         env:
@@ -66,10 +62,10 @@ jobs:
 
       - name: Ruff check changed files
         run: |
-          xargs -0 -r ruff check --output-format=github \
+          xargs -0 -r uv run ruff check --output-format=github \
             < "$RUNNER_TEMP/changed-python-files"
 
       - name: Ruff format check changed files
         run: |
-          xargs -0 -r ruff format --check \
+          xargs -0 -r uv run ruff format --check \
             < "$RUNNER_TEMP/changed-python-files"
