@@ -117,9 +117,17 @@ class DocumentationGenerator:
 
     def build_overview_structure(self, module_tree: Dict[str, Any], module_path: List[str],
                                  working_dir: str) -> Dict[str, Any]:
-        """Build structure for overview generation with 1-depth children docs and target indicator."""
-        
+        """Build structure for overview generation with 1-depth children doc paths and target indicator.
+
+        Children docs are referenced by absolute file path (``docs_path``)
+        rather than inlined, and ``components`` lists are stripped: inlining
+        the full tree plus docs blew past provider input caps (codex rejects
+        turns over 1,048,576 chars) on large repos. The overview agent reads
+        the referenced files itself.
+        """
+
         processed_module_tree = deepcopy(module_tree)
+        self._strip_components(processed_module_tree)
         module_info = processed_module_tree
         for path_part in module_path:
             module_info = module_info[path_part]
@@ -134,12 +142,24 @@ class DocumentationGenerator:
         for child_name, child_info in module_info.items():
             child_docs_path = self._resolve_child_docs_path(working_dir, child_name)
             if child_docs_path is not None:
-                child_info["docs"] = file_manager.load_text(child_docs_path)
+                child_info["docs_path"] = child_docs_path
             else:
                 logger.warning(f"Module docs not found at {os.path.join(working_dir, f'{child_name}.md')}")
-                child_info["docs"] = ""
+                child_info["docs_path"] = None
 
         return processed_module_tree
+
+    @classmethod
+    def _strip_components(cls, tree: Dict[str, Any]) -> None:
+        """Recursively drop ``components`` lists — they dominate the tree's
+        serialized size and add nothing to an overview prompt."""
+        for module_info in tree.values():
+            if not isinstance(module_info, dict):
+                continue
+            module_info.pop("components", None)
+            children = module_info.get("children")
+            if isinstance(children, dict):
+                cls._strip_components(children)
 
     @staticmethod
     def _resolve_child_docs_path(working_dir: str, child_name: str) -> str | None:
@@ -274,17 +294,18 @@ class DocumentationGenerator:
             logger.info(f"✓ Parent docs already exists at {parent_docs_path}")
             return module_tree
 
-        # Create repo structure with 1-depth children docs and target indicator
+        # Create repo structure with 1-depth children doc paths and target indicator
         repo_structure = self.build_overview_structure(module_tree, module_path, working_dir)
 
         prompt = MODULE_OVERVIEW_PROMPT.format(
             module_name=module_name,
-            repo_structure=json.dumps(repo_structure, indent=4)
+            repo_structure=json.dumps(repo_structure, indent=2)
         ) if len(module_path) >= 1 else REPO_OVERVIEW_PROMPT.format(
             repo_name=module_name,
-            repo_structure=json.dumps(repo_structure, indent=4)
+            repo_structure=json.dumps(repo_structure, indent=2)
         )
-        
+        logger.debug(f"Overview prompt for {module_name}: {len(prompt)} chars")
+
         try:
             parent_docs = self.backend.complete(prompt)
             if not parent_docs:

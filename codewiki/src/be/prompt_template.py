@@ -98,10 +98,12 @@ The overview should be a brief documentation of the repository, including:
 - The end-to-end architecture of the repository visualized by mermaid diagrams
 - The references to the core modules documentation
 
-Provide `{repo_name}` repo structure and its core modules documentation:
+Provide `{repo_name}` repo structure:
 <REPO_STRUCTURE>
 {repo_structure}
 </REPO_STRUCTURE>
+
+The core modules' documentation is NOT inlined above. Each top-level module carries a `docs_path` field with the absolute path to its documentation file — read those files with your file-reading tools before writing the overview (skip entries whose `docs_path` is null).
 
 Please generate the overview of the `{repo_name}` repository in markdown format with the following structure:
 <OVERVIEW>
@@ -117,10 +119,12 @@ The overview should be a brief documentation of the module, including:
 - The architecture of the module visualized by mermaid diagrams
 - The references to the core components documentation
 
-Provide repo structure and core components documentation of the `{module_name}` module:
+Provide repo structure of the `{module_name}` module (marked with `is_target_for_overview_generation`):
 <REPO_STRUCTURE>
 {repo_structure}
 </REPO_STRUCTURE>
+
+The child modules' documentation is NOT inlined above. Each child of the target module carries a `docs_path` field with the absolute path to its documentation file — read those files with your file-reading tools before writing the overview (skip entries whose `docs_path` is null).
 
 Please generate the overview of the `{module_name}` module in markdown format with the following structure:
 <OVERVIEW>
