@@ -98,10 +98,12 @@ The overview should be a brief documentation of the repository, including:
 - The end-to-end architecture of the repository visualized by mermaid diagrams
 - The references to the core modules documentation
 
-Provide `{repo_name}` repo structure and its core modules documentation:
+Provide `{repo_name}` repo structure:
 <REPO_STRUCTURE>
 {repo_structure}
 </REPO_STRUCTURE>
+
+The core modules' documentation is NOT inlined above. Each top-level module carries a `docs_path` field with the absolute path to its documentation file — read those files with your file-reading tools before writing the overview (skip entries whose `docs_path` is null).
 
 Please generate the overview of the `{repo_name}` repository in markdown format with the following structure:
 <OVERVIEW>
@@ -117,10 +119,12 @@ The overview should be a brief documentation of the module, including:
 - The architecture of the module visualized by mermaid diagrams
 - The references to the core components documentation
 
-Provide repo structure and core components documentation of the `{module_name}` module:
+Provide repo structure of the `{module_name}` module (marked with `is_target_for_overview_generation`):
 <REPO_STRUCTURE>
 {repo_structure}
 </REPO_STRUCTURE>
+
+The child modules' documentation is NOT inlined above. Each child of the target module carries a `docs_path` field with the absolute path to its documentation file — read those files with your file-reading tools before writing the overview (skip entries whose `docs_path` is null).
 
 Please generate the overview of the `{module_name}` module in markdown format with the following structure:
 <OVERVIEW>
@@ -253,7 +257,8 @@ Please shortlist the files, folders representing the core functionality and igno
 Reasoning at first, then return the list of relative paths in JSON format.
 """
 
-from typing import Dict, Any
+from typing import Any
+
 from codewiki.src.utils import file_manager
 
 EXTENSION_TO_LANGUAGE = {
@@ -271,37 +276,40 @@ EXTENSION_TO_LANGUAGE = {
     ".hpp": "cpp",
     ".tsx": "typescript",
     ".cc": "cpp",
-    ".hpp": "cpp",
     ".cxx": "cpp",
     ".jsx": "javascript",
     ".mjs": "javascript",
     ".cjs": "javascript",
-    ".jsx": "javascript",
     ".cs": "csharp",
     ".kt": "kotlin",
     ".kts": "kotlin",
     ".php": "php",
     ".phtml": "php",
-    ".inc": "php"
+    ".inc": "php",
 }
 
 
-def format_user_prompt(module_name: str, core_component_ids: list[str], components: Dict[str, Any], module_tree: dict[str, any]) -> str:
+def format_user_prompt(
+    module_name: str,
+    core_component_ids: list[str],
+    components: dict[str, Any],
+    module_tree: dict[str, any],
+) -> str:
     """
     Format the user prompt with module name and organized core component codes.
-    
+
     Args:
         module_name: Name of the module to document
         core_component_ids: List of component IDs to include
         components: Dictionary mapping component IDs to CodeComponent objects
-    
+
     Returns:
         Formatted user prompt string
     """
 
     # format module tree
     lines = []
-    
+
     def _format_module_tree(module_tree: dict[str, any], indent: int = 0):
         for key, value in module_tree.items():
             if key == module_name:
@@ -311,8 +319,9 @@ def format_user_prompt(module_name: str, core_component_ids: list[str], componen
 
             # Group components by file
             from collections import defaultdict
+
             by_file = defaultdict(list)
-            for c in value['components']:
+            for c in value["components"]:
                 if "::" in c:
                     fpath, name = c.split("::", 1)
                     by_file[fpath].append(name)
@@ -347,46 +356,60 @@ def format_user_prompt(module_name: str, core_component_ids: list[str], componen
     core_component_codes = ""
     for path, component_ids_in_file in grouped_components.items():
         core_component_codes += f"# File: {path}\n\n"
-        core_component_codes += f"## Core Components in this file:\n"
-        
+        core_component_codes += "## Core Components in this file:\n"
+
         for component_id in component_ids_in_file:
             core_component_codes += f"- {component_id}\n"
-        
-        core_component_codes += f"\n## File Content:\n```{EXTENSION_TO_LANGUAGE['.'+path.split('.')[-1]]}\n"
-        
+
+        core_component_codes += (
+            f"\n## File Content:\n```{EXTENSION_TO_LANGUAGE['.' + path.split('.')[-1]]}\n"
+        )
+
         # Read content of the file using the first component's file path
         try:
-            core_component_codes += file_manager.load_text(components[component_ids_in_file[0]].file_path)
-        except (FileNotFoundError, IOError) as e:
+            core_component_codes += file_manager.load_text(
+                components[component_ids_in_file[0]].file_path
+            )
+        except (OSError, FileNotFoundError) as e:
             core_component_codes += f"# Error reading file: {e}\n"
-        
+
         core_component_codes += "```\n\n"
-        
-    return USER_PROMPT.format(module_name=module_name, formatted_core_component_codes=core_component_codes, module_tree=formatted_module_tree)
+
+    return USER_PROMPT.format(
+        module_name=module_name,
+        formatted_core_component_codes=core_component_codes,
+        module_tree=formatted_module_tree,
+    )
 
 
-
-def format_cluster_prompt(potential_core_components: str, module_tree: dict[str, any] = {}, module_name: str = None) -> str:
+def format_cluster_prompt(
+    potential_core_components: str,
+    module_tree: dict[str, any] | None = None,
+    module_name: str | None = None,
+) -> str:
     """
     Format the cluster prompt with potential core components and module tree.
     """
+    if module_tree is None:
+        module_tree = {}
 
     # format module tree
     lines = []
 
     # print(f"Module tree:\n{json.dumps(module_tree, indent=2)}")
-    
+
     def _format_module_tree(module_tree: dict[str, any], indent: int = 0):
         for key, value in module_tree.items():
             if key == module_name:
                 lines.append(f"{'  ' * indent}{key} (current module)")
             else:
                 lines.append(f"{'  ' * indent}{key}")
-            
+
             # Group components by file
             from collections import defaultdict
+
             by_file = defaultdict(list)
-            for c in value['components']:
+            for c in value["components"]:
                 if "::" in c:
                     fpath, name = c.split("::", 1)
                     by_file[fpath].append(name)
@@ -398,21 +421,28 @@ def format_cluster_prompt(potential_core_components: str, module_tree: dict[str,
                 else:
                     lines.append(f"{'  ' * (indent + 1)} {', '.join(names)}")
 
-            if ("children" in value) and isinstance(value["children"], dict) and len(value["children"]) > 0:
+            if (
+                ("children" in value)
+                and isinstance(value["children"], dict)
+                and len(value["children"]) > 0
+            ):
                 lines.append(f"{'  ' * (indent + 1)} Children:")
                 _format_module_tree(value["children"], indent + 2)
-    
+
     _format_module_tree(module_tree, 0)
     formatted_module_tree = "\n".join(lines)
-
 
     if module_tree == {}:
         return CLUSTER_REPO_PROMPT.format(potential_core_components=potential_core_components)
     else:
-        return CLUSTER_MODULE_PROMPT.format(potential_core_components=potential_core_components, module_tree=formatted_module_tree, module_name=module_name)
+        return CLUSTER_MODULE_PROMPT.format(
+            potential_core_components=potential_core_components,
+            module_tree=formatted_module_tree,
+            module_name=module_name,
+        )
 
 
-def format_super_group_prompt(module_tree: Dict[str, Any]) -> str:
+def format_super_group_prompt(module_tree: dict[str, Any]) -> str:
     """
     Format the super-grouping prompt with the flat top-level modules of a tree.
     """
@@ -425,37 +455,39 @@ def format_super_group_prompt(module_tree: Dict[str, Any]) -> str:
     return SUPER_GROUP_PROMPT.format(formatted_modules="\n".join(lines))
 
 
-def format_system_prompt(module_name: str, custom_instructions: str = None) -> str:
+def format_system_prompt(module_name: str, custom_instructions: str | None = None) -> str:
     """
     Format the system prompt with module name and optional custom instructions.
-    
+
     Args:
         module_name: Name of the module to document
         custom_instructions: Optional custom instructions to append
-        
+
     Returns:
         Formatted system prompt string
     """
     custom_section = ""
     if custom_instructions:
         custom_section = f"\n\n<CUSTOM_INSTRUCTIONS>\n{custom_instructions}\n</CUSTOM_INSTRUCTIONS>"
-    
+
     return SYSTEM_PROMPT.format(module_name=module_name, custom_instructions=custom_section).strip()
 
 
-def format_leaf_system_prompt(module_name: str, custom_instructions: str = None) -> str:
+def format_leaf_system_prompt(module_name: str, custom_instructions: str | None = None) -> str:
     """
     Format the leaf system prompt with module name and optional custom instructions.
-    
+
     Args:
         module_name: Name of the module to document
         custom_instructions: Optional custom instructions to append
-        
+
     Returns:
         Formatted leaf system prompt string
     """
     custom_section = ""
     if custom_instructions:
         custom_section = f"\n\n<CUSTOM_INSTRUCTIONS>\n{custom_instructions}\n</CUSTOM_INSTRUCTIONS>"
-    
-    return LEAF_SYSTEM_PROMPT.format(module_name=module_name, custom_instructions=custom_section).strip()
+
+    return LEAF_SYSTEM_PROMPT.format(
+        module_name=module_name, custom_instructions=custom_section
+    ).strip()
