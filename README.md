@@ -48,7 +48,7 @@ codewiki --version
 
 ### 2. Configure Your Environment
 
-CodeWiki supports multiple LLM providers: **OpenAI-compatible**, **Atlas Cloud**, **Anthropic**, **AWS Bedrock**, **Azure OpenAI**, plus subscription mode via **Claude Code** and **Codex** CLIs (no API key required).
+CodeWiki supports multiple LLM providers: **OpenAI-compatible**, **Atlas Cloud**, **OrcaRouter**, **Anthropic**, **AWS Bedrock**, **Azure OpenAI**, plus subscription mode via **Claude Code** and **Codex** CLIs (no API key required).
 
 ```bash
 # OpenAI-compatible
@@ -67,6 +67,14 @@ codewiki config set \
   --main-model anthropic/claude-sonnet-4.6 \
   --cluster-model anthropic/claude-sonnet-4.6 \
   --fallback-model zai-org/GLM-4.6
+
+# OrcaRouter — base URL auto-set to https://api.orcarouter.ai/v1;
+# API key read from $ORCAROUTER_API_KEY when --api-key is omitted.
+codewiki config set \
+  --provider orcarouter \
+  --main-model anthropic/claude-sonnet-5 \
+  --cluster-model anthropic/claude-sonnet-5 \
+  --fallback-model z-ai/glm-4.6
 
 # Anthropic
 codewiki config set \
@@ -109,6 +117,8 @@ codewiki config set \
 ```
 
 **About Atlas Cloud.** [Atlas Cloud](https://www.atlascloud.ai) is a full-modal AI inference platform that exposes LLM, image, and video models (300+) behind a single OpenAI-compatible API, so it works with CodeWiki out of the box. Browse model IDs at the [models endpoint](https://api.atlascloud.ai/v1/models) and pick a strong coding model for `--main-model` / `--cluster-model`; their [coding plan](https://www.atlascloud.ai/console/coding-plan) offers budget-friendly API access.
+
+**About OrcaRouter.** [OrcaRouter](https://www.orcarouter.ai) is a fast, cost-aware AI gateway that routes every call through OpenAI- and Anthropic-compatible endpoints, so it works with CodeWiki out of the box. It also runs gateway-level, zero-trust security for AI agents on the same endpoint — screening every prompt/response and governing every tool call on a default-deny basis, with no application code changes. Browse model IDs at the [models endpoint](https://api.orcarouter.ai/v1/models) and pick a strong coding model for `--main-model` / `--cluster-model`.
 
 **Subscription mode** routes every LLM call through the local `claude` / `codex` CLI binary (via the [`caw`](https://github.com/zzjas/caw) library), so you can run CodeWiki on a Claude Pro/Max or Codex subscription instead of paying per-token API usage. Claude Code's built-in `Write`/`Edit`/`Bash` tools are disabled inside CodeWiki's agent loop so documentation writes still go through CodeWiki's Mermaid-validating editor.
 
