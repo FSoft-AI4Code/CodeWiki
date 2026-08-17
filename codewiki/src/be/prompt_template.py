@@ -257,9 +257,31 @@ Please shortlist the files, folders representing the core functionality and igno
 Reasoning at first, then return the list of relative paths in JSON format.
 """
 
+import logging
+from collections import defaultdict
 from typing import Any
 
 from codewiki.src.utils import file_manager
+
+logger = logging.getLogger(__name__)
+
+# codex rejects any turn whose total input exceeds 1,048,576 characters
+# (input_too_large, code -32602 — server-side, not configurable).  Cap the
+# user prompt below that, leaving headroom for the system prompt, tool
+# schemas and protocol overhead.
+MAX_USER_PROMPT_CHARS = 900_000
+
+MODULE_TREE_TRIMMED_NOTE = (
+    "NOTE: per-module component listings were omitted because the full module "
+    "tree exceeds the model input limit. Module names and hierarchy are "
+    "complete; read the referenced modules' documentation files or use your "
+    "code-reading tools when you need component-level detail."
+)
+
+CODE_TRUNCATED_NOTE = (
+    "\n... [file contents truncated to fit the model input limit — use your "
+    "file-reading tools to read the full files]"
+)
 
 EXTENSION_TO_LANGUAGE = {
     ".py": "python",
@@ -289,6 +311,54 @@ EXTENSION_TO_LANGUAGE = {
 }
 
 
+def _format_module_tree_str(
+    module_tree: dict[str, Any],
+    current_module_name: str | None = None,
+    include_components: bool = True,
+) -> str:
+    """
+    Render a module tree as an indented text outline.
+
+    With include_components=False only module names and hierarchy are
+    emitted, which keeps the outline small enough for huge trees that would
+    otherwise blow past MAX_USER_PROMPT_CHARS.
+    """
+    lines: list[str] = []
+
+    def _walk(tree: dict[str, Any], indent: int = 0) -> None:
+        for key, value in tree.items():
+            if key == current_module_name:
+                lines.append(f"{'  ' * indent}{key} (current module)")
+            else:
+                lines.append(f"{'  ' * indent}{key}")
+
+            if include_components:
+                # Group components by file
+                by_file = defaultdict(list)
+                for c in value["components"]:
+                    if "::" in c:
+                        fpath, name = c.split("::", 1)
+                        by_file[fpath].append(name)
+                    else:
+                        by_file[""].append(c)
+                for fpath, names in by_file.items():
+                    if fpath:
+                        lines.append(f"{'  ' * (indent + 1)} {fpath}: {', '.join(names)}")
+                    else:
+                        lines.append(f"{'  ' * (indent + 1)} {', '.join(names)}")
+
+            if (
+                ("children" in value)
+                and isinstance(value["children"], dict)
+                and len(value["children"]) > 0
+            ):
+                lines.append(f"{'  ' * (indent + 1)} Children:")
+                _walk(value["children"], indent + 2)
+
+    _walk(module_tree, 0)
+    return "\n".join(lines)
+
+
 def format_user_prompt(
     module_name: str,
     core_component_ids: list[str],
@@ -306,41 +376,7 @@ def format_user_prompt(
     Returns:
         Formatted user prompt string
     """
-
-    # format module tree
-    lines = []
-
-    def _format_module_tree(module_tree: dict[str, any], indent: int = 0):
-        for key, value in module_tree.items():
-            if key == module_name:
-                lines.append(f"{'  ' * indent}{key} (current module)")
-            else:
-                lines.append(f"{'  ' * indent}{key}")
-
-            # Group components by file
-            from collections import defaultdict
-
-            by_file = defaultdict(list)
-            for c in value["components"]:
-                if "::" in c:
-                    fpath, name = c.split("::", 1)
-                    by_file[fpath].append(name)
-                else:
-                    by_file[""].append(c)
-            for fpath, names in by_file.items():
-                if fpath:
-                    lines.append(f"{'  ' * (indent + 1)} {fpath}: {', '.join(names)}")
-                else:
-                    lines.append(f"{'  ' * (indent + 1)} {', '.join(names)}")
-
-            if isinstance(value["children"], dict) and len(value["children"]) > 0:
-                lines.append(f"{'  ' * (indent + 1)} Children:")
-                _format_module_tree(value["children"], indent + 2)
-
-    _format_module_tree(module_tree, 0)
-    formatted_module_tree = "\n".join(lines)
-
-    # print(f"Formatted module tree:\n{formatted_module_tree}")
+    formatted_module_tree = _format_module_tree_str(module_tree, module_name)
 
     # Group core component IDs by their file path
     grouped_components: dict[str, list[str]] = {}
@@ -375,11 +411,55 @@ def format_user_prompt(
 
         core_component_codes += "```\n\n"
 
-    return USER_PROMPT.format(
+    prompt = USER_PROMPT.format(
         module_name=module_name,
         formatted_core_component_codes=core_component_codes,
         module_tree=formatted_module_tree,
     )
+
+    if len(prompt) > MAX_USER_PROMPT_CHARS:
+        full_len = len(prompt)
+        formatted_module_tree = (
+            MODULE_TREE_TRIMMED_NOTE
+            + "\n\n"
+            + _format_module_tree_str(module_tree, module_name, include_components=False)
+        )
+        prompt = USER_PROMPT.format(
+            module_name=module_name,
+            formatted_core_component_codes=core_component_codes,
+            module_tree=formatted_module_tree,
+        )
+        logger.warning(
+            "Module %s: user prompt (%d chars) exceeds %d; "
+            "module tree trimmed to names only (%d chars)",
+            module_name,
+            full_len,
+            MAX_USER_PROMPT_CHARS,
+            len(prompt),
+        )
+
+    if len(prompt) > MAX_USER_PROMPT_CHARS:
+        # Even the slim tree was not enough — the inlined file contents
+        # dominate.  Truncation is recoverable: the agent has file-reading
+        # tools (read_code_components / str_replace_editor).
+        excess = len(prompt) - MAX_USER_PROMPT_CHARS + len(CODE_TRUNCATED_NOTE)
+        core_component_codes = (
+            core_component_codes[: max(0, len(core_component_codes) - excess)] + CODE_TRUNCATED_NOTE
+        )
+        prompt = USER_PROMPT.format(
+            module_name=module_name,
+            formatted_core_component_codes=core_component_codes,
+            module_tree=formatted_module_tree,
+        )
+        logger.warning(
+            "Module %s: user prompt still over %d chars after tree trim; "
+            "truncated inlined file contents (now %d chars)",
+            module_name,
+            MAX_USER_PROMPT_CHARS,
+            len(prompt),
+        )
+
+    return prompt
 
 
 def format_cluster_prompt(
@@ -393,53 +473,38 @@ def format_cluster_prompt(
     if module_tree is None:
         module_tree = {}
 
-    # format module tree
-    lines = []
-
-    # print(f"Module tree:\n{json.dumps(module_tree, indent=2)}")
-
-    def _format_module_tree(module_tree: dict[str, any], indent: int = 0):
-        for key, value in module_tree.items():
-            if key == module_name:
-                lines.append(f"{'  ' * indent}{key} (current module)")
-            else:
-                lines.append(f"{'  ' * indent}{key}")
-
-            # Group components by file
-            from collections import defaultdict
-
-            by_file = defaultdict(list)
-            for c in value["components"]:
-                if "::" in c:
-                    fpath, name = c.split("::", 1)
-                    by_file[fpath].append(name)
-                else:
-                    by_file[""].append(c)
-            for fpath, names in by_file.items():
-                if fpath:
-                    lines.append(f"{'  ' * (indent + 1)} {fpath}: {', '.join(names)}")
-                else:
-                    lines.append(f"{'  ' * (indent + 1)} {', '.join(names)}")
-
-            if (
-                ("children" in value)
-                and isinstance(value["children"], dict)
-                and len(value["children"]) > 0
-            ):
-                lines.append(f"{'  ' * (indent + 1)} Children:")
-                _format_module_tree(value["children"], indent + 2)
-
-    _format_module_tree(module_tree, 0)
-    formatted_module_tree = "\n".join(lines)
-
     if module_tree == {}:
         return CLUSTER_REPO_PROMPT.format(potential_core_components=potential_core_components)
-    else:
-        return CLUSTER_MODULE_PROMPT.format(
+
+    formatted_module_tree = _format_module_tree_str(module_tree, module_name)
+    prompt = CLUSTER_MODULE_PROMPT.format(
+        potential_core_components=potential_core_components,
+        module_tree=formatted_module_tree,
+        module_name=module_name,
+    )
+
+    if len(prompt) > MAX_USER_PROMPT_CHARS:
+        full_len = len(prompt)
+        formatted_module_tree = (
+            MODULE_TREE_TRIMMED_NOTE
+            + "\n\n"
+            + _format_module_tree_str(module_tree, module_name, include_components=False)
+        )
+        prompt = CLUSTER_MODULE_PROMPT.format(
             potential_core_components=potential_core_components,
             module_tree=formatted_module_tree,
             module_name=module_name,
         )
+        logger.warning(
+            "Module %s: cluster prompt (%d chars) exceeds %d; "
+            "module tree trimmed to names only (%d chars)",
+            module_name,
+            full_len,
+            MAX_USER_PROMPT_CHARS,
+            len(prompt),
+        )
+
+    return prompt
 
 
 def format_super_group_prompt(module_tree: dict[str, Any]) -> str:
