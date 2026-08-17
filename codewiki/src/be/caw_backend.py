@@ -23,7 +23,7 @@ import asyncio
 import logging
 import os
 import shutil
-from typing import Any, Dict, List
+from typing import Any
 
 from caw import Agent as CawAgent
 from caw import ToolGroup
@@ -170,7 +170,7 @@ def _with_allowed_tools(cmd):
         allowed = ",".join(f"mcp__{s}" for s in servers)
         logger.info("Injected --allowedTools for MCP servers: %s", servers)
         return list(cmd) + ["--allowedTools", allowed]
-    except Exception as e:  # never break the spawn on a patch hiccup
+    except Exception as e:  # noqa: BLE001 — never break the spawn on a patch hiccup
         logger.warning("claude allowedTools patch skipped: %s", e)
         return cmd
 
@@ -266,11 +266,11 @@ class CawBackend(LLMBackend):
     async def run_module_agent(
         self,
         module_name: str,
-        components: Dict[str, Node],
-        core_component_ids: List[str],
-        module_path: List[str],
+        components: dict[str, Node],
+        core_component_ids: list[str],
+        module_path: list[str],
         working_dir: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         # caw.completion shells out to a subprocess and blocks the calling
         # thread.  Push it off the event loop so the rest of the async
         # pipeline keeps moving.
@@ -293,13 +293,13 @@ class CawBackend(LLMBackend):
     def _run_module_agent_sync(
         self,
         module_name: str,
-        components: Dict[str, Node],
-        core_component_ids: List[str],
-        module_path: List[str],
+        components: dict[str, Node],
+        core_component_ids: list[str],
+        module_path: list[str],
         working_dir: str,
         start_depth: int = 1,
-        module_tree: Dict[str, Any] | None = None,
-    ) -> Dict[str, Any]:
+        module_tree: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         # ``start_depth`` lets the recursion preserve max_depth across nested
         # _run_module_agent_sync calls — each fresh deps object would otherwise
         # reset current_depth to 1 and silently bypass max_depth guards.
@@ -314,10 +314,15 @@ class CawBackend(LLMBackend):
         if module_tree is None:
             module_tree = file_manager.load_json(module_tree_path)
 
-        overview_docs_path = os.path.join(working_dir, OVERVIEW_FILENAME)
-        if os.path.exists(overview_docs_path):
-            logger.info("✓ Overview docs already exists at %s", overview_docs_path)
-            return module_tree
+        # overview.md is the root module's own doc (renamed from
+        # {repo_name}.md), so its presence only proves the root is done —
+        # nested modules must still be checked against their own doc file,
+        # or a resume after a partial run silently skips every missing one.
+        if not module_path:
+            overview_docs_path = os.path.join(working_dir, OVERVIEW_FILENAME)
+            if os.path.exists(overview_docs_path):
+                logger.info("✓ Overview docs already exists at %s", overview_docs_path)
+                return module_tree
         docs_path = os.path.join(working_dir, f"{module_name}.md")
         if os.path.exists(docs_path):
             logger.info("✓ Module docs already exists at %s", docs_path)
@@ -333,16 +338,16 @@ class CawBackend(LLMBackend):
         # agent call per sub-spec even when a single leaf write would suffice.
         # See generate_sub_module_documentation_tool for the pydantic-ai
         # equivalent.
-        _, components_with_code = format_potential_core_components(
-            core_component_ids, components
-        )
+        _, components_with_code = format_potential_core_components(core_component_ids, components)
         num_tokens = count_tokens(components_with_code)
         can_delegate = (
             is_complex_module(components, core_component_ids)
             and start_depth < config.max_depth
             and num_tokens >= config.max_token_per_leaf_module
         )
-        logger.info(f"Module {module_name} can delegate: {can_delegate} - is_complex_module: {is_complex_module(components, core_component_ids)} - start_depth: {start_depth} - num_tokens: {num_tokens} - max_depth: {config.max_depth} - max_token_per_leaf_module: {config.max_token_per_leaf_module}")
+        logger.info(
+            f"Module {module_name} can delegate: {can_delegate} - is_complex_module: {is_complex_module(components, core_component_ids)} - start_depth: {start_depth} - num_tokens: {num_tokens} - max_depth: {config.max_depth} - max_token_per_leaf_module: {config.max_token_per_leaf_module}"
+        )
 
         if can_delegate:
             system_prompt = format_system_prompt(module_name, custom_instructions)
