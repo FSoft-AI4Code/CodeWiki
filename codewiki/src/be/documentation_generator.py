@@ -297,13 +297,10 @@ class DocumentationGenerator:
         module_tree_path = os.path.join(working_dir, MODULE_TREE_FILENAME)
         module_tree = file_manager.load_json(module_tree_path)
 
-        # check if overview docs already exists
-        overview_docs_path = os.path.join(working_dir, OVERVIEW_FILENAME)
-        if os.path.exists(overview_docs_path):
-            logger.info(f"✓ Overview docs already exists at {overview_docs_path}")
-            return module_tree
-
-        # check if parent docs already exists
+        # check if parent docs already exists (for the root module the doc
+        # path below resolves to overview.md, so a blanket "overview exists →
+        # skip" check is not needed here and would mask missing parent docs
+        # on resume)
         parent_docs_path = os.path.join(
             working_dir,
             f"{module_name if len(module_path) >= 1 else OVERVIEW_FILENAME.replace('.md', '')}.md",

@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import os
 import traceback
-from typing import Any, Dict, List
+from typing import Any
 
 from pydantic_ai import Agent
 
@@ -55,19 +55,24 @@ class PydanticAIBackend(LLMBackend):
     async def run_module_agent(
         self,
         module_name: str,
-        components: Dict[str, Node],
-        core_component_ids: List[str],
-        module_path: List[str],
+        components: dict[str, Node],
+        core_component_ids: list[str],
+        module_path: list[str],
         working_dir: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         config = self._config
         module_tree_path = os.path.join(working_dir, MODULE_TREE_FILENAME)
         module_tree = file_manager.load_json(module_tree_path)
 
-        overview_docs_path = os.path.join(working_dir, OVERVIEW_FILENAME)
-        if os.path.exists(overview_docs_path):
-            logger.info("✓ Overview docs already exists at %s", overview_docs_path)
-            return module_tree
+        # overview.md is the root module's own doc (renamed from
+        # {repo_name}.md), so its presence only proves the root is done —
+        # nested modules must still be checked against their own doc file,
+        # or a resume after a partial run silently skips every missing one.
+        if not module_path:
+            overview_docs_path = os.path.join(working_dir, OVERVIEW_FILENAME)
+            if os.path.exists(overview_docs_path):
+                logger.info("✓ Overview docs already exists at %s", overview_docs_path)
+                return module_tree
         docs_path = os.path.join(working_dir, f"{module_name}.md")
         if os.path.exists(docs_path):
             logger.info("✓ Module docs already exists at %s", docs_path)
