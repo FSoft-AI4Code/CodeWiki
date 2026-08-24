@@ -150,6 +150,7 @@ tree-sitter-javascript==0.21.4
 tree-sitter-kotlin==1.1.0
 tree-sitter-language-pack==0.8.0
 tree-sitter-python==0.23.6
+tree-sitter-ruby==0.23.1
 tree-sitter-typescript==0.21.2
 tree-sitter-yaml==0.7.1
 types-protobuf==6.30.2.20250822

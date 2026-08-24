@@ -6,38 +6,38 @@ Coordinates language-specific analyzers to build comprehensive call graphs
 across different programming languages in a repository.
 """
 
-from typing import Dict, List, Optional
 import logging
-import traceback
-import time
-import signal
 import re
+import signal
+import time
+import traceback
 from collections import defaultdict
-from pathlib import Path
 from contextlib import contextmanager
-from codewiki.src.be.dependency_analyzer.models.core import Node, CallRelationship
-from codewiki.src.be.dependency_analyzer.utils.patterns import CODE_EXTENSIONS
-from codewiki.src.be.dependency_analyzer.utils.security import safe_open_text
+from pathlib import Path
+
+from codewiki.src.be.dependency_analyzer.models.core import CallRelationship, Node
 from codewiki.src.be.dependency_analyzer.utils.external_symbols import (
     CPP_STANDARD_HEADERS,
     is_external_symbol,
     is_macro_name,
 )
+from codewiki.src.be.dependency_analyzer.utils.patterns import CODE_EXTENSIONS
+from codewiki.src.be.dependency_analyzer.utils.security import safe_open_text
 
 logger = logging.getLogger(__name__)
 
 
 class TimeoutError(Exception):
     """Raised when file parsing exceeds timeout."""
-    pass
 
 
 @contextmanager
 def timeout(seconds):
     """Context manager for timeout on file parsing."""
+
     def signal_handler(signum, frame):
         raise TimeoutError(f"File parsing exceeded {seconds}s timeout")
-    
+
     # Only use signal on Unix systems (not Windows)
     try:
         old_handler = signal.signal(signal.SIGALRM, signal_handler)
@@ -57,21 +57,21 @@ def timeout(seconds):
 class CallGraphAnalyzer:
     def __init__(self):
         """Initialize the call graph analyzer."""
-        self.functions: Dict[str, Node] = {}
-        self.call_relationships: List[CallRelationship] = []
+        self.functions: dict[str, Node] = {}
+        self.call_relationships: list[CallRelationship] = []
         self._python_project_modules: set = set()
         self._python_external_import_roots: set = set()
         logger.debug("CallGraphAnalyzer initialized.")
 
-    def analyze_code_files(self, code_files: List[Dict], base_dir: str) -> Dict:
+    def analyze_code_files(self, code_files: list[dict], base_dir: str) -> dict:
         """
         Complete analysis: Analyze all files to build complete call graph with all nodes.
 
         This approach:
-        1. Analyzes all code files 
+        1. Analyzes all code files
         2. Extracts all functions and relationships
         3. Builds complete call graph
-        4. Returns all nodes and relationships 
+        4. Returns all nodes and relationships
         """
         logger.debug(f"Starting analysis of {len(code_files)} files")
         logger.info(f"📊 Parsing {len(code_files)} source files (this may take a few minutes)...")
@@ -85,23 +85,27 @@ class CallGraphAnalyzer:
         files_analyzed = 0
         files_failed = 0
         start_time = time.time()
-        
+
         for idx, file_info in enumerate(code_files, 1):
-            file_path = file_info['path']
+            file_path = file_info["path"]
             try:
                 # Log progress every file with elapsed time
                 if idx % max(1, len(code_files) // 10) == 0 or idx <= 5:
                     elapsed = time.time() - start_time
                     rate = idx / elapsed if elapsed > 0 else 0
                     remaining = (len(code_files) - idx) / rate if rate > 0 else 0
-                    logger.info(f"  [{idx}/{len(code_files)}] {file_path} ({elapsed:.1f}s elapsed, ~{remaining:.1f}s remaining)")
-                
+                    logger.info(
+                        f"  [{idx}/{len(code_files)}] {file_path} ({elapsed:.1f}s elapsed, ~{remaining:.1f}s remaining)"
+                    )
+
                 self._analyze_code_file(base_dir, file_info)
                 files_analyzed += 1
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — one unparsable file must not abort the sweep
                 files_failed += 1
-                logger.warning(f"  ⚠️  [{idx}/{len(code_files)}] Failed to analyze {file_path}: {str(e)[:100]}")
-        
+                logger.warning(
+                    f"  ⚠️  [{idx}/{len(code_files)}] Failed to analyze {file_path}: {str(e)[:100]}"
+                )
+
         elapsed_time = time.time() - start_time
         logger.info(
             f"✓ Analysis complete: {files_analyzed}/{len(code_files)} files analyzed, "
@@ -117,7 +121,7 @@ class CallGraphAnalyzer:
             "call_graph": {
                 "total_functions": len(self.functions),
                 "total_calls": len(self.call_relationships),
-                "languages_found": list(set(f.get("language") for f in code_files)),
+                "languages_found": list({f.get("language") for f in code_files}),
                 "files_analyzed": files_analyzed,
                 "analysis_approach": "complete_unlimited",
             },
@@ -126,7 +130,7 @@ class CallGraphAnalyzer:
             "visualization": viz_data,
         }
 
-    def extract_code_files(self, file_tree: Dict) -> List[Dict]:
+    def extract_code_files(self, file_tree: dict) -> list[dict]:
         """
         Extract code files from file tree structure.
 
@@ -161,7 +165,7 @@ class CallGraphAnalyzer:
         traverse(file_tree)
         return code_files
 
-    def _route_contextual_headers(self, code_files: List[Dict], base_dir: str) -> List[Dict]:
+    def _route_contextual_headers(self, code_files: list[dict], base_dir: str) -> list[dict]:
         """Route ambiguous .h headers per file.
 
         A header is parsed as C++ when its own content shows C++ signals, or
@@ -181,11 +185,12 @@ class CallGraphAnalyzer:
         routed_files = []
         for file_info in code_files:
             routed = dict(file_info)
-            if routed.get("extension", "").lower() == ".h":
-                if self._header_has_cpp_signal(base_dir, routed["path"]):
-                    routed["language"] = "cpp"
-                elif has_cpp_files and not has_c_files:
-                    routed["language"] = "cpp"
+            if routed.get("extension", "").lower() == ".h" and (
+                self._header_has_cpp_signal(base_dir, routed["path"])
+                or has_cpp_files
+                and not has_c_files
+            ):
+                routed["language"] = "cpp"
             routed_files.append(routed)
         return routed_files
 
@@ -193,7 +198,7 @@ class CallGraphAnalyzer:
         base = Path(base_dir)
         try:
             content = safe_open_text(base, base / relative_path)
-        except Exception:
+        except Exception:  # noqa: BLE001 — unreadable file simply is not an entry point
             return False
 
         if re.search(
@@ -209,7 +214,7 @@ class CallGraphAnalyzer:
                 return True
         return False
 
-    def _analyze_code_file(self, repo_dir: str, file_info: Dict):
+    def _analyze_code_file(self, repo_dir: str, file_info: dict):
         """
         Analyze a single code file based on its language.
 
@@ -246,15 +251,17 @@ class CallGraphAnalyzer:
                     self._analyze_cpp_file(file_path, content, repo_dir)
                 elif language == "php":
                     self._analyze_php_file(file_path, content, repo_dir)
+                elif language == "ruby":
+                    self._analyze_ruby_file(file_path, content, repo_dir)
                 # else:
                 #     logger.warning(
                 #         f"Unsupported language for call graph analysis: {language} for file {file_path}"
                 #     )
 
         except TimeoutError as e:
-            logger.warning(f"⏱️  Timeout analyzing {file_path}: {str(e)}")
-        except Exception as e:
-            logger.debug(f"Error analyzing {file_path}: {str(e)}")
+            logger.warning(f"⏱️  Timeout analyzing {file_path}: {e!s}")
+        except Exception as e:  # noqa: BLE001 — per-file analysis is best-effort
+            logger.debug(f"Error analyzing {file_path}: {e!s}")
             logger.debug(f"Traceback: {traceback.format_exc()}")
 
     def _analyze_python_file(self, file_path: str, content: str, base_dir: str):
@@ -282,11 +289,11 @@ class CallGraphAnalyzer:
 
             self.call_relationships.extend(relationships)
             self._python_external_import_roots.update(external_import_roots)
-        except Exception as e:
-            logger.error(f"Failed to analyze Python file {file_path}: {e}", exc_info=True)
+        except Exception:
+            logger.exception(f"Failed to analyze Python file {file_path}")
 
     @staticmethod
-    def _collect_python_modules(code_files: List[Dict]) -> set:
+    def _collect_python_modules(code_files: list[dict]) -> set:
         """Dotted module paths for every Python file in the repository."""
         modules = set()
         for file_info in code_files:
@@ -298,8 +305,7 @@ class CallGraphAnalyzer:
                     path = path[: -len(ext)]
                     break
             module = path.replace("/", ".").replace("\\", ".")
-            if module.endswith(".__init__"):
-                module = module[: -len(".__init__")]
+            module = module.removesuffix(".__init__")
             if module:
                 modules.add(module)
         return modules
@@ -314,8 +320,9 @@ class CallGraphAnalyzer:
             repo_dir: Repository base directory
         """
         try:
-
-            from codewiki.src.be.dependency_analyzer.analyzers.javascript import analyze_javascript_file_treesitter
+            from codewiki.src.be.dependency_analyzer.analyzers.javascript import (
+                analyze_javascript_file_treesitter,
+            )
 
             functions, relationships = analyze_javascript_file_treesitter(
                 file_path, content, repo_path=repo_dir
@@ -327,20 +334,21 @@ class CallGraphAnalyzer:
 
             self.call_relationships.extend(relationships)
 
-        except Exception as e:
-            logger.error(f"Failed to analyze JavaScript file {file_path}: {e}", exc_info=True)
+        except Exception:
+            logger.exception(f"Failed to analyze JavaScript file {file_path}")
 
     def _analyze_typescript_file(self, file_path: str, content: str, repo_dir: str):
         """
-        Analyze TypeScript file using tree-sitter based AST analyzer 
+        Analyze TypeScript file using tree-sitter based AST analyzer
 
         Args:
             file_path: Relative path to the TypeScript file
             content: File content string
         """
         try:
-
-            from codewiki.src.be.dependency_analyzer.analyzers.typescript import analyze_typescript_file_treesitter
+            from codewiki.src.be.dependency_analyzer.analyzers.typescript import (
+                analyze_typescript_file_treesitter,
+            )
 
             functions, relationships = analyze_typescript_file_treesitter(
                 file_path, content, repo_path=repo_dir
@@ -352,10 +360,8 @@ class CallGraphAnalyzer:
 
             self.call_relationships.extend(relationships)
 
-        except Exception as e:
-            logger.error(f"Failed to analyze TypeScript file {file_path}: {e}", exc_info=True)
-
-
+        except Exception:
+            logger.exception(f"Failed to analyze TypeScript file {file_path}")
 
     def _analyze_c_file(self, file_path: str, content: str, repo_dir: str):
         """
@@ -386,9 +392,7 @@ class CallGraphAnalyzer:
         """
         from codewiki.src.be.dependency_analyzer.analyzers.cpp import analyze_cpp_file
 
-        functions, relationships = analyze_cpp_file(
-            file_path, content, repo_path=repo_dir
-        )
+        functions, relationships = analyze_cpp_file(file_path, content, repo_path=repo_dir)
 
         for func in functions:
             func_id = func.id if func.id else f"{file_path}:{func.name}"
@@ -414,8 +418,8 @@ class CallGraphAnalyzer:
                 self.functions[func_id] = func
 
             self.call_relationships.extend(relationships)
-        except Exception as e:
-            logger.error(f"Failed to analyze Java file {file_path}: {e}", exc_info=True)
+        except Exception:
+            logger.exception(f"Failed to analyze Java file {file_path}")
 
     def _analyze_kotlin_file(self, file_path: str, content: str, repo_dir: str):
         """
@@ -435,8 +439,8 @@ class CallGraphAnalyzer:
                 self.functions[func_id] = func
 
             self.call_relationships.extend(relationships)
-        except Exception as e:
-            logger.error(f"Failed to analyze Kotlin file {file_path}: {e}", exc_info=True)
+        except Exception:
+            logger.exception(f"Failed to analyze Kotlin file {file_path}")
 
     def _analyze_csharp_file(self, file_path: str, content: str, repo_dir: str):
         """
@@ -457,8 +461,8 @@ class CallGraphAnalyzer:
                 self.functions[func_id] = func
 
             self.call_relationships.extend(relationships)
-        except Exception as e:
-            logger.error(f"Failed to analyze C# file {file_path}: {e}", exc_info=True)
+        except Exception:
+            logger.exception(f"Failed to analyze C# file {file_path}")
 
     def _analyze_php_file(self, file_path: str, content: str, repo_dir: str):
         """
@@ -479,8 +483,30 @@ class CallGraphAnalyzer:
                 self.functions[func_id] = func
 
             self.call_relationships.extend(relationships)
-        except Exception as e:
-            logger.error(f"Failed to analyze PHP file {file_path}: {e}", exc_info=True)
+        except Exception:
+            logger.exception(f"Failed to analyze PHP file {file_path}")
+
+    def _analyze_ruby_file(self, file_path: str, content: str, repo_dir: str):
+        """
+        Analyze Ruby file using tree-sitter based analyzer.
+
+        Args:
+            file_path: Relative path to the Ruby file
+            content: File content string
+            repo_dir: Repository base directory
+        """
+        from codewiki.src.be.dependency_analyzer.analyzers.ruby import analyze_ruby_file
+
+        try:
+            functions, relationships = analyze_ruby_file(file_path, content, repo_path=repo_dir)
+
+            for func in functions:
+                func_id = func.id if func.id else f"{file_path}:{func.name}"
+                self.functions[func_id] = func
+
+            self.call_relationships.extend(relationships)
+        except Exception:
+            logger.exception(f"Failed to analyze Ruby file {file_path}")
 
     def _resolve_call_relationships(self):
         """
@@ -489,7 +515,7 @@ class CallGraphAnalyzer:
         Attempts to match function calls to actual function definitions,
         handling cross-language calls where possible.
         """
-        for func_id, func_info in self.functions.items():
+        for func_info in self.functions.values():
             if not func_info.language:
                 file_ext = Path(func_info.file_path).suffix.lower()
                 func_info.language = CODE_EXTENSIONS.get(file_ext)
@@ -519,12 +545,12 @@ class CallGraphAnalyzer:
             )
         ]
 
-    def _dotted_project_packages(self) -> Dict[str, set]:
+    def _dotted_project_packages(self) -> dict[str, set]:
         """Project packages/namespaces, partitioned by language. Java and C#
         share the namespace-origin rule: a dotted callee qualified to a package
         with no prefix relation to any project package came from a third-party
         import."""
-        packages: Dict[str, set] = defaultdict(set)
+        packages: dict[str, set] = defaultdict(set)
         for func_info in self.functions.values():
             if func_info.language in ("java", "csharp"):
                 package = self._dotted_package_for_node(func_info)
@@ -532,7 +558,9 @@ class CallGraphAnalyzer:
                     packages[func_info.language].add(package)
         return packages
 
-    def _is_external_callee(self, language: Optional[str], callee: str, dotted_packages: Dict[str, set]) -> bool:
+    def _is_external_callee(
+        self, language: str | None, callee: str, dotted_packages: dict[str, set]
+    ) -> bool:
         """Classify a still-unresolved callee as external, after project
         resolution has had its chance.
 
@@ -582,19 +610,20 @@ class CallGraphAnalyzer:
             return True
         return parts[-1] in PYTHON_OBJECT_METHODS
 
-    def _build_resolution_indexes(self) -> Dict[str, Dict]:
+    def _build_resolution_indexes(self) -> dict[str, dict]:
         """Build exact/simple-name lookup indexes, both globally and per
         language. Resolution prefers the caller's own language partition: a
         name that is unique within the caller's language resolves even when
         another language defines the same name, and names made ambiguous only
         by foreign-language components keep resolving as before."""
-        def make() -> Dict[str, Dict[str, List[str]]]:
+
+        def make() -> dict[str, dict[str, list[str]]]:
             return {"exact": defaultdict(list), "simple": defaultdict(list)}
 
         global_indexes = make()
-        by_lang: Dict[str, Dict[str, Dict[str, List[str]]]] = defaultdict(make)
+        by_lang: dict[str, dict[str, dict[str, list[str]]]] = defaultdict(make)
 
-        def add(index: Dict[str, List[str]], key: Optional[str], func_id: str) -> None:
+        def add(index: dict[str, list[str]], key: str | None, func_id: str) -> None:
             if key and func_id not in index[key]:
                 index[key].append(func_id)
 
@@ -633,13 +662,17 @@ class CallGraphAnalyzer:
             "by_lang": dict(by_lang),
         }
 
-    def _resolve_callee(self, relationship: CallRelationship, indexes: Dict[str, Dict]) -> Optional[str]:
+    def _resolve_callee(
+        self, relationship: CallRelationship, indexes: dict[str, dict]
+    ) -> str | None:
         caller = self.functions.get(relationship.caller)
         caller_language = caller.language if caller else None
 
         lang_indexes = indexes["by_lang"].get(caller_language) if caller_language else None
         if lang_indexes:
-            match = self._resolve_callee_in(relationship, lang_indexes["exact"], lang_indexes["simple"])
+            match = self._resolve_callee_in(
+                relationship, lang_indexes["exact"], lang_indexes["simple"]
+            )
             if match:
                 return match
 
@@ -648,9 +681,9 @@ class CallGraphAnalyzer:
     def _resolve_callee_in(
         self,
         relationship: CallRelationship,
-        exact: Dict[str, List[str]],
-        simple: Dict[str, List[str]],
-    ) -> Optional[str]:
+        exact: dict[str, list[str]],
+        simple: dict[str, list[str]],
+    ) -> str | None:
         callee_name = relationship.callee
 
         exact_match = self._unique_match(exact, callee_name)
@@ -684,7 +717,7 @@ class CallGraphAnalyzer:
 
         return self._unique_match(simple, callee_name)
 
-    def _unique_match(self, index: Dict[str, List[str]], key: str) -> Optional[str]:
+    def _unique_match(self, index: dict[str, list[str]], key: str) -> str | None:
         matches = index.get(key, [])
         return matches[0] if len(matches) == 1 else None
 
@@ -701,7 +734,7 @@ class CallGraphAnalyzer:
             return ".".join(parts[:-2])
         return ".".join(parts[:-1])
 
-    def _caller_language(self, caller_id: str) -> Optional[str]:
+    def _caller_language(self, caller_id: str) -> str | None:
         caller = self.functions.get(caller_id)
         if caller and caller.language:
             return caller.language
@@ -727,7 +760,7 @@ class CallGraphAnalyzer:
 
         self.call_relationships = unique_relationships
 
-    def _generate_visualization_data(self) -> Dict:
+    def _generate_visualization_data(self) -> dict:
         """
         Generate visualization data for graph rendering.
 
@@ -755,12 +788,22 @@ class CallGraphAnalyzer:
                 node_classes.append("lang-typescript")
             elif language == "c":
                 node_classes.append("lang-c")
-            elif language == "cpp" or file_ext in [".cpp", ".cc", ".cxx", ".c++", ".hpp", ".hxx", ".h++"]:
+            elif language == "cpp" or file_ext in [
+                ".cpp",
+                ".cc",
+                ".cxx",
+                ".c++",
+                ".hpp",
+                ".hxx",
+                ".h++",
+            ]:
                 node_classes.append("lang-cpp")
             elif file_ext in [".kt", ".kts"]:
                 node_classes.append("lang-kotlin")
             elif file_ext in [".php", ".phtml", ".inc"]:
                 node_classes.append("lang-php")
+            elif file_ext == ".rb":
+                node_classes.append("lang-ruby")
 
             cytoscape_elements.append(
                 {
@@ -800,7 +843,7 @@ class CallGraphAnalyzer:
             "summary": summary,
         }
 
-    def generate_llm_format(self) -> Dict:
+    def generate_llm_format(self) -> dict:
         """Generate clean format optimized for LLM consumption."""
         return {
             "functions": [
@@ -853,31 +896,29 @@ class CallGraphAnalyzer:
 
         graph = {}
         for rel in self.call_relationships:
-            if rel.caller in self.functions:
-                if rel.caller not in graph:
-                    graph[rel.caller] = set()
-            if rel.callee in self.functions:
-                if rel.callee not in graph:
-                    graph[rel.callee] = set()
+            if rel.caller in self.functions and rel.caller not in graph:
+                graph[rel.caller] = set()
+            if rel.callee in self.functions and rel.callee not in graph:
+                graph[rel.callee] = set()
 
             if rel.caller in graph and rel.callee in graph:
                 graph[rel.caller].add(rel.callee)
                 graph[rel.callee].add(rel.caller)
 
         degree_centrality = {}
-        for func_id in self.functions.keys():
+        for func_id in self.functions:
             degree_centrality[func_id] = len(graph.get(func_id, set()))
 
         sorted_func_ids = sorted(degree_centrality, key=degree_centrality.get, reverse=True)
 
         selected_func_ids = sorted_func_ids[:target_count]
 
-        original_func_count = len(self.functions)
+        len(self.functions)
         self.functions = {
             fid: func for fid, func in self.functions.items() if fid in selected_func_ids
         }
 
-        original_rel_count = len(self.call_relationships)
+        len(self.call_relationships)
         self.call_relationships = [
             rel
             for rel in self.call_relationships
