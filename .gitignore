@@ -41,6 +41,7 @@ htmlcov/
 tests/*
 !tests/test_gitignore_filtering.py
 !tests/test_module_tree_validation.py
+!tests/test_ruby_analyzer.py
 
 # Jupyter
 *.ipynb

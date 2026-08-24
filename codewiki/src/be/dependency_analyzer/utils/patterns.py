@@ -5,15 +5,12 @@ This module contains patterns used to identify entry points, high-connectivity f
 and function definitions across multiple programming languages.
 """
 
-from typing import List, Dict, Optional
-
 DEFAULT_IGNORE_PATTERNS = {
     ".github",
     ".vscode",
     ".git",
     ".gitignore",
     ".gitmodules",
-    ".gitignore",
     "examples",
     # Python
     "*.pyc",
@@ -74,12 +71,9 @@ DEFAULT_IGNORE_PATTERNS = {
     # Go / .NET / C#
     "bin/",
     # Version control
-    ".git",
     ".svn",
     ".hg",
-    ".gitignore",
     ".gitattributes",
-    ".gitmodules",
     # Images and media
     "*.svg",
     "*.png",
@@ -100,7 +94,6 @@ DEFAULT_IGNORE_PATTERNS = {
     "virtualenv",
     # IDEs and editors
     ".idea",
-    ".vscode",
     ".vs",
     "*.swo",
     "*.swn",
@@ -140,7 +133,6 @@ DEFAULT_IGNORE_PATTERNS = {
     "test",
     "Tests",
     "Test",
-    "examples",
     "Examples",
 }
 
@@ -274,6 +266,12 @@ ENTRY_POINT_PATTERNS = {
     "console",  # Symfony CLI
     "server.php",
     "start.php",
+    # Ruby
+    "main.rb",
+    "app.rb",
+    "application.rb",
+    "config.ru",
+    "Rakefile",
 }
 
 # Additional entry point path patterns (for when filename patterns fail)
@@ -418,8 +416,20 @@ FUNCTION_DEFINITION_PATTERNS = {
     "rust": ["fn {name}", "pub fn {name}"],
     "c": ["void {name}", "int {name}", "{name}("],
     "cpp": ["void {name}", "int {name}", "{name}("],
-    "php": ["function {name}", "public function {name}", "private function {name}", "protected function {name}"],
-    "kotlin": ["fun {name}", "private fun {name}", "public fun {name}", "internal fun {name}", "protected fun {name}"],
+    "php": [
+        "function {name}",
+        "public function {name}",
+        "private function {name}",
+        "protected function {name}",
+    ],
+    "kotlin": [
+        "fun {name}",
+        "private fun {name}",
+        "public fun {name}",
+        "internal fun {name}",
+        "protected fun {name}",
+    ],
+    "ruby": ["def {name}", "def self.{name}"],
     "general": ["{name}("],  # Fallback pattern
 }
 
@@ -540,13 +550,10 @@ def has_high_connectivity_potential(filename: str, filepath: str) -> bool:
         return True
 
     # Check source directory patterns
-    if any(pattern in filepath_lower for pattern in SOURCE_DIRECTORY_PATTERNS):
-        return True
-
-    return False
+    return bool(any(pattern in filepath_lower for pattern in SOURCE_DIRECTORY_PATTERNS))
 
 
-def is_critical_function(func_name: str, code_snippet: Optional[str] = None) -> bool:
+def is_critical_function(func_name: str, code_snippet: str | None = None) -> bool:
     """
     Check if a function is critical based on name and code patterns.
 
@@ -570,7 +577,7 @@ def is_critical_function(func_name: str, code_snippet: Optional[str] = None) -> 
     return False
 
 
-def find_fallback_entry_points(code_files: List[Dict], max_files: int = 5) -> List[Dict]:
+def find_fallback_entry_points(code_files: list[dict], max_files: int = 5) -> list[dict]:
     """
     Find fallback entry points when standard patterns don't match.
 
@@ -589,11 +596,9 @@ def find_fallback_entry_points(code_files: List[Dict], max_files: int = 5) -> Li
         filepath = file_info["path"].lower()
 
         # Check for any main-like files
-        if any(pattern in filename for pattern in ["main", "app", "server", "start", "index"]):
-            fallback_files.append(file_info)
-
-        # Check for entry point paths
-        elif is_entry_point_path(filepath):
+        if any(
+            pattern in filename for pattern in ["main", "app", "server", "start", "index"]
+        ) or is_entry_point_path(filepath):
             fallback_files.append(file_info)
 
     # If still nothing, try files in root or common directories
@@ -625,7 +630,7 @@ def find_fallback_entry_points(code_files: List[Dict], max_files: int = 5) -> Li
     return fallback_files[:max_files]
 
 
-def find_fallback_connectivity_files(code_files: List[Dict], max_files: int = 10) -> List[Dict]:
+def find_fallback_connectivity_files(code_files: list[dict], max_files: int = 10) -> list[dict]:
     """
     Find fallback high-connectivity files when standard patterns don't match.
 
@@ -652,9 +657,10 @@ def find_fallback_connectivity_files(code_files: List[Dict], max_files: int = 10
             if file_info not in fallback_files:
                 name = file_info["name"].lower()
                 # Include common source file extensions
-                if any(ext in name for ext in [".py", ".js", ".ts", ".go", ".rs", ".c", ".cpp"]):
-                    # Skip test files
-                    if not any(test_pattern in name for test_pattern in ["test", "spec", "_test"]):
-                        fallback_files.append(file_info)
+                # Include common source file extensions, skipping test files
+                if any(
+                    ext in name for ext in [".py", ".js", ".ts", ".go", ".rs", ".c", ".cpp"]
+                ) and not any(test_pattern in name for test_pattern in ["test", "spec", "_test"]):
+                    fallback_files.append(file_info)
 
     return fallback_files[:max_files]

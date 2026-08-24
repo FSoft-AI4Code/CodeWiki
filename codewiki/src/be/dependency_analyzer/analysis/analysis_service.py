@@ -8,15 +8,19 @@ AST parsing for call graph generation.
 
 import logging
 import traceback
-from typing import Dict, List, Optional, Any
 from pathlib import Path
-from codewiki.src.be.dependency_analyzer.utils.security import safe_open_text, assert_safe_path
-from codewiki.src.be.dependency_analyzer.analysis.repo_analyzer import RepoAnalyzer
+from typing import Any
+
 from codewiki.src.be.dependency_analyzer.analysis.call_graph_analyzer import CallGraphAnalyzer
-from codewiki.src.be.dependency_analyzer.analysis.cloning import clone_repository, cleanup_repository, parse_github_url
+from codewiki.src.be.dependency_analyzer.analysis.cloning import (
+    cleanup_repository,
+    clone_repository,
+    parse_github_url,
+)
+from codewiki.src.be.dependency_analyzer.analysis.repo_analyzer import RepoAnalyzer
 from codewiki.src.be.dependency_analyzer.models.analysis import AnalysisResult
 from codewiki.src.be.dependency_analyzer.models.core import Repository
-
+from codewiki.src.be.dependency_analyzer.utils.security import assert_safe_path, safe_open_text
 
 logger = logging.getLogger(__name__)
 
@@ -42,64 +46,64 @@ class AnalysisService:
         self,
         repo_path: str,
         max_files: int = 100,
-        languages: Optional[List[str]] = None,
+        languages: list[str] | None = None,
         use_gitignore: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Analyze a local repository folder.
-        
+
         Args:
             repo_path: Path to local repository folder
             max_files: Maximum number of files to analyze
             languages: List of languages to include (e.g., ['python', 'javascript'])
             use_gitignore: Whether to apply Git ignore rules
-            
+
         Returns:
             Dict with analysis results including nodes and relationships
         """
         try:
             logger.debug(f"Analyzing local repository at {repo_path}")
-            
+
             # Get repo analyzer to find files
             repo_analyzer = RepoAnalyzer(use_gitignore=use_gitignore)
             structure_result = repo_analyzer.analyze_repository_structure(repo_path)
-            
+
             # Extract code files
             code_files = self.call_graph_analyzer.extract_code_files(structure_result["file_tree"])
-            
+
             # Filter by languages if specified
             if languages:
                 code_files = [f for f in code_files if f.get("language") in languages]
-            
+
             # Limit number of files
             if len(code_files) > max_files:
                 code_files = code_files[:max_files]
                 logger.debug(f"Limited analysis to {max_files} files")
-            
+
             logger.debug(f"Analyzing {len(code_files)} files")
-            
+
             # Analyze files
             result = self.call_graph_analyzer.analyze_code_files(code_files, repo_path)
-            
+
             return {
                 "nodes": result.get("functions", {}),
                 "relationships": result.get("relationships", []),
                 "summary": {
                     "total_files": len(code_files),
                     "total_nodes": len(result.get("functions", {})),
-                    "total_relationships": len(result.get("relationships", []))
-                }
+                    "total_relationships": len(result.get("relationships", [])),
+                },
             }
-            
+
         except Exception as e:
-            logger.error(f"Local repository analysis failed: {str(e)}", exc_info=True)
-            raise RuntimeError(f"Analysis failed: {str(e)}")
+            logger.exception("Local repository analysis failed")
+            raise RuntimeError(f"Analysis failed: {e!s}")
 
     def analyze_repository_full(
         self,
         github_url: str,
-        include_patterns: Optional[List[str]] = None,
-        exclude_patterns: Optional[List[str]] = None,
+        include_patterns: list[str] | None = None,
+        exclude_patterns: list[str] | None = None,
         use_gitignore: bool = True,
     ) -> AnalysisResult:
         """
@@ -168,18 +172,18 @@ class AnalysisService:
             return analysis_result
 
         except Exception as e:
-            logger.error(f"Analysis failed: {str(e)}", exc_info=True)
+            logger.exception("Analysis failed")
             if "temp_dir" in locals() and Path(temp_dir).exists():
                 self._cleanup_repository(temp_dir)
-            raise RuntimeError(f"Repository analysis failed: {str(e)}")
+            raise RuntimeError(f"Repository analysis failed: {e!s}")
 
     def analyze_repository_structure_only(
         self,
         github_url: str,
-        include_patterns: Optional[List[str]] = None,
-        exclude_patterns: Optional[List[str]] = None,
+        include_patterns: list[str] | None = None,
+        exclude_patterns: list[str] | None = None,
         use_gitignore: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Perform lightweight structure-only analysis without call graph generation.
 
@@ -222,9 +226,9 @@ class AnalysisService:
         except Exception as e:
             if temp_dir:
                 self._cleanup_repository(temp_dir)
-            logger.error(f"Structure analysis failed for {github_url}: {str(e)}")
+            logger.error(f"Structure analysis failed for {github_url}: {e!s}")
             logger.error(f"Traceback: {traceback.format_exc()}")
-            raise RuntimeError(f"Structure analysis failed: {str(e)}") from e
+            raise RuntimeError(f"Structure analysis failed: {e!s}") from e
 
     def _clone_repository(self, github_url: str) -> str:
         """Clone repository and return temp dir path."""
@@ -234,17 +238,17 @@ class AnalysisService:
         self._temp_directories.append(temp_dir)
         return temp_dir
 
-    def _parse_repository_info(self, github_url: str) -> Dict[str, str]:
+    def _parse_repository_info(self, github_url: str) -> dict[str, str]:
         """Parse GitHub URL and extract repository metadata."""
         return parse_github_url(github_url)
 
     def _analyze_structure(
         self,
         repo_dir: str,
-        include_patterns: Optional[List[str]],
-        exclude_patterns: Optional[List[str]],
+        include_patterns: list[str] | None,
+        exclude_patterns: list[str] | None,
         use_gitignore: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Analyze repository file structure with filtering."""
         logger.debug(
             "Initializing RepoAnalyzer with include: %s, exclude: %s, use_gitignore: %s",
@@ -255,7 +259,7 @@ class AnalysisService:
         repo_analyzer = RepoAnalyzer(include_patterns, exclude_patterns, use_gitignore)
         return repo_analyzer.analyze_repository_structure(repo_dir)
 
-    def _read_readme_file(self, repo_dir: str) -> Optional[str]:
+    def _read_readme_file(self, repo_dir: str) -> str | None:
         """Find and read the README file from the repository root."""
         # possible_readme_names = ["README.md", "README", "readme.md", "README.txt"]
         # for name in possible_readme_names:
@@ -278,13 +282,13 @@ class AnalysisService:
                     assert_safe_path(base, p)
                     logger.debug(f"Found README file at {p}")
                     return safe_open_text(base, p, encoding="utf-8")
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 — README loading is best-effort
                     logger.warning(f"Skipping unsafe/ unreadable README at {p}: {e}")
                     return None
         logger.debug("No README file found in repository root.")
         return None
 
-    def _analyze_call_graph(self, file_tree: Dict[str, Any], repo_dir: str) -> Dict[str, Any]:
+    def _analyze_call_graph(self, file_tree: dict[str, Any], repo_dir: str) -> dict[str, Any]:
         """
         Perform multi-language call graph analysis.
 
@@ -296,7 +300,9 @@ class AnalysisService:
         logger.debug("Extracting code files from file tree...")
         code_files = self.call_graph_analyzer.extract_code_files(file_tree)
 
-        logger.debug(f"Found {len(code_files)} total code files. Filtering for supported languages.")
+        logger.debug(
+            f"Found {len(code_files)} total code files. Filtering for supported languages."
+        )
         supported_files = self._filter_supported_languages(code_files)
         logger.debug(f"Analyzing {len(supported_files)} supported files.")
 
@@ -307,11 +313,11 @@ class AnalysisService:
 
         return result
 
-    def _filter_supported_languages(self, code_files: List[Dict]) -> List[Dict]:
+    def _filter_supported_languages(self, code_files: list[dict]) -> list[dict]:
         """
         Filter code files to only include supported languages.
 
-        Supports Python, JavaScript, TypeScript, Java, C#, C, C++, PHP, Go, and Rust.
+        Supports Python, JavaScript, TypeScript, Java, C#, C, C++, PHP, Ruby, Go, and Rust.
         """
         supported_languages = {
             "python",
@@ -322,6 +328,7 @@ class AnalysisService:
             "c",
             "cpp",
             "php",
+            "ruby",
             "go",
             "rust",
             "kotlin",
@@ -333,9 +340,20 @@ class AnalysisService:
             if file_info.get("language") in supported_languages
         ]
 
-    def _get_supported_languages(self) -> List[str]:
+    def _get_supported_languages(self) -> list[str]:
         """Get list of currently supported languages for analysis."""
-        return ["python", "javascript", "typescript", "java", "csharp", "c", "cpp", "php", "kotlin"]
+        return [
+            "python",
+            "javascript",
+            "typescript",
+            "java",
+            "csharp",
+            "c",
+            "cpp",
+            "php",
+            "ruby",
+            "kotlin",
+        ]
 
     def _cleanup_repository(self, temp_dir: str):
         """Clean up cloned repository."""
@@ -372,7 +390,7 @@ def analyze_repository(
 
 def analyze_repository_structure_only(
     github_url: str, include_patterns=None, exclude_patterns=None, use_gitignore=True
-) -> tuple[Dict, None]:
+) -> tuple[dict, None]:
     """
     Backward compatibility function.
 

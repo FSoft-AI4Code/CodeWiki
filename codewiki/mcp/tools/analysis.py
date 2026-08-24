@@ -13,9 +13,9 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
-from codewiki.mcp.session import SessionState, SessionStore
+from codewiki.mcp.session import SessionStore
 from codewiki.mcp.workspace import SessionWorkspace
 
 logger = logging.getLogger(__name__)
@@ -25,10 +25,11 @@ logger = logging.getLogger(__name__)
 #  Incremental update: detect changes since last generation
 # ---------------------------------------------------------------------------
 
+
 def _detect_changes(
     repo_path: Path,
     output_dir: Path,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Detect changes since last documentation generation.
 
     Returns a changes dict with affected modules, or None if no previous
@@ -89,9 +90,9 @@ def _detect_changes(
 
 def _detect_via_git(
     repo_path: Path,
-    metadata: Dict[str, Any],
+    metadata: dict[str, Any],
     output_dir: Path | None = None,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Detect changes via git. Returns None if not in a git repo or if no
     previous commit is recorded (so the caller can fall through to mtime).
 
@@ -100,8 +101,9 @@ def _detect_via_git(
     """
     try:
         import git
+
         repo = git.Repo(repo_path, search_parent_directories=True)
-    except Exception:
+    except Exception:  # noqa: BLE001 — not a git repo is a normal outcome
         return None
 
     prev_commit = metadata.get("generation_info", {}).get("commit_id")
@@ -110,7 +112,7 @@ def _detect_via_git(
 
     try:
         current_commit = repo.head.commit.hexsha
-    except Exception:
+    except Exception:  # noqa: BLE001 — empty repo has no HEAD commit
         return None
 
     # Compute subpath prefix for monorepo support.
@@ -136,12 +138,12 @@ def _detect_via_git(
         except (ValueError, TypeError):
             pass
 
-    def _normalize(p: str) -> Optional[str]:
+    def _normalize(p: str) -> str | None:
         """Strip the monorepo subpath and drop generated/non-source paths."""
         if subpath:
             if not p.startswith(subpath + "/"):
                 return None  # outside target subdirectory
-            p = p[len(subpath) + 1:]
+            p = p[len(subpath) + 1 :]
         if p.startswith(".codewiki/"):
             return None
         if output_dir_rel and (p == output_dir_rel or p.startswith(output_dir_rel + "/")):
@@ -151,7 +153,7 @@ def _detect_via_git(
     changed: list[str] = []
     seen: set[str] = set()
 
-    def _add(raw: Optional[str]) -> None:
+    def _add(raw: str | None) -> None:
         if raw:
             p = _normalize(raw)
             if p and p not in seen:
@@ -162,14 +164,15 @@ def _detect_via_git(
     if prev_commit != current_commit:
         try:
             diff_index = repo.commit(prev_commit).diff(current_commit)
-        except Exception:
+        except Exception:  # noqa: BLE001 — see fallback note below
             # Baseline commit unreachable (shallow clone, rebase, gc).
             # Committed changes can't be enumerated, and returning an empty
             # list here would falsely report "up to date" on a clean tree —
             # fall back to mtime detection instead.
             logger.warning(
                 "Stored commit %s is unreachable in %s; falling back to mtime detection",
-                prev_commit, repo_path,
+                prev_commit,
+                repo_path,
             )
             return None
         for diff in diff_index:
@@ -183,7 +186,7 @@ def _detect_via_git(
             _add(d.b_path)
         for item in repo.untracked_files:
             _add(item)
-    except Exception:
+    except Exception:  # noqa: BLE001, S110 — uncommitted-change listing is best-effort
         pass
 
     return {"changed_files": changed, "method": "git"}
@@ -191,8 +194,8 @@ def _detect_via_git(
 
 def _detect_via_mtime(
     repo_path: Path,
-    metadata: Dict[str, Any],
-) -> Optional[Dict[str, Any]]:
+    metadata: dict[str, Any],
+) -> dict[str, Any] | None:
     """Fallback: detect changed files by comparing mtime with generation timestamp."""
     timestamp_str = metadata.get("generation_info", {}).get("timestamp")
     if not timestamp_str:
@@ -200,22 +203,37 @@ def _detect_via_mtime(
 
     try:
         from datetime import datetime
+
         prev_time = datetime.fromisoformat(timestamp_str).timestamp()
     except (ValueError, TypeError):
         return None
 
     # Language extensions recognized by CodeWiki
     source_extensions = {
-        ".py", ".java", ".js", ".jsx", ".ts", ".tsx",
-        ".c", ".h", ".cpp", ".hpp", ".cc", ".hh",
-        ".cs", ".kt", ".kts",
+        ".py",
+        ".java",
+        ".js",
+        ".jsx",
+        ".ts",
+        ".tsx",
+        ".c",
+        ".h",
+        ".cpp",
+        ".hpp",
+        ".cc",
+        ".hh",
+        ".cs",
+        ".kt",
+        ".kts",
+        ".rb",
     }
 
     changed: list[str] = []
     for dirpath, dirnames, filenames in os.walk(repo_path):
         # Skip hidden dirs and common non-source dirs
         dirnames[:] = [
-            d for d in dirnames
+            d
+            for d in dirnames
             if not d.startswith(".") and d not in ("node_modules", "__pycache__", "venv", ".venv")
         ]
         for filename in filenames:
@@ -233,9 +251,9 @@ def _detect_via_mtime(
 
 
 def _find_affected_modules(
-    module_tree: Dict[str, Any],
-    changed_files: List[str],
-) -> Tuple[set, set]:
+    module_tree: dict[str, Any],
+    changed_files: list[str],
+) -> tuple[set, set]:
     """Map changed files to affected modules using module_tree.json.
 
     Uses substring matching (same as the CLI ``_invalidate_affected_modules``).
@@ -244,7 +262,7 @@ def _find_affected_modules(
     affected: set[str] = set()
     cascade: set[str] = set()
 
-    def _walk(tree: Dict, parents: list[str] | None = None):
+    def _walk(tree: dict, parents: list[str] | None = None):
         if parents is None:
             parents = []
         for mod_name, mod_info in tree.items():
@@ -253,7 +271,11 @@ def _find_affected_modules(
             for comp in components:
                 comp_file = comp.split("::")[0]
                 for cf in changed_files:
-                    if comp_file == cf or comp_file.endswith("/" + cf) or cf.endswith("/" + comp_file):
+                    if (
+                        comp_file == cf
+                        or comp_file.endswith("/" + cf)
+                        or cf.endswith("/" + comp_file)
+                    ):
                         hit = True
                         break
                     # Changed dir contains the component file, or vice versa
@@ -280,7 +302,7 @@ def _find_affected_modules(
 
 
 def handle_analyze_repo(
-    arguments: Dict[str, Any],
+    arguments: dict[str, Any],
     store: SessionStore,
 ) -> str:
     """Run the dependency analysis, write results to workspace files,
@@ -294,6 +316,7 @@ def handle_analyze_repo(
 
     # Build a minimal Config for the dependency analyzer (no LLM fields used)
     from codewiki.src.config import Config
+
     config = Config(
         repo_path=str(repo_path),
         output_dir=str(output_dir / "temp"),
@@ -311,7 +334,7 @@ def handle_analyze_repo(
     include = arguments.get("include_patterns")
     exclude = arguments.get("exclude_patterns")
     if include or exclude:
-        agent_instructions: Dict[str, Any] = {}
+        agent_instructions: dict[str, Any] = {}
         if include:
             agent_instructions["include_patterns"] = [p.strip() for p in include.split(",")]
         if exclude:
@@ -319,6 +342,7 @@ def handle_analyze_repo(
         config.agent_instructions = agent_instructions
 
     from codewiki.src.be.dependency_analyzer import DependencyGraphBuilder
+
     builder = DependencyGraphBuilder(config)
     components, leaf_nodes = builder.build_dependency_graph()
 
@@ -333,6 +357,7 @@ def handle_analyze_repo(
     # Record the analyzed commit now — close_session uses it as the
     # incremental-update baseline in metadata.json.
     from codewiki.cli.utils.repo_validator import get_git_commit_hash
+
     session.analyzed_commit = get_git_commit_hash(repo_path) or None
 
     # Create the workspace with the real session_id
@@ -344,18 +369,20 @@ def handle_analyze_repo(
     # 1. Full component index (no pagination)
     component_index: list[dict] = []
     for comp_id, node in components.items():
-        component_index.append({
-            "id": comp_id,
-            "type": getattr(node, "component_type", "unknown"),
-            "file": getattr(node, "relative_path", ""),
-        })
+        component_index.append(
+            {
+                "id": comp_id,
+                "type": getattr(node, "component_type", "unknown"),
+                "file": getattr(node, "relative_path", ""),
+            }
+        )
     workspace.write_json("component_index.json", component_index)
 
     # 2. Full leaf nodes list
     workspace.write_json("leaf_nodes.json", leaf_nodes)
 
     # 3. Language stats
-    languages: Dict[str, int] = {}
+    languages: dict[str, int] = {}
     for node in components.values():
         lang = getattr(node, "language", "unknown")
         languages[lang] = languages.get(lang, 0) + 1
