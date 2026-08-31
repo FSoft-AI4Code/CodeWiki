@@ -116,6 +116,31 @@ class DocumentationGenerator:
         collect_modules(module_tree, parent_path)
         return processing_order
 
+    def resolve_processing_order(
+        self,
+        first_module_tree: dict[str, Any],
+        module_tree: dict[str, Any],
+    ) -> list[tuple[list[str], str]]:
+        """Get the processing order, falling back to ``module_tree`` when
+        ``first_module_tree`` is empty.
+
+        Whole-repository-mode runs (module clustering skipped because the
+        repo fits in one context window) never populate
+        ``first_module_tree.json`` — only the LLM clustering path does.
+        A prior whole-repo agent run can still insert real sub-modules into
+        ``module_tree.json`` via ``generate_sub_module_documentation_tool``,
+        though. Without this fallback, ``--update``/``--compare-to``
+        correctly invalidates (deletes) an affected sub-module's ``.md``
+        using ``module_tree.json``, but the processing loop below never
+        re-visits it because its order comes from the still-empty
+        ``first_module_tree`` — the run then always ends in
+        ``IncompleteGenerationError``.
+        """
+        processing_order = self.get_processing_order(first_module_tree)
+        if not processing_order and module_tree:
+            processing_order = self.get_processing_order(module_tree)
+        return processing_order
+
     def is_leaf_module(self, module_info: dict[str, Any]) -> bool:
         """Check if a module is a leaf module (has no children or empty children)."""
         children = module_info.get("children", {})
@@ -208,7 +233,7 @@ class DocumentationGenerator:
         first_module_tree = file_manager.load_json(first_module_tree_path)
 
         # Get processing order (leaf modules first)
-        processing_order = self.get_processing_order(first_module_tree)
+        processing_order = self.resolve_processing_order(first_module_tree, module_tree)
 
         # Process modules in dependency order
         final_module_tree = module_tree
