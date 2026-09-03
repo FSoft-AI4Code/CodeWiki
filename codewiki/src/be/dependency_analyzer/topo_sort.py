@@ -13,8 +13,11 @@ from collections import deque
 from codewiki.src.be.dependency_analyzer.models.core import Node
 from codewiki.src.be.dependency_analyzer.leaf_selection import (
     LEAF_REDUCTION_THRESHOLD,
+    MIN_FILE_COVERAGE_AFTER_REDUCTION,
     compute_valid_leaf_types,
+    files_covered,
     filter_leaf_nodes,
+    spread_over_files,
 )
 
 logger = logging.getLogger(__name__)
@@ -310,16 +313,52 @@ def get_leaf_nodes(graph: Dict[str, Set[str]], components: Dict[str, Node]) -> L
 
     concise_leaf_nodes = concise_node(leaf_nodes)
     if len(concise_leaf_nodes) >= LEAF_REDUCTION_THRESHOLD:
-        logger.debug(f"Leaf nodes are too many ({len(concise_leaf_nodes)}), removing dependencies of other nodes")
+        logger.info(
+            "Leaf nodes are too many (%d); reducing to components nothing "
+            "depends on.",
+            len(concise_leaf_nodes),
+        )
         # Remove nodes that are dependencies of other nodes
+        reduced_input = set(leaf_nodes)
         for node, deps in acyclic_graph.items():
             for dep in deps:
-                leaf_nodes.discard(dep)
-        
-        concise_leaf_nodes = concise_node(leaf_nodes)
-    
+                reduced_input.discard(dep)
+        reduced = concise_node(reduced_input)
+
+        # In call-graph shaped repositories nearly every function is called by
+        # something, so the reduction above can collapse to a few unreferenced
+        # functions and leave most files without an entry point. Compare file
+        # coverage and fall back to a capped, file-spread selection instead.
+        before = files_covered(concise_leaf_nodes, components)
+        after = files_covered(reduced, components)
+        keeps_coverage = (
+            not before
+            or len(after) / len(before) >= MIN_FILE_COVERAGE_AFTER_REDUCTION
+        )
+
+        if reduced and keeps_coverage:
+            leaf_nodes = reduced_input
+            concise_leaf_nodes = reduced
+        else:
+            in_degree: Dict[str, int] = {}
+            for node, deps in acyclic_graph.items():
+                for dep in deps:
+                    in_degree[dep] = in_degree.get(dep, 0) + 1
+            capped = spread_over_files(
+                concise_leaf_nodes, components, in_degree,
+                LEAF_REDUCTION_THRESHOLD,
+            )
+            logger.info(
+                "Reduction would have covered only %d of %d source files; "
+                "keeping %d entry points spread across %d files instead.",
+                len(after), len(before), len(capped),
+                len(files_covered(capped, components)),
+            )
+            leaf_nodes = set(capped)
+            concise_leaf_nodes = capped
+
     if not leaf_nodes:
         logger.warning("No leaf nodes found in the graph")
         return []
-    
-    return concise_leaf_nodes 
+
+    return concise_leaf_nodes
