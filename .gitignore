@@ -42,7 +42,7 @@ tests/*
 !tests/test_gitignore_filtering.py
 !tests/test_module_tree_validation.py
 !tests/test_ruby_analyzer.py
-!tests/test_processing_order_fallback.py
+!tests/test_processing_order_update.py
 
 # Jupyter
 *.ipynb
