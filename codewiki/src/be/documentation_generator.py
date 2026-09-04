@@ -89,8 +89,9 @@ class DocumentationGenerator:
         metadata_path = os.path.join(working_dir, "metadata.json")
         file_manager.save_json(metadata, metadata_path)
 
+    @staticmethod
     def get_processing_order(
-        self, module_tree: dict[str, Any], parent_path: list[str] | None = None
+        module_tree: dict[str, Any], parent_path: list[str] | None = None
     ) -> list[tuple[list[str], str]]:
         """Get the processing order using topological sort (leaf modules first)."""
         parent_path = parent_path or []
@@ -116,7 +117,8 @@ class DocumentationGenerator:
         collect_modules(module_tree, parent_path)
         return processing_order
 
-    def is_leaf_module(self, module_info: dict[str, Any]) -> bool:
+    @staticmethod
+    def is_leaf_module(module_info: dict[str, Any]) -> bool:
         """Check if a module is a leaf module (has no children or empty children)."""
         children = module_info.get("children", {})
         return not children or (isinstance(children, dict) and len(children) == 0)
@@ -203,12 +205,22 @@ class DocumentationGenerator:
         file_manager.ensure_directory(working_dir)
 
         module_tree_path = os.path.join(working_dir, MODULE_TREE_FILENAME)
-        first_module_tree_path = os.path.join(working_dir, FIRST_MODULE_TREE_FILENAME)
         module_tree = file_manager.load_json(module_tree_path)
-        first_module_tree = file_manager.load_json(first_module_tree_path)
 
-        # Get processing order (leaf modules first)
-        processing_order = self.get_processing_order(first_module_tree)
+        # Get processing order (leaf modules first) from module_tree.json, not
+        # first_module_tree.json. The first tree only holds the initial
+        # clustering result (and stays {} in whole-repository mode), while
+        # module_tree.json also carries the sub-modules agents inserted via
+        # generate_sub_module_documentation_tool. --update/--compare-to
+        # invalidates docs against module_tree.json, so ordering from the
+        # first tree would skip any invalidated agent-inserted module and the
+        # run would end in IncompleteDocumentationError. Iterating the full
+        # tree is safe on resume: every module whose .md already exists
+        # short-circuits in run_module_agent/generate_parent_module_docs, so
+        # unaffected modules cost no LLM calls. In whole-repository mode a
+        # regenerated overview.md is rebuilt from the module docs via
+        # generate_parent_module_docs([]) rather than by the whole-repo agent.
+        processing_order = self.get_processing_order(module_tree)
 
         # Process modules in dependency order
         final_module_tree = module_tree
