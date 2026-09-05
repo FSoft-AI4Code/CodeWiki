@@ -1,4 +1,5 @@
 from typing import Dict, List, Set
+import re
 
 from codewiki.src.be.dependency_analyzer.models.core import Node
 
@@ -15,6 +16,11 @@ OOP_MINORITY_RATIO = 0.2
 LEAF_REDUCTION_THRESHOLD = 400
 
 OOP_TYPES = {"class", "interface", "struct"}
+
+# Error strings that occasionally reach leaf-node selection instead of an
+# identifier. Matched on word boundaries and only for entries that are not
+# known components, so that names like `handleInvalidInput` survive.
+ERROR_MESSAGE_RE = re.compile(r"\b(error|exception|failed|invalid)\b", re.IGNORECASE)
 
 
 def compute_valid_leaf_types(components: Dict[str, Node]) -> Set[str]:
@@ -60,8 +66,13 @@ def filter_leaf_nodes(
     """Keep leaf nodes that are known components of a valid type."""
     keep_leaf_nodes = []
     for leaf_node in leaf_nodes:
-        # Skip any leaf nodes that are clearly error strings or invalid identifiers
-        if not isinstance(leaf_node, str) or leaf_node.strip() == "" or any(err_keyword in leaf_node.lower() for err_keyword in ['error', 'exception', 'failed', 'invalid']):
+        if not isinstance(leaf_node, str) or leaf_node.strip() == "":
+            logger.debug(f"Skipping invalid leaf node identifier: '{leaf_node}'")
+            continue
+
+        # Only reject strings that look like error messages, not identifiers
+        # that merely contain such a word (handleInvalidInput, ErrorLog, ...).
+        if leaf_node not in components and ERROR_MESSAGE_RE.search(leaf_node):
             logger.debug(f"Skipping invalid leaf node identifier: '{leaf_node}'")
             continue
 
