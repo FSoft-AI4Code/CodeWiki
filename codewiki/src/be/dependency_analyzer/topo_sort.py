@@ -310,13 +310,17 @@ def get_leaf_nodes(graph: Dict[str, Set[str]], components: Dict[str, Node]) -> L
 
     concise_leaf_nodes = concise_node(leaf_nodes)
     if len(concise_leaf_nodes) >= LEAF_REDUCTION_THRESHOLD:
-        logger.debug(f"Leaf nodes are too many ({len(concise_leaf_nodes)}), removing dependencies of other nodes")
+        count_before = len(concise_leaf_nodes)
+        logger.info("Leaf nodes are too many (%d >= %d); reducing to components "
+                    "that nothing else depends on.",
+                    count_before, LEAF_REDUCTION_THRESHOLD)
         # Remove nodes that are dependencies of other nodes
         for node, deps in acyclic_graph.items():
             for dep in deps:
                 leaf_nodes.discard(dep)
-        
+
         concise_leaf_nodes = concise_node(leaf_nodes)
+        logger.info("Reduced from %d to %d leaf nodes.", count_before, len(concise_leaf_nodes))
     
     if not leaf_nodes:
         logger.warning("No leaf nodes found in the graph")
