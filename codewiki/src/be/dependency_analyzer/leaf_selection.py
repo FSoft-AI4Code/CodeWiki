@@ -1,8 +1,7 @@
-from typing import Dict, List, Set
+import logging
 
 from codewiki.src.be.dependency_analyzer.models.core import Node
 
-import logging
 logger = logging.getLogger(__name__)
 
 # Below this many class/interface/struct components, a repo is considered
@@ -17,7 +16,7 @@ LEAF_REDUCTION_THRESHOLD = 400
 OOP_TYPES = {"class", "interface", "struct"}
 
 
-def compute_valid_leaf_types(components: Dict[str, Node]) -> Set[str]:
+def compute_valid_leaf_types(components: dict[str, Node]) -> set[str]:
     """
     Determine which component types qualify as leaf nodes.
 
@@ -54,9 +53,9 @@ def compute_valid_leaf_types(components: Dict[str, Node]) -> Set[str]:
 
 def filter_leaf_nodes(
     leaf_nodes,
-    components: Dict[str, Node],
-    valid_types: Set[str],
-) -> List[str]:
+    components: dict[str, Node],
+    valid_types: set[str],
+) -> list[str]:
     """Keep leaf nodes that are known components of a valid type.
 
     Anything that is not a known component id (None, empty strings, error
