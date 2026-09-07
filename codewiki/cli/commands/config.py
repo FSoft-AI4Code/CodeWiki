@@ -87,12 +87,13 @@ def config_group():
 @click.option(
     "--provider",
     type=click.Choice(
-        ['openai-compatible', 'atlas-cloud', 'anthropic', 'bedrock', 'azure-openai', 'claude-code', 'codex'],
+        ['openai-compatible', 'atlas-cloud', 'orcarouter', 'anthropic', 'bedrock', 'azure-openai', 'claude-code', 'codex'],
         case_sensitive=False,
     ),
     help=(
         "LLM provider type (default: openai-compatible). "
         "Use 'atlas-cloud' for Atlas Cloud (base URL auto-set; reads ATLASCLOUD_API_KEY). "
+        "Use 'orcarouter' for OrcaRouter (base URL auto-set; reads ORCAROUTER_API_KEY). "
         "Use 'claude-code' or 'codex' to run on a CLI subscription instead of an API key."
     ),
 )
@@ -160,6 +161,11 @@ def config_set(
     $ codewiki config set --provider atlas-cloud --main-model <atlas-model> --cluster-model <atlas-model>
 
     \b
+    # OrcaRouter (OpenAI-compatible) — base URL auto-set,
+    # API key read from ORCAROUTER_API_KEY if --api-key is omitted
+    $ codewiki config set --provider orcarouter --main-model <model> --cluster-model <model>
+
+    \b
     # Subscription mode (Claude Code) — no API key needed,
     # authenticate via 'claude login' on the host first
     $ codewiki config set --provider claude-code --main-model claude-sonnet-4-5
@@ -203,6 +209,16 @@ def config_set(
                 base_url = ATLAS_CLOUD_BASE_URL
             if not api_key:
                 api_key = os.getenv("ATLASCLOUD_API_KEY")
+
+        # OrcaRouter convenience defaults: it's an OpenAI-compatible endpoint, so
+        # auto-fill its base URL and pull the API key from ORCAROUTER_API_KEY when
+        # the user does not pass them explicitly.
+        if provider and provider.lower() == "orcarouter":
+            from codewiki.src.config import ORCAROUTER_BASE_URL
+            if not base_url:
+                base_url = ORCAROUTER_BASE_URL
+            if not api_key:
+                api_key = os.getenv("ORCAROUTER_API_KEY")
 
         # Validate inputs before saving
         validated_data = {}

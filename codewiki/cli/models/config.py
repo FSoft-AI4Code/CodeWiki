@@ -113,7 +113,7 @@ class Configuration:
         cluster_model: Model for module clustering
         fallback_model: Fallback model for documentation generation
         default_output: Default output directory
-        provider: LLM provider type (openai-compatible, atlas-cloud, anthropic, bedrock, azure-openai)
+        provider: LLM provider type (openai-compatible, atlas-cloud, orcarouter, anthropic, bedrock, azure-openai)
         aws_region: AWS region for Bedrock provider
         api_version: Azure OpenAI API version
         azure_deployment: Azure OpenAI deployment name
