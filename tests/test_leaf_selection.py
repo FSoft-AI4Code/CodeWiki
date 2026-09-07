@@ -1,8 +1,8 @@
 """Tests for leaf-node identifier filtering.
 
 Covers filter_leaf_nodes: identifiers that merely contain a word like
-"invalid" must survive, while strings that are actually error messages
-reaching leaf-node selection instead of an identifier are dropped.
+"invalid" must survive, while strings that are not known component ids
+(error messages reaching leaf-node selection, malformed entries) are dropped.
 """
 
 from __future__ import annotations
