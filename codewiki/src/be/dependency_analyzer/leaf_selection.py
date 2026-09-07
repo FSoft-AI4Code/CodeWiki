@@ -1,8 +1,7 @@
-from typing import Dict, List, Set
+import logging
 
 from codewiki.src.be.dependency_analyzer.models.core import Node
 
-import logging
 logger = logging.getLogger(__name__)
 
 # Below this many class/interface/struct components, a repo is considered
@@ -17,7 +16,7 @@ LEAF_REDUCTION_THRESHOLD = 400
 OOP_TYPES = {"class", "interface", "struct"}
 
 
-def compute_valid_leaf_types(components: Dict[str, Node]) -> Set[str]:
+def compute_valid_leaf_types(components: dict[str, Node]) -> set[str]:
     """
     Determine which component types qualify as leaf nodes.
 
@@ -54,19 +53,23 @@ def compute_valid_leaf_types(components: Dict[str, Node]) -> Set[str]:
 
 def filter_leaf_nodes(
     leaf_nodes,
-    components: Dict[str, Node],
-    valid_types: Set[str],
-) -> List[str]:
-    """Keep leaf nodes that are known components of a valid type."""
+    components: dict[str, Node],
+    valid_types: set[str],
+) -> list[str]:
+    """Keep leaf nodes that are known components of a valid type.
+
+    Anything that is not a known component id (None, empty strings, error
+    messages that occasionally reach leaf-node selection) is dropped by the
+    membership check alone. Do not add keyword-based filtering on top of it:
+    it would also reject identifiers such as `handleInvalidInput` or `ErrorLog`.
+    """
     keep_leaf_nodes = []
     for leaf_node in leaf_nodes:
-        # Skip any leaf nodes that are clearly error strings or invalid identifiers
-        if not isinstance(leaf_node, str) or leaf_node.strip() == "" or any(err_keyword in leaf_node.lower() for err_keyword in ['error', 'exception', 'failed', 'invalid']):
-            logger.debug(f"Skipping invalid leaf node identifier: '{leaf_node}'")
+        if not isinstance(leaf_node, str) or leaf_node not in components:
+            logger.debug(f"Skipping unknown leaf node identifier: '{leaf_node}'")
             continue
 
-        if leaf_node in components:
-            if components[leaf_node].component_type in valid_types:
-                keep_leaf_nodes.append(leaf_node)
+        if components[leaf_node].component_type in valid_types:
+            keep_leaf_nodes.append(leaf_node)
 
     return keep_leaf_nodes
