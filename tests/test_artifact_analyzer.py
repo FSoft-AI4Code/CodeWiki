@@ -21,17 +21,19 @@ from codewiki.src.be.cluster_modules import (
 )
 from codewiki.src.be.dependency_analyzer.analysis.repo_analyzer import RepoAnalyzer
 from codewiki.src.be.dependency_analyzer.analyzers.artifact import (
-    ArtifactOptions,
     TRUNCATION_MARKER,
+    ArtifactOptions,
     classify_artifact,
     render_artifact_index,
 )
 from codewiki.src.be.dependency_analyzer.ast_parser import DependencyParser
 from codewiki.src.be.dependency_analyzer.leaf_selection import compute_valid_leaf_types
 from codewiki.src.be.dependency_analyzer.models.core import Node
-from codewiki.src.be.dependency_analyzer.topo_sort import build_graph_from_components, get_leaf_nodes
+from codewiki.src.be.dependency_analyzer.topo_sort import (
+    build_graph_from_components,
+    get_leaf_nodes,
+)
 from codewiki.src.be.prompt_template import USER_PROMPT, format_user_prompt
-
 
 # --------------------------------------------------------------------------- #
 # fixture
@@ -59,7 +61,11 @@ def mini_repo(tmp_path: Path) -> Path:
         "package.json",
         '{\n  "name": "mini",\n  "main": "pkg/index.js",\n  "scripts": {\n    "build": "node scripts/build.js",\n    "test": "npm run build && node test.js"\n  }\n}\n',
     )
-    _write(tmp_path, "scripts/build.js", "function build() { return 1; }\nmodule.exports = { build };\n")
+    _write(
+        tmp_path,
+        "scripts/build.js",
+        "function build() { return 1; }\nmodule.exports = { build };\n",
+    )
     _write(
         tmp_path,
         "Makefile",
@@ -68,7 +74,7 @@ def mini_repo(tmp_path: Path) -> Path:
     _write(
         tmp_path,
         "Dockerfile",
-        "FROM python:3.12 AS builder\nCOPY pkg/cli.py /app/cli.py\nRUN make build\n\nFROM python:3.12-slim\nCOPY --from=builder /app /app\nENTRYPOINT [\"python\", \"pkg/cli.py\"]\n",
+        'FROM python:3.12 AS builder\nCOPY pkg/cli.py /app/cli.py\nRUN make build\n\nFROM python:3.12-slim\nCOPY --from=builder /app /app\nENTRYPOINT ["python", "pkg/cli.py"]\n',
     )
     _write(
         tmp_path,
@@ -141,7 +147,9 @@ def test_classify_prose_and_exclude() -> None:
     assert classify_artifact("pkg/notes.md", "notes.md", 10, prose) is None
     excl = ArtifactOptions(exclude_patterns=["docker/data/*"])
     assert classify_artifact("docker/data/huge.yml", "huge.yml", 10, excl) is None
-    assert classify_artifact("docker/data/huge.yml", "huge.yml", 10, ArtifactOptions()) == "container"
+    assert (
+        classify_artifact("docker/data/huge.yml", "huge.yml", 10, ArtifactOptions()) == "container"
+    )
     assert classify_artifact("Dockerfile", "Dockerfile", 0, ArtifactOptions()) is None
 
 
@@ -166,14 +174,23 @@ def _tree_paths(tree: dict) -> set[str]:
 
 
 def test_repo_analyzer_whitelist(mini_repo: Path) -> None:
-    paths = _tree_paths(RepoAnalyzer(use_gitignore=False).analyze_repository_structure(str(mini_repo))["file_tree"])
-    assert {".github/workflows/ci.yml", "pytest.ini", "Dockerfile", "Makefile", "pyproject.toml"} <= paths
+    paths = _tree_paths(
+        RepoAnalyzer(use_gitignore=False).analyze_repository_structure(str(mini_repo))["file_tree"]
+    )
+    assert {
+        ".github/workflows/ci.yml",
+        "pytest.ini",
+        "Dockerfile",
+        "Makefile",
+        "pyproject.toml",
+    } <= paths
     assert "tests/conftest.py" not in paths
     assert ".github/ISSUE_TEMPLATE/bug.md" not in paths
     # user excludes still win over the whitelist
     paths_user = _tree_paths(
-        RepoAnalyzer(exclude_patterns=[".github"], use_gitignore=False)
-        .analyze_repository_structure(str(mini_repo))["file_tree"]
+        RepoAnalyzer(
+            exclude_patterns=[".github"], use_gitignore=False
+        ).analyze_repository_structure(str(mini_repo))["file_tree"]
     )
     assert ".github/workflows/ci.yml" not in paths_user
 
@@ -213,7 +230,10 @@ def test_parse_repository_emits_artifact_nodes_and_units(mini_repo: Path) -> Non
     assert artifacts[".github/workflows/ci.yml::lint"].artifact_class == "ci"
     assert artifacts["Makefile::test"].source_code.startswith("test: build\n\tpython pkg/cli.py")
     # code side is untouched
-    assert "pkg/cli.py::main" in components and components["pkg/cli.py::main"].component_type == "function"
+    assert (
+        "pkg/cli.py::main" in components
+        and components["pkg/cli.py::main"].component_type == "function"
+    )
     # a parser without options keeps the code-only graph
     plain = DependencyParser(str(mini_repo), use_gitignore=False).parse_repository()
     assert not _artifact_nodes(plain)
@@ -256,15 +276,23 @@ def test_edges_resolve_only_to_known_ids(mini_repo: Path) -> None:
 def test_caps(mini_repo: Path) -> None:
     for i in range(45):
         _write(mini_repo, f"config/c{i:02d}.yaml", f"n: {i}\n")
-    parser = DependencyParser(str(mini_repo), use_gitignore=False, artifact_options=ArtifactOptions())
+    parser = DependencyParser(
+        str(mini_repo), use_gitignore=False, artifact_options=ArtifactOptions()
+    )
     components = parser.parse_repository()
     big = components["config/big.yaml::big.yaml"]
     marker_prefix = TRUNCATION_MARKER.split("{")[0]
     assert marker_prefix in big.source_code
     assert len(big.source_code) < 16_384 + len(TRUNCATION_MARKER) + 32
-    config_files = [n for n in _artifact_nodes(components).values() if n.artifact_class == "config" and n.node_type == "artifact_file"]
+    config_files = [
+        n
+        for n in _artifact_nodes(components).values()
+        if n.artifact_class == "config" and n.node_type == "artifact_file"
+    ]
     assert len(config_files) == 40
-    assert len(parser.artifact_index["classes"]["config"]["omitted_by_class_cap"]) == 6  # 46 config files - 40
+    assert (
+        len(parser.artifact_index["classes"]["config"]["omitted_by_class_cap"]) == 6
+    )  # 46 config files - 40
     # a tiny budget keeps manifests (highest priority) and records what was skipped
     tight = DependencyParser(
         str(mini_repo), use_gitignore=False, artifact_options=ArtifactOptions(token_budget=120)
@@ -305,7 +333,9 @@ def test_leaf_types_and_pruning() -> None:
     components["src/x.py::X"] = _node("src/x.py::X", "class")
     components["src/z.py::Z"] = _node("src/z.py::Z", "class")
     components["src/y.py::Y"] = _node("src/y.py::Y", "class", {"src/z.py::Z"})
-    components["Dockerfile::Dockerfile"] = _node("Dockerfile::Dockerfile", "artifact", {"src/x.py::X"})
+    components["Dockerfile::Dockerfile"] = _node(
+        "Dockerfile::Dockerfile", "artifact", {"src/x.py::X"}
+    )
     leaves = set(get_leaf_nodes(build_graph_from_components(components), components))
     assert "src/x.py::X" in leaves  # referenced only by an artifact: kept
     assert "Dockerfile::Dockerfile" in leaves
@@ -325,7 +355,7 @@ def test_format_user_prompt_with_artifacts() -> None:
         component_type="artifact",
         file_path="/nonexistent/Dockerfile",
         relative_path="Dockerfile",
-        source_code="FROM python:3.12\nCMD [\"python\"]\n",
+        source_code='FROM python:3.12\nCMD ["python"]\n',
         node_type="artifact_file",
         artifact_class="container",
     )
@@ -356,7 +386,12 @@ def test_format_user_prompt_with_artifacts() -> None:
         relative_path="cfg/app.yml",
         source_code="a: 1",
     )
-    prompt2 = format_user_prompt("M", [code.id], {code.id: code}, {"M": {"path": "", "components": [code.id], "children": {}}})
+    prompt2 = format_user_prompt(
+        "M",
+        [code.id],
+        {code.id: code},
+        {"M": {"path": "", "components": [code.id], "children": {}}},
+    )
     assert "<REPOSITORY_ARTIFACTS>" not in prompt2
     assert "```yaml" in prompt2
     # MCP contract: USER_PROMPT still has exactly the three original placeholders

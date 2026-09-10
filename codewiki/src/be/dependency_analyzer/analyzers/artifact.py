@@ -34,9 +34,10 @@ import logging
 import os
 import posixpath
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any
 
 from codewiki.src.be.dependency_analyzer.models.core import CallRelationship, Node
 from codewiki.src.be.dependency_analyzer.utils.patterns import ARTIFACT_LOCKFILES
@@ -72,15 +73,56 @@ TRUNCATION_MARKER = "\n# [codewiki: truncated - showing first {shown} of {total}
 
 # Unit names that should be kept first when a file has more units than the cap.
 PRIORITY_UNITS = {
-    "all", "build", "test", "tests", "install", "lint", "release", "dev",
-    "start", "ci", "docker", "publish", "check", "format", "deploy",
+    "all",
+    "build",
+    "test",
+    "tests",
+    "install",
+    "lint",
+    "release",
+    "dev",
+    "start",
+    "ci",
+    "docker",
+    "publish",
+    "check",
+    "format",
+    "deploy",
 }
 
 _PROSE_EXTS = {".md", ".mdx", ".rst", ".txt"}
 _CODE_OR_SCRIPT_EXTS = (
-    "py", "sh", "bash", "js", "mjs", "cjs", "ts", "tsx", "jsx", "rb", "ps1",
-    "mk", "toml", "yaml", "yml", "json", "cfg", "ini", "java", "kt", "go",
-    "rs", "c", "cc", "cpp", "h", "hpp", "cs", "php", "proto", "fbs",
+    "py",
+    "sh",
+    "bash",
+    "js",
+    "mjs",
+    "cjs",
+    "ts",
+    "tsx",
+    "jsx",
+    "rb",
+    "ps1",
+    "mk",
+    "toml",
+    "yaml",
+    "yml",
+    "json",
+    "cfg",
+    "ini",
+    "java",
+    "kt",
+    "go",
+    "rs",
+    "c",
+    "cc",
+    "cpp",
+    "h",
+    "hpp",
+    "cs",
+    "php",
+    "proto",
+    "fbs",
 )
 PATH_TOKEN_RE = re.compile(
     r"(?<![\w@:/$-])((?:[\w.-]+/)*[\w.-]+\.(?:" + "|".join(_CODE_OR_SCRIPT_EXTS) + r"))\b"
@@ -90,9 +132,26 @@ MAKE_TARGET_RE = re.compile(r"(?<![\w-])make\s+(?:-[\w-]+\s+)*([A-Za-z0-9][\w./-
 NPM_SCRIPT_RE = re.compile(r"\b(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?([A-Za-z_][\w:.-]*)")
 DOCKER_BUILD_FILE_RE = re.compile(r"docker\s+(?:buildx\s+)?build\b[^\n]*?(?:-f|--file)[=\s]+(\S+)")
 _NPM_RESERVED = {
-    "install", "ci", "test", "run", "publish", "pack", "audit", "cache", "init",
-    "add", "remove", "update", "upgrade", "exec", "link", "login", "version",
-    "--frozen-lockfile", "-g", "--global",
+    "install",
+    "ci",
+    "test",
+    "run",
+    "publish",
+    "pack",
+    "audit",
+    "cache",
+    "init",
+    "add",
+    "remove",
+    "update",
+    "upgrade",
+    "exec",
+    "link",
+    "login",
+    "version",
+    "--frozen-lockfile",
+    "-g",
+    "--global",
 }
 
 
@@ -139,47 +198,132 @@ def is_artifact_file_node(node: Any) -> bool:
 # --------------------------------------------------------------------------- #
 
 _DROP_SEGMENTS = {
-    "docs", "doc", "node_modules", "vendor", "third_party", "dist", ".git",
-    "fixtures", "fixture", "testdata", "test_data", "__snapshots__",
+    "docs",
+    "doc",
+    "node_modules",
+    "vendor",
+    "third_party",
+    "dist",
+    ".git",
+    "fixtures",
+    "fixture",
+    "testdata",
+    "test_data",
+    "__snapshots__",
 }
 _CI_NAMES = {
-    ".gitlab-ci.yml", "Jenkinsfile", ".travis.yml", "azure-pipelines.yml",
-    "appveyor.yml", ".appveyor.yml", "bitbucket-pipelines.yml", "cloudbuild.yaml",
-    "cloudbuild.yml", ".drone.yml",
+    ".gitlab-ci.yml",
+    "Jenkinsfile",
+    ".travis.yml",
+    "azure-pipelines.yml",
+    "appveyor.yml",
+    ".appveyor.yml",
+    "bitbucket-pipelines.yml",
+    "cloudbuild.yaml",
+    "cloudbuild.yml",
+    ".drone.yml",
 }
 _MANIFEST_NAMES = {
-    "package.json", "pyproject.toml", "setup.py", "setup.cfg", "Cargo.toml",
-    "go.mod", "Gemfile", "pnpm-workspace.yaml", "lerna.json", "nx.json",
-    "turbo.json", "composer.json", "pom.xml", "build.gradle", "build.gradle.kts",
-    "settings.gradle", "settings.gradle.kts", "Package.swift", "pubspec.yaml",
-    "Pipfile", "environment.yml", "environment.yaml", "MANIFEST.in", "Procfile",
-    "conda.yaml", "conda.yml",
+    "package.json",
+    "pyproject.toml",
+    "setup.py",
+    "setup.cfg",
+    "Cargo.toml",
+    "go.mod",
+    "Gemfile",
+    "pnpm-workspace.yaml",
+    "lerna.json",
+    "nx.json",
+    "turbo.json",
+    "composer.json",
+    "pom.xml",
+    "build.gradle",
+    "build.gradle.kts",
+    "settings.gradle",
+    "settings.gradle.kts",
+    "Package.swift",
+    "pubspec.yaml",
+    "Pipfile",
+    "environment.yml",
+    "environment.yaml",
+    "MANIFEST.in",
+    "Procfile",
+    "conda.yaml",
+    "conda.yml",
 }
 _MANIFEST_EXTS = {".gemspec", ".csproj", ".fsproj", ".vbproj", ".sln", ".podspec"}
 _MANIFEST_RES = [re.compile(r"^requirements[\w.-]*\.txt$"), re.compile(r"^tsconfig[\w.-]*\.json$")]
-_PACKAGING_EXTS = {".spec", ".service", ".socket", ".timer", ".plist", ".nuspec", ".wxs", ".desktop"}
+_PACKAGING_EXTS = {
+    ".spec",
+    ".service",
+    ".socket",
+    ".timer",
+    ".plist",
+    ".nuspec",
+    ".wxs",
+    ".desktop",
+}
 _PACKAGING_TOPS = {"debian", "rpm", "installer", "pkg", "packaging"}
 _PACKAGING_PACKAGES_NAMES = {
-    "control", "rules", "changelog", "postinst", "prerm", "postrm", "preinst", "copyright",
+    "control",
+    "rules",
+    "changelog",
+    "postinst",
+    "prerm",
+    "postrm",
+    "preinst",
+    "copyright",
 }
 _BUILD_NAMES = {
-    "Makefile", "GNUmakefile", "makefile", "CMakeLists.txt", "Rakefile", "BUILD",
-    "BUILD.gn", "BUILD.bazel", "WORKSPACE", "DEPS", "meson.build", "SConstruct",
-    "SConscript", "build.xml", "gulpfile.js", "Gruntfile.js", "Herebyfile.mjs",
+    "Makefile",
+    "GNUmakefile",
+    "makefile",
+    "CMakeLists.txt",
+    "Rakefile",
+    "BUILD",
+    "BUILD.gn",
+    "BUILD.bazel",
+    "WORKSPACE",
+    "DEPS",
+    "meson.build",
+    "SConstruct",
+    "SConscript",
+    "build.xml",
+    "gulpfile.js",
+    "Gruntfile.js",
+    "Herebyfile.mjs",
 }
 _BUILD_EXTS = {".gn", ".gni", ".gradle", ".rake", ".mk", ".cmake", ".bzl", ".ninja"}
 _BUILD_CONFIG_RE = re.compile(r"^(webpack|rollup|vite|esbuild|tsup|babel)\.config\.[cm]?[jt]s$")
 _BUILD_TOPS = {"build", "rakelib", "cmake"}
 _TEST_INFRA_NAMES = {
-    "pytest.ini", "tox.ini", "conftest.py", ".coveragerc", "codecov.yml",
-    "karma.conf.js", ".nycrc", "noxfile.py",
+    "pytest.ini",
+    "tox.ini",
+    "conftest.py",
+    ".coveragerc",
+    "codecov.yml",
+    "karma.conf.js",
+    ".nycrc",
+    "noxfile.py",
 }
-_TEST_INFRA_RE = re.compile(r"^(jest|vitest|playwright|cypress|wdio|mocha)\.(config|workspace)\.[\w.]+$")
+_TEST_INFRA_RE = re.compile(
+    r"^(jest|vitest|playwright|cypress|wdio|mocha)\.(config|workspace)\.[\w.]+$"
+)
 _SCHEMA_EXTS = {".proto", ".fbs", ".avsc", ".thrift", ".graphql", ".gql", ".capnp", ".xsd", ".wsdl"}
 _SCHEMA_RE = re.compile(r"^(openapi|swagger)[\w.-]*\.(ya?ml|json)$")
 _CONFIG_EXTS = {
-    ".toml", ".yml", ".yaml", ".ini", ".cfg", ".conf", ".options", ".properties",
-    ".tf", ".nix", ".editorconfig", ".env",
+    ".toml",
+    ".yml",
+    ".yaml",
+    ".ini",
+    ".cfg",
+    ".conf",
+    ".options",
+    ".properties",
+    ".tf",
+    ".nix",
+    ".editorconfig",
+    ".env",
 }
 _CONFIG_TOPS = {"config", "configs", "conf", "etc", "settings", ".github"}
 _SCRIPT_EXTS = {".sh", ".bash", ".zsh", ".ps1", ".bat", ".cmd"}
@@ -192,7 +336,7 @@ def classify_artifact(
     size: int,
     opts: ArtifactOptions,
     first_line: str | None = None,
-) -> Optional[str]:
+) -> str | None:
     """Return the artifact class of ``rel_path`` or ``None`` when it is not one.
 
     ``first_line`` is only needed for extension-less files under ``bin/`` or
@@ -210,7 +354,9 @@ def classify_artifact(
     # ---- hard drops -------------------------------------------------------
     if size <= 0 or name in ARTIFACT_LOCKFILES:
         return None
-    if any(seg in _DROP_SEGMENTS for seg in segs[:-1]) and not (opts.with_prose and top in {"docs", "doc"}):
+    if any(seg in _DROP_SEGMENTS for seg in segs[:-1]) and not (
+        opts.with_prose and top in {"docs", "doc"}
+    ):
         return None
     for pat in opts.exclude_patterns or []:
         if fnmatch.fnmatch(rel, pat) or fnmatch.fnmatch(name, pat):
@@ -243,7 +389,11 @@ def classify_artifact(
         return "ci"
 
     # ---- container -----------------------------------------------------------
-    if fnmatch.fnmatch(name, "Dockerfile*") or lower.endswith(".dockerfile") or lower == "containerfile":
+    if (
+        fnmatch.fnmatch(name, "Dockerfile*")
+        or lower.endswith(".dockerfile")
+        or lower == "containerfile"
+    ):
         return "container"
     if re.match(r"^(docker-)?compose[.\w-]*\.ya?ml$", lower):
         return "container"
@@ -255,12 +405,29 @@ def classify_artifact(
         return "container"
 
     # ---- manifest (before packaging: packages/*/package.json is a manifest) --
-    if name in _MANIFEST_NAMES or ext in _MANIFEST_EXTS or any(r.match(name) for r in _MANIFEST_RES):
+    if (
+        name in _MANIFEST_NAMES
+        or ext in _MANIFEST_EXTS
+        or any(r.match(name) for r in _MANIFEST_RES)
+    ):
         return "manifest"
 
     # Source files are code, not artifacts, unless an explicit name rule above
     # (setup.py, conftest.py, noxfile.py, *.conf.py) already claimed them.
-    if ext in {".py", ".js", ".ts", ".java", ".rb", ".go", ".rs", ".c", ".cpp", ".cs", ".php", ".kt"}:
+    if ext in {
+        ".py",
+        ".js",
+        ".ts",
+        ".java",
+        ".rb",
+        ".go",
+        ".rs",
+        ".c",
+        ".cpp",
+        ".cs",
+        ".php",
+        ".kt",
+    }:
         if name in _TEST_INFRA_NAMES:
             return "test_infra"
         if name in _BUILD_NAMES or _BUILD_CONFIG_RE.match(name) or _TEST_INFRA_RE.match(name):
@@ -272,11 +439,18 @@ def classify_artifact(
         return "packaging"
     if top in _PACKAGING_TOPS:
         return "packaging"
-    if top == "packages" and (ext in {".sh", ".conf", ".spec", ".service"} or name in _PACKAGING_PACKAGES_NAMES):
+    if top == "packages" and (
+        ext in {".sh", ".conf", ".spec", ".service"} or name in _PACKAGING_PACKAGES_NAMES
+    ):
         return "packaging"
 
     # ---- build -------------------------------------------------------------------
-    if name in _BUILD_NAMES or ext in _BUILD_EXTS or _BUILD_CONFIG_RE.match(name) or lower.startswith(".babelrc"):
+    if (
+        name in _BUILD_NAMES
+        or ext in _BUILD_EXTS
+        or _BUILD_CONFIG_RE.match(name)
+        or lower.startswith(".babelrc")
+    ):
         return "build"
     if top in _BUILD_TOPS and ext in _BUILD_EXTS:
         return "build"
@@ -292,18 +466,23 @@ def classify_artifact(
         return "schema"
 
     # ---- config ------------------------------------------------------------------
-    if ext in _CONFIG_EXTS or (
+    is_config_like = ext in _CONFIG_EXTS or (
         name.startswith(".") and ext in {"", ".json", ".yml", ".yaml", ".js", ".cjs"}
-    ):
-        if depth <= 1 or top in _CONFIG_TOPS:
-            return "config"
+    )
+    if is_config_like and (depth <= 1 or top in _CONFIG_TOPS):
+        return "config"
     if ext in {".json", ".xml"} and (depth == 0 or top in {"config", "configs", "conf", "etc"}):
         return "config"
 
     # ---- script ------------------------------------------------------------------
     if ext in _SCRIPT_EXTS and (depth <= 2 or top in _SCRIPT_TOPS):
         return "script"
-    if ext == "" and top in {"bin", "scripts"} and first_line is not None and first_line.startswith("#!"):
+    if (
+        ext == ""
+        and top in {"bin", "scripts"}
+        and first_line is not None
+        and first_line.startswith("#!")
+    ):
         return "script"
 
     return None
@@ -321,11 +500,11 @@ def _line_of(text: str, offset: int) -> int:
 def _yaml_children(text: str, top_key: str) -> list[tuple[str, int, int]]:
     """Return ``(name, start, end)`` offsets of the direct children of a top-level
     YAML mapping such as ``jobs:`` or ``services:`` without a YAML library."""
-    m = re.search(rf"^{re.escape(top_key)}:[ \t]*(?:#.*)?$", text, re.M)
+    m = re.search(rf"^{re.escape(top_key)}:[ \t]*(?:#.*)?$", text, re.MULTILINE)
     if not m:
         return []
     body_start = m.end()
-    nxt = re.compile(r"^\S", re.M).search(text, body_start + 1)
+    nxt = re.compile(r"^\S", re.MULTILINE).search(text, body_start + 1)
     body_end = nxt.start() if nxt else len(text)
     body = text[body_start:body_end]
     indent = None
@@ -335,7 +514,7 @@ def _yaml_children(text: str, top_key: str) -> list[tuple[str, int, int]]:
             break
     if not indent:
         return []
-    child_re = re.compile(rf"^ {{{indent}}}([A-Za-z_\"'][\w.\"'-]*):[ \t]*(?:#.*)?$", re.M)
+    child_re = re.compile(rf"^ {{{indent}}}([A-Za-z_\"'][\w.\"'-]*):[ \t]*(?:#.*)?$", re.MULTILINE)
     matches = list(child_re.finditer(body))
     units: list[tuple[str, int, int]] = []
     for i, cm in enumerate(matches):
@@ -346,7 +525,9 @@ def _yaml_children(text: str, top_key: str) -> list[tuple[str, int, int]]:
 
 
 def _dockerfile_units(text: str) -> list[tuple[str, int, int]]:
-    from_re = re.compile(r"^FROM\s+(?:--platform=\S+\s+)?(\S+)(?:\s+AS\s+(\S+))?", re.I | re.M)
+    from_re = re.compile(
+        r"^FROM\s+(?:--platform=\S+\s+)?(\S+)(?:\s+AS\s+(\S+))?", re.IGNORECASE | re.MULTILINE
+    )
     matches = list(from_re.finditer(text))
     if not matches or (len(matches) == 1 and not matches[0].group(2)):
         return []
@@ -377,13 +558,21 @@ def _makefile_units(text: str) -> list[tuple[str, int, int]]:
     i = 0
     while i < len(lines):
         m = target_re.match(lines[i])
-        if not m or "%" in m.group(1) or "$" in m.group(1) or m.group(1).startswith(".") \
-                or re.match(r"\s*[?+!]?=", m.group("rest")):
+        if (
+            not m
+            or "%" in m.group(1)
+            or "$" in m.group(1)
+            or m.group(1).startswith(".")
+            or re.match(r"\s*[?+!]?=", m.group("rest"))
+        ):
             i += 1
             continue
         name = m.group(1)
         j = i + 1
-        while j < len(lines) and (lines[j].startswith("\t") or (lines[j].strip() == "" and j + 1 < len(lines) and lines[j + 1].startswith("\t"))):
+        while j < len(lines) and (
+            lines[j].startswith("\t")
+            or (lines[j].strip() == "" and j + 1 < len(lines) and lines[j + 1].startswith("\t"))
+        ):
             j += 1
         end = offsets[j] - 1 if j < len(lines) else len(text)
         if name not in seen:
@@ -435,7 +624,11 @@ def _entry_point_units(text: str, kind: str) -> list[tuple[str, int, int, str, s
             except Exception:  # noqa: BLE001 - fall back to regex below
                 tables = {}
         if not tables:
-            for sec in re.finditer(r"^\[(?:project\.(?:gui-)?scripts|tool\.poetry\.scripts)\]\s*$(.*?)(?=^\[|\Z)", text, re.M | re.S):
+            for sec in re.finditer(
+                r"^\[(?:project\.(?:gui-)?scripts|tool\.poetry\.scripts)\]\s*$(.*?)(?=^\[|\Z)",
+                text,
+                re.MULTILINE | re.DOTALL,
+            ):
                 for line in sec.group(1).splitlines():
                     lm = re.match(r"^\s*([\w.-]+)\s*=\s*[\"']([\w.]+):([\w.]+)[\"']", line)
                     if lm:
@@ -444,12 +637,12 @@ def _entry_point_units(text: str, kind: str) -> list[tuple[str, int, int, str, s
             if not isinstance(target, str) or ":" not in target:
                 continue
             module, func = target.split(":", 1)
-            m = re.search(rf"^\s*{re.escape(name)}\s*=", text, re.M)
+            m = re.search(rf"^\s*{re.escape(name)}\s*=", text, re.MULTILINE)
             start = m.start() if m else 0
             snippet = f'{name} = "{target}"'
             results.append((str(name), start, start + len(snippet), module.strip(), func.strip()))
     else:  # setup.cfg
-        m = re.search(r"^console_scripts\s*=\s*$(.*?)(?=^\S|\Z)", text, re.M | re.S)
+        m = re.search(r"^console_scripts\s*=\s*$(.*?)(?=^\S|\Z)", text, re.MULTILINE | re.DOTALL)
         if m:
             for line in m.group(1).splitlines():
                 lm = re.match(r"^\s*([\w.-]+)\s*=\s*([\w.]+):([\w.]+)", line)
@@ -502,8 +695,12 @@ class _Resolver:
             return []
         if ref.startswith(("http://", "https://", "/", "..", "~")) or "://" in ref:
             return []
-        ref = ref[2:] if ref.startswith("./") else ref
-        cand = posixpath.normpath(posixpath.join(base_dir, ref)) if base_dir else posixpath.normpath(ref)
+        ref = ref.removeprefix("./")
+        cand = (
+            posixpath.normpath(posixpath.join(base_dir, ref))
+            if base_dir
+            else posixpath.normpath(ref)
+        )
         if cand in (".", "") or cand.startswith("../"):
             return []
         if cand in self.tree_dirs:
@@ -533,7 +730,12 @@ class _Resolver:
         if not module or not re.match(r"^[A-Za-z_][\w.]*$", module):
             return []
         mod_path = module.replace(".", "/")
-        candidates = [f"{mod_path}.py", f"{mod_path}/__init__.py", f"src/{mod_path}.py", f"{mod_path}/__main__.py"]
+        candidates = [
+            f"{mod_path}.py",
+            f"{mod_path}/__init__.py",
+            f"src/{mod_path}.py",
+            f"{mod_path}/__main__.py",
+        ]
         for p in candidates:
             if func:
                 fid = f"{p}::{func}"
@@ -545,7 +747,9 @@ class _Resolver:
         return []
 
 
-def _refs_from_shell_text(text: str, resolver: _Resolver, base_dir: str, artifact_units: dict[str, set[str]]) -> set[str]:
+def _refs_from_shell_text(
+    text: str, resolver: _Resolver, base_dir: str, artifact_units: dict[str, set[str]]
+) -> set[str]:
     """Collect ids referenced by shell-ish text (CI ``run:`` blocks, RUN lines,
     Makefile recipes, npm script values)."""
     found: set[str] = set()
@@ -563,7 +767,11 @@ def _refs_from_shell_text(text: str, resolver: _Resolver, base_dir: str, artifac
         script = m.group(1)
         if script in _NPM_RESERVED:
             continue
-        pj = posixpath.normpath(posixpath.join(base_dir, "package.json")) if base_dir else "package.json"
+        pj = (
+            posixpath.normpath(posixpath.join(base_dir, "package.json"))
+            if base_dir
+            else "package.json"
+        )
         if script in artifact_units.get(pj, set()):
             found.add(f"{pj}::{script}")
     for m in DOCKER_BUILD_FILE_RE.finditer(text):
@@ -661,7 +869,9 @@ def analyze_artifacts(
             continue
         truncated = total > opts.per_file_bytes
         if truncated:
-            text = text + TRUNCATION_MARKER.format(shown=len(text.encode("utf-8", "replace")), total=total)
+            text = text + TRUNCATION_MARKER.format(
+                shown=len(text.encode("utf-8", "replace")), total=total
+            )
         n_tokens = count_tokens(text)
         if tokens_used + n_tokens > opts.token_budget:
             index_classes[cls]["not_loaded_budget"].append(rel)
@@ -675,9 +885,13 @@ def analyze_artifacts(
     nodes: list[Node] = []
     relationships: list[CallRelationship] = []
     artifact_units: dict[str, set[str]] = {}
-    unit_specs: list[tuple[str, str, str, str, int, int, dict]] = []  # (cls, rel, unit, text, start_line, end_line, extra)
+    unit_specs: list[
+        tuple[str, str, str, str, int, int, dict]
+    ] = []  # (cls, rel, unit, text, start_line, end_line, extra)
 
-    def _make_node(rel: str, name: str, cls: str, text: str, node_type: str, start: int, end: int) -> Node:
+    def _make_node(
+        rel: str, name: str, cls: str, text: str, node_type: str, start: int, end: int
+    ) -> Node:
         return Node(
             id=f"{rel}::{name}",
             name=name,
@@ -709,7 +923,9 @@ def analyze_artifacts(
         elif cls == "container" and re.match(r"^(docker-)?compose[.\w-]*\.ya?ml$", lower):
             units = _yaml_children(text, "services")
             extra["compose"] = True
-        elif cls == "container" and (fnmatch.fnmatch(name, "Dockerfile*") or lower.endswith(".dockerfile")):
+        elif cls == "container" and (
+            fnmatch.fnmatch(name, "Dockerfile*") or lower.endswith(".dockerfile")
+        ):
             units = _dockerfile_units(text)
             extra["dockerfile"] = True
         elif lower in {"makefile", "gnumakefile"} or lower.endswith(".mk"):
@@ -719,18 +935,50 @@ def analyze_artifacts(
             pj_units, data = _package_json_units(text)
             extra["package_json"] = data
             for uname, start, end, utext in _prioritise_units(pj_units, opts.per_file_units):
-                unit_specs.append((cls, rel, uname, utext, _line_of(text, start), _line_of(text, end), {"script": True}))
+                unit_specs.append(
+                    (
+                        cls,
+                        rel,
+                        uname,
+                        utext,
+                        _line_of(text, start),
+                        _line_of(text, end),
+                        {"script": True},
+                    )
+                )
                 artifact_units.setdefault(rel, set()).add(uname)
             units = []
         elif name == "pyproject.toml" or name == "setup.cfg":
             kind = "pyproject" if name == "pyproject.toml" else "setup_cfg"
-            for uname, start, end, module, func in _prioritise_units(_entry_point_units(text, kind), opts.per_file_units):
+            for uname, start, end, module, func in _prioritise_units(
+                _entry_point_units(text, kind), opts.per_file_units
+            ):
                 snippet = f"{uname} = {module}:{func}"
-                unit_specs.append((cls, rel, uname, snippet, _line_of(text, start), _line_of(text, end), {"entry": (module, func)}))
+                unit_specs.append(
+                    (
+                        cls,
+                        rel,
+                        uname,
+                        snippet,
+                        _line_of(text, start),
+                        _line_of(text, end),
+                        {"entry": (module, func)},
+                    )
+                )
                 artifact_units.setdefault(rel, set()).add(uname)
             units = []
         for uname, start, end in _prioritise_units(units, opts.per_file_units):
-            unit_specs.append((cls, rel, uname, text[start:end].rstrip() + "\n", _line_of(text, start), _line_of(text, max(start, end - 1)), extra))
+            unit_specs.append(
+                (
+                    cls,
+                    rel,
+                    uname,
+                    text[start:end].rstrip() + "\n",
+                    _line_of(text, start),
+                    _line_of(text, max(start, end - 1)),
+                    extra,
+                )
+            )
             artifact_units.setdefault(rel, set()).add(uname)
         index_classes[cls]["files"].append(
             {
@@ -777,26 +1025,38 @@ def analyze_artifacts(
                 if job_base in (".", "/"):
                     job_base = ""
                 refs.update(_refs_from_shell_text(job_text, resolver, job_base, artifact_units))
-                _add_edges(f"{rel}::{uname}" if resolver.known(f"{rel}::{uname}") else file_id, refs)
+                _add_edges(
+                    f"{rel}::{uname}" if resolver.known(f"{rel}::{uname}") else file_id, refs
+                )
         elif cls == "container" and re.match(r"^(docker-)?compose[.\w-]*\.ya?ml$", lower):
             for uname, start, end in _yaml_children(text, "services"):
                 svc = text[start:end]
                 refs = set()
-                ctx = re.search(r"^\s+context:\s*(\S+)", svc, re.M)
-                dfile = re.search(r"^\s+dockerfile:\s*(\S+)", svc, re.M)
-                build_str = re.search(r"^\s+build:\s*(\S+)\s*$", svc, re.M)
-                context = (ctx.group(1) if ctx else (build_str.group(1) if build_str else "")).strip("\"'")
+                ctx = re.search(r"^\s+context:\s*(\S+)", svc, re.MULTILINE)
+                dfile = re.search(r"^\s+dockerfile:\s*(\S+)", svc, re.MULTILINE)
+                build_str = re.search(r"^\s+build:\s*(\S+)\s*$", svc, re.MULTILINE)
+                context = (
+                    ctx.group(1) if ctx else (build_str.group(1) if build_str else "")
+                ).strip("\"'")
                 dockerfile = (dfile.group(1) if dfile else "Dockerfile").strip("\"'")
                 if ctx or build_str or dfile:
-                    refs.update(resolver.resolve_path(posixpath.join(context, dockerfile), base_dir))
-                _add_edges(f"{rel}::{uname}" if resolver.known(f"{rel}::{uname}") else file_id, refs)
-        elif cls == "container" and (fnmatch.fnmatch(name, "Dockerfile*") or lower.endswith(".dockerfile")):
+                    refs.update(
+                        resolver.resolve_path(posixpath.join(context, dockerfile), base_dir)
+                    )
+                _add_edges(
+                    f"{rel}::{uname}" if resolver.known(f"{rel}::{uname}") else file_id, refs
+                )
+        elif cls == "container" and (
+            fnmatch.fnmatch(name, "Dockerfile*") or lower.endswith(".dockerfile")
+        ):
             units = _dockerfile_units(text) or [(None, 0, len(text))]
             for uname, start, end in units:
                 stage = text[start:end]
                 refs = set()
-                caller = f"{rel}::{uname}" if uname and resolver.known(f"{rel}::{uname}") else file_id
-                for m in re.finditer(r"^(?:COPY|ADD)\s+(.*)$", stage, re.I | re.M):
+                caller = (
+                    f"{rel}::{uname}" if uname and resolver.known(f"{rel}::{uname}") else file_id
+                )
+                for m in re.finditer(r"^(?:COPY|ADD)\s+(.*)$", stage, re.IGNORECASE | re.MULTILINE):
                     args = [a for a in m.group(1).split() if not a.startswith("--")]
                     if m.group(0).find("--from=") != -1:
                         alias = re.search(r"--from=(\S+)", m.group(0)).group(1)
@@ -804,11 +1064,15 @@ def analyze_artifacts(
                         continue
                     for a in args[:-1]:
                         refs.update(resolver.resolve_path(a, base_dir))
-                for m in re.finditer(r"^(?:ENTRYPOINT|CMD|RUN)\s+(.*)$", stage, re.I | re.M):
-                    refs.update(_refs_from_shell_text(m.group(1), resolver, base_dir, artifact_units))
+                for m in re.finditer(
+                    r"^(?:ENTRYPOINT|CMD|RUN)\s+(.*)$", stage, re.IGNORECASE | re.MULTILINE
+                ):
+                    refs.update(
+                        _refs_from_shell_text(m.group(1), resolver, base_dir, artifact_units)
+                    )
                 _add_edges(caller, refs)
         elif lower in {"makefile", "gnumakefile"} or lower.endswith(".mk"):
-            for m in re.finditer(r"^(?:-?include|sinclude)\s+(\S+)", text, re.M):
+            for m in re.finditer(r"^(?:-?include|sinclude)\s+(\S+)", text, re.MULTILINE):
                 _add_edges(file_id, resolver.resolve_path(m.group(1), base_dir))
             for uname, start, end in _makefile_units(text):
                 recipe = text[start:end]
@@ -821,7 +1085,9 @@ def analyze_artifacts(
                             refs.add(f"{rel}::{prereq}")
                         else:
                             refs.update(resolver.resolve_path(prereq, base_dir))
-                _add_edges(f"{rel}::{uname}" if resolver.known(f"{rel}::{uname}") else file_id, refs)
+                _add_edges(
+                    f"{rel}::{uname}" if resolver.known(f"{rel}::{uname}") else file_id, refs
+                )
         elif name == "package.json":
             _, data = _package_json_units(text)
             if isinstance(data, dict):
@@ -830,28 +1096,36 @@ def analyze_artifacts(
                     if isinstance(data.get(key), str):
                         refs.update(resolver.resolve_path(data[key], base_dir))
                 bin_field = data.get("bin")
-                for v in ([bin_field] if isinstance(bin_field, str) else list(bin_field.values()) if isinstance(bin_field, dict) else []):
+                for v in (
+                    [bin_field]
+                    if isinstance(bin_field, str)
+                    else list(bin_field.values())
+                    if isinstance(bin_field, dict)
+                    else []
+                ):
                     if isinstance(v, str):
                         refs.update(resolver.resolve_path(v, base_dir))
 
-                def _walk_exports(val: Any) -> None:
+                def _walk_exports(val: Any, found: set[str], rel_dir: str) -> None:
                     if isinstance(val, str):
-                        refs.update(resolver.resolve_path(val, base_dir))
+                        found.update(resolver.resolve_path(val, rel_dir))
                     elif isinstance(val, dict):
                         for v in val.values():
-                            _walk_exports(v)
+                            _walk_exports(v, found, rel_dir)
                     elif isinstance(val, list):
                         for v in val:
-                            _walk_exports(v)
+                            _walk_exports(v, found, rel_dir)
 
-                _walk_exports(data.get("exports"))
+                _walk_exports(data.get("exports"), refs, base_dir)
                 _add_edges(file_id, refs)
                 scripts = data.get("scripts") if isinstance(data.get("scripts"), dict) else {}
                 for sname, sval in scripts.items():
                     if not isinstance(sval, str):
                         continue
                     caller = f"{rel}::{sname}" if resolver.known(f"{rel}::{sname}") else file_id
-                    _add_edges(caller, _refs_from_shell_text(sval, resolver, base_dir, artifact_units))
+                    _add_edges(
+                        caller, _refs_from_shell_text(sval, resolver, base_dir, artifact_units)
+                    )
         elif name in {"pyproject.toml", "setup.cfg"}:
             kind = "pyproject" if name == "pyproject.toml" else "setup_cfg"
             for uname, _s, _e, module, func in _entry_point_units(text, kind):
@@ -872,13 +1146,21 @@ def analyze_artifacts(
             "per_file_units": opts.per_file_units,
         },
         "with_prose": opts.with_prose,
-        "classes": {cls: v for cls, v in index_classes.items() if v["files"] or v["omitted_by_class_cap"] or v["not_loaded_budget"]},
+        "classes": {
+            cls: v
+            for cls, v in index_classes.items()
+            if v["files"] or v["omitted_by_class_cap"] or v["not_loaded_budget"]
+        },
         "nodes": len(nodes),
         "edges": len(relationships),
     }
     logger.info(
         "Artifact analysis: %d files, %d nodes, %d edges, %d tokens (budget %d)",
-        len(loaded), len(nodes), len(relationships), tokens_used, opts.token_budget,
+        len(loaded),
+        len(nodes),
+        len(relationships),
+        tokens_used,
+        opts.token_budget,
     )
     return ArtifactAnalysis(nodes=nodes, relationships=relationships, index=index)
 
@@ -937,9 +1219,11 @@ def render_artifact_index(components: dict[str, Any], max_files_per_class: int =
         return ""
     lines = [
         "<REPOSITORY_ARTIFACTS>",
-        "Build, CI, container, packaging, manifest, config, schema and script files in this "
-        "repository, grouped by class. Component ids are `<path>::<name>`; read a file with "
-        "`str_replace_editor view` (working_dir=`repo`).",
+        (
+            "Build, CI, container, packaging, manifest, config, schema and script files in this "
+            "repository, grouped by class. Component ids are `<path>::<name>`; read a file with "
+            "`str_replace_editor view` (working_dir=`repo`)."
+        ),
     ]
     for cls in CLASS_PRIORITY:
         entries = index.get(cls)

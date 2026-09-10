@@ -1,18 +1,19 @@
-from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any
 import argparse
 import os
-import sys
+from dataclasses import dataclass
+from typing import Any
+
 from dotenv import load_dotenv
+
 load_dotenv()
 
 # Constants
-OUTPUT_BASE_DIR = 'output'
-DEPENDENCY_GRAPHS_DIR = 'dependency_graphs'
-DOCS_DIR = 'docs'
-FIRST_MODULE_TREE_FILENAME = 'first_module_tree.json'
-MODULE_TREE_FILENAME = 'module_tree.json'
-OVERVIEW_FILENAME = 'overview.md'
+OUTPUT_BASE_DIR = "output"
+DEPENDENCY_GRAPHS_DIR = "dependency_graphs"
+DOCS_DIR = "docs"
+FIRST_MODULE_TREE_FILENAME = "first_module_tree.json"
+MODULE_TREE_FILENAME = "module_tree.json"
+OVERVIEW_FILENAME = "overview.md"
 MAX_DEPTH = 2
 # Default max token settings
 DEFAULT_MAX_TOKENS = 32_768
@@ -36,31 +37,36 @@ MAX_TOKEN_PER_LEAF_MODULE = DEFAULT_MAX_TOKEN_PER_LEAF_MODULE
 # CLI context detection
 _CLI_CONTEXT = False
 
+
 def set_cli_context(enabled: bool = True):
     """Set whether we're running in CLI context (vs web app)."""
     global _CLI_CONTEXT
     _CLI_CONTEXT = enabled
 
+
 def is_cli_context() -> bool:
     """Check if running in CLI context."""
     return _CLI_CONTEXT
 
+
 # LLM services
 # In CLI mode, these will be loaded from ~/.codewiki/config.json + keyring
 # In web app mode, use environment variables
-MAIN_MODEL = os.getenv('MAIN_MODEL', 'claude-sonnet-4')
-FALLBACK_MODEL_1 = os.getenv('FALLBACK_MODEL_1', 'glm-4p5')
-CLUSTER_MODEL = os.getenv('CLUSTER_MODEL', MAIN_MODEL)
-LLM_BASE_URL = os.getenv('LLM_BASE_URL', 'http://0.0.0.0:4000/')
-LLM_API_KEY = os.getenv('LLM_API_KEY', 'sk-1234')
+MAIN_MODEL = os.getenv("MAIN_MODEL", "claude-sonnet-4")
+FALLBACK_MODEL_1 = os.getenv("FALLBACK_MODEL_1", "glm-4p5")
+CLUSTER_MODEL = os.getenv("CLUSTER_MODEL", MAIN_MODEL)
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "http://0.0.0.0:4000/")
+LLM_API_KEY = os.getenv("LLM_API_KEY", "sk-1234")
 
 # Atlas Cloud default endpoint (OpenAI-compatible). Used to auto-fill the base URL
 # when the user selects the `atlas-cloud` provider without passing --base-url.
 ATLAS_CLOUD_BASE_URL = "https://api.atlascloud.ai/v1"
 
+
 @dataclass
 class Config:
     """Configuration class for CodeWiki."""
+
     repo_path: str
     output_dir: str
     dependency_graph_dir: str
@@ -73,7 +79,9 @@ class Config:
     cluster_model: str
     fallback_model: str = FALLBACK_MODEL_1
     # Provider configuration
-    provider: str = "openai-compatible"  # openai-compatible, atlas-cloud, anthropic, bedrock, azure-openai
+    provider: str = (
+        "openai-compatible"  # openai-compatible, atlas-cloud, anthropic, bedrock, azure-openai
+    )
     aws_region: str = "us-east-1"
     api_version: str = "2024-12-01-preview"  # Azure OpenAI API version
     azure_deployment: str = ""  # Azure OpenAI deployment name
@@ -87,7 +95,7 @@ class Config:
     # the provider rejects cache_control markers)
     prompt_caching: bool = True
     # Agent instructions for customization
-    agent_instructions: Optional[Dict[str, Any]] = None
+    agent_instructions: dict[str, Any] | None = None
     # Apply Git ignore rules before dependency analysis
     use_gitignore: bool = True
     # Artifact-aware generation (Dockerfiles, CI workflows, Makefiles,
@@ -97,82 +105,84 @@ class Config:
     # Also read the root README and docs/ as a `prose` artifact class (off by
     # default: documentation without existing prose is the benchmark setting)
     with_prose: bool = False
-    
+
     @property
-    def artifact_exclude(self) -> Optional[List[str]]:
+    def artifact_exclude(self) -> list[str] | None:
         """Extra patterns excluded from artifact analysis (from agent instructions)."""
         if self.agent_instructions:
-            return self.agent_instructions.get('artifact_exclude')
+            return self.agent_instructions.get("artifact_exclude")
         return None
 
     @property
-    def include_patterns(self) -> Optional[List[str]]:
+    def include_patterns(self) -> list[str] | None:
         """Get file include patterns from agent instructions."""
         if self.agent_instructions:
-            return self.agent_instructions.get('include_patterns')
+            return self.agent_instructions.get("include_patterns")
         return None
-    
+
     @property
-    def exclude_patterns(self) -> Optional[List[str]]:
+    def exclude_patterns(self) -> list[str] | None:
         """Get file exclude patterns from agent instructions."""
         if self.agent_instructions:
-            return self.agent_instructions.get('exclude_patterns')
+            return self.agent_instructions.get("exclude_patterns")
         return None
-    
+
     @property
-    def focus_modules(self) -> Optional[List[str]]:
+    def focus_modules(self) -> list[str] | None:
         """Get focus modules from agent instructions."""
         if self.agent_instructions:
-            return self.agent_instructions.get('focus_modules')
+            return self.agent_instructions.get("focus_modules")
         return None
-    
+
     @property
-    def doc_type(self) -> Optional[str]:
+    def doc_type(self) -> str | None:
         """Get documentation type from agent instructions."""
         if self.agent_instructions:
-            return self.agent_instructions.get('doc_type')
+            return self.agent_instructions.get("doc_type")
         return None
-    
+
     @property
-    def custom_instructions(self) -> Optional[str]:
+    def custom_instructions(self) -> str | None:
         """Get custom instructions from agent instructions."""
         if self.agent_instructions:
-            return self.agent_instructions.get('custom_instructions')
+            return self.agent_instructions.get("custom_instructions")
         return None
-    
+
     def get_prompt_addition(self) -> str:
         """Generate prompt additions based on agent instructions."""
         if not self.agent_instructions:
             return ""
-        
+
         additions = []
-        
+
         if self.doc_type:
             doc_type_instructions = {
-                'api': "Focus on API documentation: endpoints, parameters, return types, and usage examples.",
-                'architecture': "Focus on architecture documentation: system design, component relationships, and data flow.",
-                'user-guide': "Focus on user guide documentation: how to use features, step-by-step tutorials.",
-                'developer': "Focus on developer documentation: code structure, contribution guidelines, and implementation details.",
+                "api": "Focus on API documentation: endpoints, parameters, return types, and usage examples.",
+                "architecture": "Focus on architecture documentation: system design, component relationships, and data flow.",
+                "user-guide": "Focus on user guide documentation: how to use features, step-by-step tutorials.",
+                "developer": "Focus on developer documentation: code structure, contribution guidelines, and implementation details.",
             }
             if self.doc_type.lower() in doc_type_instructions:
                 additions.append(doc_type_instructions[self.doc_type.lower()])
             else:
                 additions.append(f"Focus on generating {self.doc_type} documentation.")
-        
+
         if self.focus_modules:
-            additions.append(f"Pay special attention to and provide more detailed documentation for these modules: {', '.join(self.focus_modules)}")
-        
+            additions.append(
+                f"Pay special attention to and provide more detailed documentation for these modules: {', '.join(self.focus_modules)}"
+            )
+
         if self.custom_instructions:
             additions.append(f"Additional instructions: {self.custom_instructions}")
-        
+
         return "\n".join(additions) if additions else ""
-    
+
     @classmethod
-    def from_args(cls, args: argparse.Namespace) -> 'Config':
+    def from_args(cls, args: argparse.Namespace) -> "Config":
         """Create configuration from parsed arguments."""
         repo_name = os.path.basename(os.path.normpath(args.repo_path))
-        sanitized_repo_name = ''.join(c if c.isalnum() else '_' for c in repo_name)
-        
+        sanitized_repo_name = "".join(c if c.isalnum() else "_" for c in repo_name)
+
         return cls(
             repo_path=args.repo_path,
             output_dir=OUTPUT_BASE_DIR,
@@ -186,7 +196,7 @@ class Config:
             fallback_model=FALLBACK_MODEL_1,
             use_gitignore=getattr(args, "use_gitignore", True),
         )
-    
+
     @classmethod
     def from_cli(
         cls,
@@ -207,13 +217,13 @@ class Config:
         min_modules_for_super_grouping: int = DEFAULT_MIN_MODULES_FOR_SUPER_GROUPING,
         max_leaf_nodes_per_cluster: int = DEFAULT_MAX_LEAF_NODES_PER_CLUSTER,
         max_depth: int = MAX_DEPTH,
-        agent_instructions: Optional[Dict[str, Any]] = None,
+        agent_instructions: dict[str, Any] | None = None,
         use_gitignore: bool = True,
         prompt_caching: bool = True,
         artifacts_enabled: bool = True,
         artifact_token_budget: int = DEFAULT_ARTIFACT_TOKEN_BUDGET,
         with_prose: bool = False,
-    ) -> 'Config':
+    ) -> "Config":
         """
         Create configuration for CLI context.
 
@@ -249,7 +259,6 @@ class Config:
         Returns:
             Config instance
         """
-        repo_name = os.path.basename(os.path.normpath(repo_path))
         base_output_dir = os.path.join(output_dir, "temp")
 
         return cls(

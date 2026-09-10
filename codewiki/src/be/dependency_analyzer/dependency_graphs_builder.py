@@ -1,26 +1,33 @@
-from typing import Dict, List, Any
+import logging
 import os
-from codewiki.src.config import Config
-from codewiki.src.be.dependency_analyzer.ast_parser import DependencyParser
+from typing import Any
+
 from codewiki.src.be.dependency_analyzer.analyzers.artifact import ArtifactOptions
-from codewiki.src.be.dependency_analyzer.topo_sort import build_graph_from_components, get_leaf_nodes
-from codewiki.src.be.dependency_analyzer.leaf_selection import compute_valid_leaf_types, filter_leaf_nodes
+from codewiki.src.be.dependency_analyzer.ast_parser import DependencyParser
+from codewiki.src.be.dependency_analyzer.leaf_selection import (
+    compute_valid_leaf_types,
+    filter_leaf_nodes,
+)
+from codewiki.src.be.dependency_analyzer.topo_sort import (
+    build_graph_from_components,
+    get_leaf_nodes,
+)
+from codewiki.src.config import Config
 from codewiki.src.utils import file_manager
 
-import logging
 logger = logging.getLogger(__name__)
 
 
 class DependencyGraphBuilder:
     """Handles dependency analysis and graph building."""
-    
+
     def __init__(self, config: Config):
         self.config = config
-    
-    def build_dependency_graph(self) -> tuple[Dict[str, Any], List[str]]:
+
+    def build_dependency_graph(self) -> tuple[dict[str, Any], list[str]]:
         """
         Build and save dependency graph, returning components and leaf nodes.
-        
+
         Returns:
             Tuple of (components, leaf_nodes)
         """
@@ -29,20 +36,14 @@ class DependencyGraphBuilder:
 
         # Prepare dependency graph path
         repo_name = os.path.basename(os.path.normpath(self.config.repo_path))
-        sanitized_repo_name = ''.join(c if c.isalnum() else '_' for c in repo_name)
+        sanitized_repo_name = "".join(c if c.isalnum() else "_" for c in repo_name)
         dependency_graph_path = os.path.join(
-            self.config.dependency_graph_dir, 
-            f"{sanitized_repo_name}_dependency_graph.json"
+            self.config.dependency_graph_dir, f"{sanitized_repo_name}_dependency_graph.json"
         )
-        filtered_folders_path = os.path.join(
-            self.config.dependency_graph_dir, 
-            f"{sanitized_repo_name}_filtered_folders.json"
-        )
-
         # Get custom include/exclude patterns from config
         include_patterns = self.config.include_patterns if self.config.include_patterns else None
         exclude_patterns = self.config.exclude_patterns if self.config.exclude_patterns else None
-        
+
         artifact_options = ArtifactOptions(
             enabled=getattr(self.config, "artifacts_enabled", True),
             token_budget=getattr(self.config, "artifact_token_budget", 200_000),
@@ -70,7 +71,7 @@ class DependencyGraphBuilder:
 
         # Parse repository
         components = parser.parse_repository(filtered_folders)
-        
+
         # Save dependency graph
         parser.save_dependency_graph(dependency_graph_path)
 
@@ -90,10 +91,10 @@ class DependencyGraphBuilder:
                 )
             else:
                 logger.info("Artifact nodes in dependency graph: %d", n_artifacts)
-        
+
         # Build graph for traversal
         graph = build_graph_from_components(components)
-        
+
         # Get leaf nodes
         leaf_nodes = get_leaf_nodes(graph, components)
 

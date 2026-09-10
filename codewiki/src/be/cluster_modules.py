@@ -1,29 +1,33 @@
-from typing import List, Dict, Any, Callable, Optional
-from collections import defaultdict
 import ast
 import logging
 import traceback
+from collections import defaultdict
+from collections.abc import Callable
+from typing import Any
+
 logger = logging.getLogger(__name__)
 
 from codewiki.src.be.dependency_analyzer.models.core import Node
 from codewiki.src.be.llm_services import call_llm
 from codewiki.src.be.module_naming import resolve_unique_name, sanitize_module_name
+from codewiki.src.be.prompt_template import format_cluster_prompt, format_super_group_prompt
 from codewiki.src.be.utils import count_tokens
 from codewiki.src.config import (
-    Config,
     DEFAULT_MAX_LEAF_NODES_PER_CLUSTER,
     DEFAULT_MIN_MODULES_FOR_SUPER_GROUPING,
+    Config,
 )
-from codewiki.src.be.prompt_template import format_cluster_prompt, format_super_group_prompt
 
-Completer = Callable[[str], Optional[str]]
+Completer = Callable[[str], str | None]
 
 # When whole-repo mode is chosen but leaf entry points touch fewer than this
 # fraction of parsed files, warn that coverage depends on agent exploration.
 LOW_COVERAGE_RATIO = 0.5
 
 
-def format_potential_core_components(leaf_nodes: List[str], components: Dict[str, Node]) -> tuple[str, str]:
+def format_potential_core_components(
+    leaf_nodes: list[str], components: dict[str, Node]
+) -> tuple[str, str]:
     """
     Format the potential core components into a string that can be used in the prompt.
     """
@@ -34,21 +38,21 @@ def format_potential_core_components(leaf_nodes: List[str], components: Dict[str
             valid_leaf_nodes.append(leaf_node)
         else:
             logger.warning(f"Skipping invalid leaf node '{leaf_node}' - not found in components")
-    
-    #group leaf nodes by file
+
+    # group leaf nodes by file
     leaf_nodes_by_file = defaultdict(list)
     for leaf_node in valid_leaf_nodes:
         leaf_nodes_by_file[components[leaf_node].relative_path].append(leaf_node)
 
     potential_core_components = ""
     potential_core_components_with_code = ""
-    for file, leaf_nodes in dict(sorted(leaf_nodes_by_file.items())).items():
+    for file, file_nodes in dict(sorted(leaf_nodes_by_file.items())).items():
         header = f"# {file}"
-        if all(components[n].component_type == "artifact" for n in leaf_nodes):
-            header += f" (artifact: {components[leaf_nodes[0]].artifact_class or 'config'})"
+        if all(components[n].component_type == "artifact" for n in file_nodes):
+            header += f" (artifact: {components[file_nodes[0]].artifact_class or 'config'})"
         potential_core_components += f"{header}\n"
         potential_core_components_with_code += f"{header}\n"
-        for leaf_node in leaf_nodes:
+        for leaf_node in file_nodes:
             potential_core_components += f"\t{leaf_node}\n"
             potential_core_components_with_code += f"\t{leaf_node}\n"
             potential_core_components_with_code += f"{components[leaf_node].source_code}\n"
@@ -56,9 +60,7 @@ def format_potential_core_components(leaf_nodes: List[str], components: Dict[str
     return potential_core_components, potential_core_components_with_code
 
 
-def get_clustering_input_token_count(
-    leaf_nodes: List[str], components: Dict[str, Node]
-) -> int:
+def get_clustering_input_token_count(leaf_nodes: list[str], components: dict[str, Node]) -> int:
     """Count the tokens used to decide whether a module needs clustering."""
     _, potential_core_components_with_code = format_potential_core_components(
         leaf_nodes, components
@@ -66,16 +68,14 @@ def get_clustering_input_token_count(
     return count_tokens(potential_core_components_with_code)
 
 
-def _cluster_batch_fits(node_ids: List[str], config: Config) -> bool:
+def _cluster_batch_fits(node_ids: list[str], config: Config) -> bool:
     """Whether a single LLM clustering call can handle these nodes.
 
     The clustering response must re-emit every component ID verbatim, so the
     joined ID list is a direct proxy for output size; keep 2x headroom under
     max_tokens for dict syntax, module names/paths, and preamble.
     """
-    max_nodes = getattr(
-        config, "max_leaf_nodes_per_cluster", DEFAULT_MAX_LEAF_NODES_PER_CLUSTER
-    )
+    max_nodes = getattr(config, "max_leaf_nodes_per_cluster", DEFAULT_MAX_LEAF_NODES_PER_CLUSTER)
     if len(node_ids) > max_nodes:
         return False
     output_budget = max(2048, config.max_tokens // 2)
@@ -83,10 +83,10 @@ def _cluster_batch_fits(node_ids: List[str], config: Config) -> bool:
 
 
 def partition_leaf_nodes_by_structure(
-    leaf_nodes: List[str],
-    components: Dict[str, Node],
-    fits: Callable[[List[str]], bool],
-) -> List[List[str]]:
+    leaf_nodes: list[str],
+    components: dict[str, Node],
+    fits: Callable[[list[str]], bool],
+) -> list[list[str]]:
     """Partition leaf nodes into batches that each satisfy ``fits``.
 
     Splits along the directory structure of the nodes' relative paths, then
@@ -105,10 +105,10 @@ def partition_leaf_nodes_by_structure(
     if not valid or fits(valid):
         return [valid]
 
-    def path_parts(node: str) -> List[str]:
+    def path_parts(node: str) -> list[str]:
         return components[node].relative_path.strip("/").split("/")
 
-    def chunk(nodes: List[str]) -> List[List[str]]:
+    def chunk(nodes: list[str]) -> list[list[str]]:
         # Nodes that share one directory/file and still don't fit can only be
         # cut into fixed-size slices.
         size = len(nodes)
@@ -120,13 +120,13 @@ def partition_leaf_nodes_by_structure(
             len(nodes),
             size,
         )
-        return [nodes[i:i + size] for i in range(0, len(nodes), size)]
+        return [nodes[i : i + size] for i in range(0, len(nodes), size)]
 
-    def split(nodes: List[str], depth: int) -> List[List[str]]:
+    def split(nodes: list[str], depth: int) -> list[list[str]]:
         by_prefix = defaultdict(list)
         for node in nodes:
             by_prefix["/".join(path_parts(node)[:depth])].append(node)
-        groups: List[List[str]] = []
+        groups: list[list[str]] = []
         for prefix in sorted(by_prefix):
             sub = by_prefix[prefix]
             if fits(sub):
@@ -137,8 +137,8 @@ def partition_leaf_nodes_by_structure(
                 groups.extend(chunk(sub))
         return groups
 
-    batches: List[List[str]] = []
-    current: List[str] = []
+    batches: list[list[str]] = []
+    current: list[str] = []
     for group in split(valid, 1):
         if not current:
             current = group
@@ -153,21 +153,23 @@ def partition_leaf_nodes_by_structure(
 
 
 def _cluster_via_llm(
-    leaf_nodes: List[str],
-    components: Dict[str, Node],
+    leaf_nodes: list[str],
+    components: dict[str, Node],
     config: Config,
-    current_module_tree: Dict[str, Any],
-    current_module_name: Optional[str],
+    current_module_tree: dict[str, Any],
+    current_module_name: str | None,
     module_label: str,
-    completer: Optional[Completer],
-) -> Dict[str, Any]:
+    completer: Completer | None,
+) -> dict[str, Any]:
     """Run one clustering LLM call over these nodes.
 
     Returns {} for any empty, malformed, or non-dict response instead of
     raising, so callers can fall back gracefully.
     """
     potential_core_components, _ = format_potential_core_components(leaf_nodes, components)
-    prompt = format_cluster_prompt(potential_core_components, current_module_tree, current_module_name)
+    prompt = format_cluster_prompt(
+        potential_core_components, current_module_tree, current_module_name
+    )
     if completer is not None:
         response = completer(prompt)
     else:
@@ -191,14 +193,16 @@ def _cluster_via_llm(
             )
             return {}
 
-        response_content = response.split("<GROUPED_COMPONENTS>")[1].split("</GROUPED_COMPONENTS>")[0]
+        response_content = response.split("<GROUPED_COMPONENTS>")[1].split("</GROUPED_COMPONENTS>")[
+            0
+        ]
         module_tree = eval(response_content)
 
         if not isinstance(module_tree, dict):
             logger.error(f"Invalid module tree format - expected dict, got {type(module_tree)}")
             return {}
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — a failed LLM call must not abort clustering
         logger.warning(
             "Failed to parse LLM clustering response for %s; falling back. "
             "Error: %s. Response preview: %s...",
@@ -212,7 +216,7 @@ def _cluster_via_llm(
     return module_tree
 
 
-def _merge_module_trees(target: Dict[str, Any], addition: Dict[str, Any]) -> None:
+def _merge_module_trees(target: dict[str, Any], addition: dict[str, Any]) -> None:
     """Merge one batch's module dict into the accumulated tree in place.
 
     Batches cluster independently, so two of them may propose the same module
@@ -240,15 +244,14 @@ def _merge_module_trees(target: Dict[str, Any], addition: Dict[str, Any]) -> Non
         paths = [existing.get("path", ""), info.get("path", "")]
         existing["path"] = _common_path_prefix(paths) if all(paths) else ""
         logger.info(
-            "Module '%s' was produced by multiple clustering batches; merged "
-            "into %d components.",
+            "Module '%s' was produced by multiple clustering batches; merged into %d components.",
             name,
             len(merged),
         )
 
 
 def _batch_fallback_name(
-    batch: List[str], components: Dict[str, Node], existing: Dict[str, Any]
+    batch: list[str], components: dict[str, Node], existing: dict[str, Any]
 ) -> str:
     """Directory-derived module name for a batch whose LLM clustering failed."""
     prefix = _common_path_prefix(
@@ -259,14 +262,14 @@ def _batch_fallback_name(
 
 
 def cluster_modules(
-    leaf_nodes: List[str],
-    components: Dict[str, Node],
+    leaf_nodes: list[str],
+    components: dict[str, Node],
     config: Config,
-    current_module_tree: dict[str, Any] = {},
-    current_module_name: str = None,
-    current_module_path: List[str] = [],
-    completer: Optional[Completer] = None,
-) -> Dict[str, Any]:
+    current_module_tree: dict[str, Any] | None = None,
+    current_module_name: str | None = None,
+    current_module_path: list[str] | None = None,
+    completer: Completer | None = None,
+) -> dict[str, Any]:
     """
     Cluster the potential core components into modules.
 
@@ -277,8 +280,10 @@ def cluster_modules(
             subscription-mode (caw) routing.  If ``None``, falls back to
             ``call_llm`` for backward compatibility with direct callers.
     """
-    _, potential_core_components_with_code = (
-        format_potential_core_components(leaf_nodes, components)
+    current_module_tree = {} if current_module_tree is None else current_module_tree
+    current_module_path = [] if current_module_path is None else current_module_path
+    _, potential_core_components_with_code = format_potential_core_components(
+        leaf_nodes, components
     )
     input_tokens = count_tokens(potential_core_components_with_code)
     threshold = config.max_token_per_module
@@ -409,15 +414,17 @@ def cluster_modules(
 
     for module_name, module_info in module_tree.items():
         sub_leaf_nodes = module_info.get("components", [])
-        
+
         # Filter sub_leaf_nodes to ensure they exist in components
         valid_sub_leaf_nodes = []
         for node in sub_leaf_nodes:
             if node in components:
                 valid_sub_leaf_nodes.append(node)
             else:
-                logger.warning(f"Skipping invalid sub leaf node '{node}' in module '{module_name}' - not found in components")
-        
+                logger.warning(
+                    f"Skipping invalid sub leaf node '{node}' in module '{module_name}' - not found in components"
+                )
+
         current_module_path.append(module_name)
         module_info["children"] = {}
         module_info["children"] = cluster_modules(
@@ -434,7 +441,7 @@ def cluster_modules(
     return module_tree
 
 
-def _common_path_prefix(paths: List[str]) -> str:
+def _common_path_prefix(paths: list[str]) -> str:
     """Longest common directory prefix of the given relative paths."""
     split_paths = [p.strip("/").split("/") for p in paths if p]
     if not split_paths:
@@ -448,7 +455,7 @@ def _common_path_prefix(paths: List[str]) -> str:
     return "/".join(common)
 
 
-def _parse_super_group_response(response: Optional[str]) -> Optional[Dict[str, Any]]:
+def _parse_super_group_response(response: str | None) -> dict[str, Any] | None:
     if not response:
         logger.warning(
             "Empty super-grouping response (provider returned no content, "
@@ -466,7 +473,7 @@ def _parse_super_group_response(response: Optional[str]) -> Optional[Dict[str, A
         grouping = ast.literal_eval(
             response.split("<GROUPED_MODULES>")[1].split("</GROUPED_MODULES>")[0]
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — a failed LLM call must not abort clustering
         logger.warning(
             "Failed to parse super-grouping response; keeping the flat module "
             "tree. Error: %s. Response preview: %s...",
@@ -476,8 +483,7 @@ def _parse_super_group_response(response: Optional[str]) -> Optional[Dict[str, A
         return None
     if not isinstance(grouping, dict):
         logger.warning(
-            "Invalid super-grouping format - expected dict, got %s; keeping the "
-            "flat module tree.",
+            "Invalid super-grouping format - expected dict, got %s; keeping the flat module tree.",
             type(grouping),
         )
         return None
@@ -485,10 +491,10 @@ def _parse_super_group_response(response: Optional[str]) -> Optional[Dict[str, A
 
 
 def super_group_modules(
-    module_tree: Dict[str, Any],
+    module_tree: dict[str, Any],
     config: Config,
-    completer: Optional[Completer] = None,
-) -> Dict[str, Any]:
+    completer: Completer | None = None,
+) -> dict[str, Any]:
     """
     Group a flat top level of modules into higher-level architectural subsystems.
 
@@ -501,14 +507,11 @@ def super_group_modules(
         config, "min_modules_for_super_grouping", DEFAULT_MIN_MODULES_FOR_SUPER_GROUPING
     )
     if min_modules <= 0:
-        logger.info(
-            "Super-grouping disabled (min_modules_for_super_grouping=%d).", min_modules
-        )
+        logger.info("Super-grouping disabled (min_modules_for_super_grouping=%d).", min_modules)
         return module_tree
     if len(module_tree) <= min_modules:
         logger.info(
-            "Skipping super-grouping: %d top-level modules fit within the "
-            "%d-module threshold.",
+            "Skipping super-grouping: %d top-level modules fit within the %d-module threshold.",
             len(module_tree),
             min_modules,
         )
@@ -516,8 +519,7 @@ def super_group_modules(
 
     prompt = format_super_group_prompt(module_tree)
     logger.info(
-        "Requesting super-grouping of %d top-level modules into architectural "
-        "subsystems.",
+        "Requesting super-grouping of %d top-level modules into architectural subsystems.",
         len(module_tree),
     )
     if completer is not None:
@@ -532,13 +534,12 @@ def super_group_modules(
     # Validate assignments: unknown modules are dropped, duplicates keep their
     # first assignment, unassigned modules stay at the top level.
     assigned = set()
-    subsystems: Dict[str, List[str]] = {}
+    subsystems: dict[str, list[str]] = {}
     for subsystem_name, info in grouping.items():
         members = info.get("modules") if isinstance(info, dict) else None
         if not isinstance(members, list):
             logger.warning(
-                "Skipping subsystem '%s' in super-grouping response: no valid "
-                "'modules' list.",
+                "Skipping subsystem '%s' in super-grouping response: no valid 'modules' list.",
                 subsystem_name,
             )
             continue
@@ -553,8 +554,7 @@ def super_group_modules(
                 continue
             if member in assigned:
                 logger.warning(
-                    "Module '%s' assigned to multiple subsystems; keeping its "
-                    "first assignment.",
+                    "Module '%s' assigned to multiple subsystems; keeping its first assignment.",
                     member,
                 )
                 continue
@@ -576,7 +576,7 @@ def super_group_modules(
         )
         return module_tree
 
-    result: Dict[str, Any] = {}
+    result: dict[str, Any] = {}
     for subsystem_name, members in subsystems.items():
         if len(members) == 1:
             result[members[0]] = module_tree[members[0]]
@@ -599,8 +599,7 @@ def super_group_modules(
         result[name] = module_tree[name]
 
     logger.info(
-        "Super-grouping consolidated %d top-level modules into %d entries "
-        "(%d subsystems).",
+        "Super-grouping consolidated %d top-level modules into %d entries (%d subsystems).",
         len(module_tree),
         len(result),
         len(subsystems),
@@ -618,11 +617,11 @@ ARTIFACT_MODULE_NAME = "Build, Deployment and Configuration"
 ARTIFACT_MIN_SHARE = 0.8
 
 
-def collect_module_tree_component_ids(module_tree: Dict[str, Any]) -> set:
+def collect_module_tree_component_ids(module_tree: dict[str, Any]) -> set:
     """Return every component id referenced anywhere in ``module_tree``."""
     ids: set = set()
 
-    def _walk(tree: Dict[str, Any]) -> None:
+    def _walk(tree: dict[str, Any]) -> None:
         for module_info in tree.values():
             if not isinstance(module_info, dict):
                 continue
@@ -636,11 +635,11 @@ def collect_module_tree_component_ids(module_tree: Dict[str, Any]) -> set:
 
 
 def ensure_artifact_module(
-    module_tree: Dict[str, Any],
-    leaf_nodes: List[str],
-    components: Dict[str, Node],
+    module_tree: dict[str, Any],
+    leaf_nodes: list[str],
+    components: dict[str, Node],
     min_share: float = ARTIFACT_MIN_SHARE,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Guarantee that artifact leaf nodes are documented.
 
     Clustering is an LLM call and may drop or scatter artifact nodes despite
@@ -652,8 +651,7 @@ def ensure_artifact_module(
     if not module_tree:
         return module_tree
     artifact_leaves = [
-        n for n in leaf_nodes
-        if n in components and components[n].component_type == "artifact"
+        n for n in leaf_nodes if n in components and components[n].component_type == "artifact"
     ]
     if not artifact_leaves:
         return module_tree
@@ -662,7 +660,9 @@ def ensure_artifact_module(
     share = 1.0 - len(unassigned) / len(artifact_leaves)
     logger.info(
         "Artifact coverage after clustering: %d/%d artifact leaf nodes assigned (%.0f%%)",
-        len(artifact_leaves) - len(unassigned), len(artifact_leaves), share * 100,
+        len(artifact_leaves) - len(unassigned),
+        len(artifact_leaves),
+        share * 100,
     )
     if not unassigned or share >= min_share:
         return module_tree
@@ -685,6 +685,9 @@ def ensure_artifact_module(
     }
     logger.info(
         "Artifact coverage %.0f%% < %.0f%%; inserted top-level module '%s' with %d components",
-        share * 100, min_share * 100, name, len(unassigned),
+        share * 100,
+        min_share * 100,
+        name,
+        len(unassigned),
     )
     return module_tree

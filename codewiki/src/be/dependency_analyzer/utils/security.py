@@ -1,5 +1,6 @@
-from pathlib import Path
 import os
+from pathlib import Path
+
 
 def _inside(base: Path, target: Path) -> bool:
     base_r = base.resolve()
@@ -9,6 +10,7 @@ def _inside(base: Path, target: Path) -> bool:
     except AttributeError:
         return str(target.resolve()).startswith(str(base_r))
 
+
 def assert_safe_path(base_dir: Path, target: Path):
     # Block symlinks (file or dir)
     if target.is_symlink():
@@ -16,6 +18,7 @@ def assert_safe_path(base_dir: Path, target: Path):
     # Block paths that escape repo
     if not _inside(base_dir, target):
         raise PermissionError(f"Path escapes repo: {target} -> {target.resolve()}")
+
 
 def safe_open_text(base_dir: Path, target: Path, encoding="utf-8"):
     assert_safe_path(base_dir, target)
@@ -33,7 +36,9 @@ def safe_open_text(base_dir: Path, target: Path, encoding="utf-8"):
             pass
 
 
-def safe_read_head(base_dir: Path, target: Path, max_bytes: int, encoding="utf-8") -> tuple[str, int, bool]:
+def safe_read_head(
+    base_dir: Path, target: Path, max_bytes: int, encoding="utf-8"
+) -> tuple[str, int, bool]:
     """Read at most ``max_bytes`` of ``target`` with the same symlink/escape checks
     as :func:`safe_open_text`.
 

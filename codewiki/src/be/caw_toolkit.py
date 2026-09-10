@@ -56,7 +56,7 @@ async def _heartbeat(ctx: Context, work: asyncio.Task) -> None:
                 total=None,
                 message="sub-module generation in progress",
             )
-        except Exception:
+        except Exception:  # noqa: BLE001, S110 — progress reporting is best-effort
             pass
 
 
@@ -82,7 +82,7 @@ class CawToolKit(
     def __init__(
         self,
         deps: CodeWikiDeps,
-        backend: "CawBackend",
+        backend: CawBackend,
         allow_subagent: bool,
     ) -> None:
         self._deps = deps
@@ -108,8 +108,7 @@ class CawToolKit(
                 results.append(f"# Component {cid} not found")
             else:
                 results.append(
-                    f"# Component {cid}:\n"
-                    f"{self._deps.components[cid].source_code.strip()}\n\n"
+                    f"# Component {cid}:\n{self._deps.components[cid].source_code.strip()}\n\n"
                 )
         return "\n".join(results)
 
@@ -257,9 +256,7 @@ class CawToolKit(
         # event loop stays responsive while sub-agents run.  A heartbeat task
         # emits MCP progress notifications so the CLI does not treat the long
         # tool call as a stalled / cancelled invocation.
-        work = asyncio.create_task(
-            asyncio.to_thread(self._run_sub_modules, sub_module_specs)
-        )
+        work = asyncio.create_task(asyncio.to_thread(self._run_sub_modules, sub_module_specs))
         heartbeat = asyncio.create_task(_heartbeat(ctx, work))
         try:
             return await work
@@ -300,7 +297,9 @@ class CawToolKit(
             for sub_name, core_ids in final_specs.items():
                 indent = "  " * deps.current_depth
                 arrow = "└─" if deps.current_depth > 0 else "→"
-                logger.info("%s%s Generating documentation for sub-module: %s", indent, arrow, sub_name)
+                logger.info(
+                    "%s%s Generating documentation for sub-module: %s", indent, arrow, sub_name
+                )
 
                 deps.current_module_name = sub_name
                 deps.path_to_current_module.append(sub_name)
@@ -341,5 +340,7 @@ class CawToolKit(
         report = f"Saved documentations: {', '.join(saved) if saved else 'none'}."
         if missing:
             report += f" MISSING (generation did not produce these files): {', '.join(missing)}."
-            logger.warning("Sub-module documentation missing after generation: %s", ", ".join(missing))
+            logger.warning(
+                "Sub-module documentation missing after generation: %s", ", ".join(missing)
+            )
         return report

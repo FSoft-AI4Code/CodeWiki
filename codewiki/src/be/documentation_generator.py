@@ -16,8 +16,8 @@ from codewiki.src.be.cluster_modules import (
     get_clustering_input_token_count,
     super_group_modules,
 )
-from codewiki.src.be.dependency_analyzer.analyzers.artifact import render_artifact_index
 from codewiki.src.be.dependency_analyzer import DependencyGraphBuilder
+from codewiki.src.be.dependency_analyzer.analyzers.artifact import render_artifact_index
 from codewiki.src.be.module_naming import (
     dedupe_module_tree_names,
     find_missing_module_docs,
@@ -348,7 +348,9 @@ class DocumentationGenerator:
         if len(module_path) == 0 and components:
             artifact_index = render_artifact_index(components)
             if artifact_index:
-                prompt += "\n\n" + REPO_OVERVIEW_ARTIFACT_ADDENDUM.format(artifact_index=artifact_index)
+                prompt += "\n\n" + REPO_OVERVIEW_ARTIFACT_ADDENDUM.format(
+                    artifact_index=artifact_index
+                )
         logger.debug(f"Overview prompt for {module_name}: {len(prompt)} chars")
 
         try:

@@ -293,7 +293,7 @@ CODE_TRUNCATED_NOTE = (
 ARTIFACT_USAGE_NOTE = (
     "* NOTE: when this module's behaviour depends on how the system is built, "
     "configured, packaged, deployed or tested, read the relevant artifact file "
-    "with `str_replace_editor` (`command=\"view\"`, `working_dir=\"repo\"`, path as "
+    'with `str_replace_editor` (`command="view"`, `working_dir="repo"`, path as '
     "listed above) and cite the file path in the documentation."
 )
 
@@ -498,9 +498,7 @@ def format_user_prompt(
         core_component_codes += "\n```\n\n"
 
     artifact_index = render_artifact_index(components)
-    artifact_section = (
-        f"\n\n{artifact_index}\n{ARTIFACT_USAGE_NOTE}" if artifact_index else ""
-    )
+    artifact_section = f"\n\n{artifact_index}\n{ARTIFACT_USAGE_NOTE}" if artifact_index else ""
 
     def _assemble(codes: str, tree: str) -> str:
         return (
