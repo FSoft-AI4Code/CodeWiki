@@ -12,10 +12,12 @@ logger = logging.getLogger(__name__)
 from codewiki.src.be.backend import LLMBackend, get_backend
 from codewiki.src.be.cluster_modules import (
     cluster_modules,
+    ensure_artifact_module,
     get_clustering_input_token_count,
     super_group_modules,
 )
 from codewiki.src.be.dependency_analyzer import DependencyGraphBuilder
+from codewiki.src.be.dependency_analyzer.analyzers.artifact import render_artifact_index
 from codewiki.src.be.module_naming import (
     dedupe_module_tree_names,
     find_missing_module_docs,
@@ -23,6 +25,7 @@ from codewiki.src.be.module_naming import (
 )
 from codewiki.src.be.prompt_template import (
     MODULE_OVERVIEW_PROMPT,
+    REPO_OVERVIEW_ARTIFACT_ADDENDUM,
     REPO_OVERVIEW_PROMPT,
 )
 from codewiki.src.config import (
@@ -269,7 +272,9 @@ class DocumentationGenerator:
 
             # Generate repo overview
             logger.info("📚 Generating repository overview")
-            final_module_tree = await self.generate_parent_module_docs([], working_dir)
+            final_module_tree = await self.generate_parent_module_docs(
+                [], working_dir, components=components
+            )
         else:
             logger.info("Processing whole repo because repo can fit in the context window")
             repo_name = os.path.basename(os.path.normpath(self.config.repo_path))
@@ -294,9 +299,16 @@ class DocumentationGenerator:
         return working_dir
 
     async def generate_parent_module_docs(
-        self, module_path: list[str], working_dir: str
+        self,
+        module_path: list[str],
+        working_dir: str,
+        components: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Generate documentation for a parent module based on its children's documentation."""
+        """Generate documentation for a parent module based on its children's documentation.
+
+        For the repository overview (``module_path == []``) pass ``components``
+        so the artifact index can be appended to the prompt.
+        """
         module_name = (
             module_path[-1]
             if len(module_path) >= 1
@@ -333,6 +345,12 @@ class DocumentationGenerator:
                 repo_name=module_name, repo_structure=json.dumps(repo_structure, indent=2)
             )
         )
+        if len(module_path) == 0 and components:
+            artifact_index = render_artifact_index(components)
+            if artifact_index:
+                prompt += "\n\n" + REPO_OVERVIEW_ARTIFACT_ADDENDUM.format(
+                    artifact_index=artifact_index
+                )
         logger.debug(f"Overview prompt for {module_name}: {len(prompt)} chars")
 
         try:
@@ -417,6 +435,10 @@ class DocumentationGenerator:
                         self.config,
                         completer=lambda p: self.backend.complete(p, model=cluster_model),
                     )
+                # Artifact nodes the clustering LLM dropped get a fixed module
+                # so build/CI/config coverage does not depend on the LLM.
+                if getattr(self.config, "artifacts_enabled", True):
+                    module_tree = ensure_artifact_module(module_tree, leaf_nodes, components)
                 # Only freshly clustered trees are deduped: renaming a cached
                 # key whose .md already exists would orphan the doc.
                 module_tree = dedupe_module_tree_names(module_tree)

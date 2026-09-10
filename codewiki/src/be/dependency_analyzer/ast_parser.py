@@ -1,9 +1,13 @@
 import json
 import logging
 import os
+from typing import TYPE_CHECKING
 
 from codewiki.src.be.dependency_analyzer.analysis.analysis_service import AnalysisService
 from codewiki.src.be.dependency_analyzer.models.core import Node
+
+if TYPE_CHECKING:  # pragma: no cover
+    from codewiki.src.be.dependency_analyzer.analyzers.artifact import ArtifactOptions
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -18,6 +22,7 @@ class DependencyParser:
         include_patterns: list[str] | None = None,
         exclude_patterns: list[str] | None = None,
         use_gitignore: bool = True,
+        artifact_options: "ArtifactOptions | None" = None,
     ):
         """
         Initialize the dependency parser.
@@ -27,7 +32,12 @@ class DependencyParser:
             include_patterns: File patterns to include (e.g., ["*.cs", "*.py"])
             exclude_patterns: File/directory patterns to exclude (e.g., ["*Tests*"])
             use_gitignore: Whether to apply Git ignore rules
+            artifact_options: When given and enabled, also emit ``artifact``
+                nodes for build/CI/container/manifest/config files
+                (``analyzers/artifact.py``). ``None`` keeps the code-only graph.
         """
+        self.artifact_options = artifact_options
+        self.artifact_index: dict | None = None
         self.repo_path = os.path.abspath(repo_path)
         self.components: dict[str, Node] = {}
         self.modules: set[str] = set()
@@ -54,8 +64,9 @@ class DependencyParser:
         )
 
         call_graph_result = self.analysis_service._analyze_call_graph(
-            structure_result["file_tree"], self.repo_path
+            structure_result["file_tree"], self.repo_path, artifact_options=self.artifact_options
         )
+        self.artifact_index = call_graph_result.get("artifact_index")
 
         self._build_components_from_analysis(call_graph_result)
 
@@ -92,6 +103,7 @@ class DependencyParser:
                 class_name=func_dict.get("class_name"),
                 display_name=func_dict.get("display_name", ""),
                 component_id=component_id,
+                artifact_class=func_dict.get("artifact_class"),
             )
 
             self.components[component_id] = node

@@ -1,47 +1,48 @@
 from pydantic import BaseModel
-from typing import List, Optional, Dict, Any, Set
-from datetime import datetime
-
 
 
 class Node(BaseModel):
     id: str
 
     name: str
-    
+
     component_type: str
-    
+
     file_path: str
-    
+
     relative_path: str
-    
-    depends_on: Set[str] = set()
-    
-    source_code: Optional[str] = None
-    
+
+    depends_on: set[str] = set()
+
+    source_code: str | None = None
+
     start_line: int = 0
 
     end_line: int = 0
-    
+
     has_docstring: bool = False
-    
+
     docstring: str = ""
-    
-    parameters: Optional[List[str]] = None
 
-    node_type: Optional[str] = None  
+    parameters: list[str] | None = None
 
-    base_classes: Optional[List[str]] = None
+    node_type: str | None = None
 
-    class_name: Optional[str] = None
+    base_classes: list[str] | None = None
 
-    display_name: Optional[str] = None
+    class_name: str | None = None
 
-    component_id: Optional[str] = None
+    display_name: str | None = None
 
-    language: Optional[str] = None
+    component_id: str | None = None
 
-    qualified_name: Optional[str] = None
+    language: str | None = None
+
+    qualified_name: str | None = None
+
+    # Set only on artifact nodes (component_type == "artifact"): one of the
+    # classes in analyzers/artifact.py CLASS_PRIORITY (build, ci, container, ...).
+    artifact_class: str | None = None
 
     def get_display_name(self) -> str:
         return self.display_name or self.name
@@ -52,7 +53,7 @@ class CallRelationship(BaseModel):
 
     callee: str
 
-    call_line: Optional[int] = None
+    call_line: int | None = None
 
     is_resolved: bool = False
 
@@ -63,5 +64,5 @@ class Repository(BaseModel):
     name: str
 
     clone_path: str
-    
+
     analysis_id: str

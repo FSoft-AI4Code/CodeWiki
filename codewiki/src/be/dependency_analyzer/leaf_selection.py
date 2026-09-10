@@ -14,6 +14,7 @@ OOP_MINORITY_RATIO = 0.2
 LEAF_REDUCTION_THRESHOLD = 400
 
 OOP_TYPES = {"class", "interface", "struct"}
+ARTIFACT_TYPE = "artifact"
 
 
 def compute_valid_leaf_types(components: dict[str, Node]) -> set[str]:
@@ -34,6 +35,10 @@ def compute_valid_leaf_types(components: dict[str, Node]) -> set[str]:
             n_func += 1
 
     valid_types = set(OOP_TYPES)
+    # Artifact nodes (build, CI, container, manifest, config files) are always
+    # leaf candidates: nothing in the code graph depends on them, and they are
+    # the only route to documenting how the system is built and shipped.
+    valid_types.add(ARTIFACT_TYPE)
     include_functions = (
         n_oop == 0
         or (n_oop < MIN_OOP_COMPONENTS and n_func > n_oop)

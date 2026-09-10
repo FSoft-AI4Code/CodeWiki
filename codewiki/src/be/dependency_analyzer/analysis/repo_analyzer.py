@@ -7,18 +7,18 @@ detailed file tree representations with filtering capabilities.
 
 import fnmatch
 import logging
+import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from pathspec import GitIgnoreSpec
 
 from codewiki.src.be.dependency_analyzer.utils.patterns import (
+    ARTIFACT_WHITELIST,
     DEFAULT_IGNORE_PATTERNS,
     DEFAULT_INCLUDE_PATTERNS,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,7 @@ class GitIgnoreFilter:
         try:
             root_result = subprocess.run(
                 [git_path, "-C", str(self.repo_dir), "rev-parse", "--show-toplevel"],
+                check=False,
                 capture_output=True,
                 text=True,
                 timeout=10,
@@ -137,8 +138,7 @@ class GitIgnoreFilter:
     def is_ignored(self, relative_path: str, is_dir: bool) -> bool:
         """Return whether a repository-relative path should be ignored."""
         normalized = relative_path.replace("\\", "/")
-        if normalized.startswith("./"):
-            normalized = normalized[2:]
+        normalized = normalized.removeprefix("./")
         if normalized in ("", "."):
             return False
 
@@ -176,24 +176,24 @@ class GitIgnoreFilter:
 class RepoAnalyzer:
     def __init__(
         self,
-        include_patterns: Optional[List[str]] = None,
-        exclude_patterns: Optional[List[str]] = None,
+        include_patterns: list[str] | None = None,
+        exclude_patterns: list[str] | None = None,
         use_gitignore: bool = True,
     ) -> None:
         # Include patterns: if specified, use ONLY those patterns (replaces defaults)
         self.include_patterns = (
             include_patterns if include_patterns is not None else DEFAULT_INCLUDE_PATTERNS
         )
-        # Exclude patterns: if specified, MERGE with default ignore patterns
-        self.exclude_patterns = (
-            list(DEFAULT_IGNORE_PATTERNS) + exclude_patterns
-            if exclude_patterns is not None
-            else list(DEFAULT_IGNORE_PATTERNS)
-        )
+        # Exclude patterns: if specified, MERGE with default ignore patterns.
+        # The two sets are also kept apart: user excludes always win, while
+        # the defaults yield to ARTIFACT_WHITELIST (e.g. `.github/workflows`).
+        self.default_exclude_patterns = list(DEFAULT_IGNORE_PATTERNS)
+        self.user_exclude_patterns = list(exclude_patterns) if exclude_patterns is not None else []
+        self.exclude_patterns = self.default_exclude_patterns + self.user_exclude_patterns
         self.use_gitignore = use_gitignore
-        self._gitignore_filter: Optional[GitIgnoreFilter] = None
+        self._gitignore_filter: GitIgnoreFilter | None = None
 
-    def analyze_repository_structure(self, repo_dir: str) -> Dict:
+    def analyze_repository_structure(self, repo_dir: str) -> dict:
         self._gitignore_filter = GitIgnoreFilter(Path(repo_dir)) if self.use_gitignore else None
         file_tree = self._build_file_tree(repo_dir)
         return {
@@ -204,8 +204,8 @@ class RepoAnalyzer:
             },
         }
 
-    def _build_file_tree(self, repo_dir: str) -> Dict:
-        def build_tree(path: Path, base_path: Path) -> Optional[Dict]:
+    def _build_file_tree(self, repo_dir: str) -> dict:
+        def build_tree(path: Path, base_path: Path) -> dict | None:
             relative_path = path.relative_to(base_path)
             relative_path_str = str(relative_path)
 
@@ -261,8 +261,9 @@ class RepoAnalyzer:
 
         return build_tree(Path(repo_dir), Path(repo_dir))
 
-    def _should_exclude_path(self, path: str, filename: str, is_dir: bool = False) -> bool:
-        for pattern in self.exclude_patterns:
+    @staticmethod
+    def _matches_any(path: str, filename: str, patterns: list[str]) -> bool:
+        for pattern in patterns:
             if fnmatch.fnmatch(path, pattern) or fnmatch.fnmatch(filename, pattern):
                 return True
             if pattern.endswith("/") and path.startswith(pattern.rstrip("/")):
@@ -271,9 +272,34 @@ class RepoAnalyzer:
                 return True
             if pattern in path.split("/"):
                 return True
-        if self._gitignore_filter and self._gitignore_filter.is_ignored(path, is_dir):
-            return True
         return False
+
+    @staticmethod
+    def _is_artifact_whitelisted(path: str, filename: str, is_dir: bool) -> bool:
+        """True when ``path`` is an artifact the default ignore list must not drop.
+
+        Directories count as whitelisted when a whitelist pattern lives below
+        them, so ``.github`` survives long enough for ``.github/workflows/*``
+        to be visited.
+        """
+        norm = path.replace(os.sep, "/")
+        for pattern in ARTIFACT_WHITELIST:
+            if fnmatch.fnmatch(norm, pattern) or fnmatch.fnmatch(filename, pattern):
+                return True
+            if is_dir and "/" in pattern and pattern.startswith(norm.rstrip("/") + "/"):
+                return True
+        return False
+
+    def _should_exclude_path(self, path: str, filename: str, is_dir: bool = False) -> bool:
+        # User-provided excludes always win.
+        if self._matches_any(path, filename, self.user_exclude_patterns):
+            return True
+        # Built-in ignores yield to the artifact whitelist.
+        if not self._is_artifact_whitelisted(path, filename, is_dir) and self._matches_any(
+            path, filename, self.default_exclude_patterns
+        ):
+            return True
+        return bool(self._gitignore_filter and self._gitignore_filter.is_ignored(path, is_dir))
 
     def _should_include_file(self, path: str, filename: str) -> bool:
         if not self.include_patterns:
@@ -283,12 +309,12 @@ class RepoAnalyzer:
                 return True
         return False
 
-    def _count_files(self, tree: Dict) -> int:
+    def _count_files(self, tree: dict) -> int:
         if tree["type"] == "file":
             return 1
         return sum(self._count_files(child) for child in tree.get("children", []))
 
-    def _calculate_size(self, tree: Dict) -> float:
+    def _calculate_size(self, tree: dict) -> float:
         if tree["type"] == "file":
             return tree.get("_size_bytes", 0) / 1024
         return sum(self._calculate_size(child) for child in tree.get("children", []))

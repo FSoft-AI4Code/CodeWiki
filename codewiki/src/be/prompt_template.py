@@ -38,7 +38,7 @@ Generate documentation following this structure:
 </WORKFLOW>
 
 <AVAILABLE_TOOLS>
-- `str_replace_editor`: File system operations for creating and editing documentation files
+- `str_replace_editor`: File system operations for creating and editing documentation files, and (with `working_dir="repo"`, `view` only) for reading build, CI, container, packaging, manifest and config files such as Dockerfile, Makefile, .github/workflows/*.yml, pyproject.toml or package.json
 - `read_code_components`: Explore additional code dependencies not included in the provided components
 - `generate_sub_module_documentation`: Generate detailed documentation for individual sub-modules via sub-agents
 </AVAILABLE_TOOLS>
@@ -71,7 +71,7 @@ Generate documentation following the following requirements:
 </WORKFLOW>
 
 <AVAILABLE_TOOLS>
-- `str_replace_editor`: File system operations for creating and editing documentation files
+- `str_replace_editor`: File system operations for creating and editing documentation files, and (with `working_dir="repo"`, `view` only) for reading build, CI, container, packaging, manifest and config files such as Dockerfile, Makefile, .github/workflows/*.yml, pyproject.toml or package.json
 - `read_code_components`: Explore additional code dependencies not included in the provided components
 </AVAILABLE_TOOLS>
 {custom_instructions}
@@ -140,6 +140,8 @@ Here is list of all potential core components of the repository (It's normal tha
 
 Please group the components into groups such that each group is a set of components that are closely related to each other and together they form a module. DO NOT include components that are not essential to the repository.
 
+Files marked `(artifact: <class>)` are build, CI, container, packaging, manifest, configuration, schema or script files. Their components describe how the system is built, packaged, shipped, configured and tested. They ARE essential: group them into a dedicated build/deployment/configuration module, or attach them to the module they configure. Never drop them.
+
 Each component ID has the form `<file_path>::<name>`. Return the IDs EXACTLY as given — do NOT strip the `<file_path>::` prefix or shorten the ID to the bare name.
 
 Firstly reason about the components and then group them and return the result in the following format:
@@ -179,6 +181,8 @@ Here is list of all potential core components of the module {module_name} (It's 
 </POTENTIAL_CORE_COMPONENTS>
 
 Please group the components into groups such that each group is a set of components that are closely related to each other and together they form a smaller module. DO NOT include components that are not essential to the module.
+
+Files marked `(artifact: <class>)` are build, CI, container, packaging, manifest, configuration, schema or script files. Their components describe how the system is built, packaged, shipped, configured and tested. They ARE essential: group them into a dedicated build/deployment/configuration module, or attach them to the module they configure. Never drop them.
 
 Each component ID has the form `<file_path>::<name>`. Return the IDs EXACTLY as given — do NOT strip the `<file_path>::` prefix or shorten the ID to the bare name.
 
@@ -283,12 +287,53 @@ CODE_TRUNCATED_NOTE = (
     "file-reading tools to read the full files]"
 )
 
+# Appended to the user prompt (after USER_PROMPT) when the dependency graph
+# contains artifact nodes. Kept out of USER_PROMPT itself so callers that
+# format the template directly (MCP prompt server) keep working.
+ARTIFACT_USAGE_NOTE = (
+    "* NOTE: when this module's behaviour depends on how the system is built, "
+    "configured, packaged, deployed or tested, read the relevant artifact file "
+    'with `str_replace_editor` (`command="view"`, `working_dir="repo"`, path as '
+    "listed above) and cite the file path in the documentation."
+)
+
+REPO_OVERVIEW_ARTIFACT_ADDENDUM = """
+The repository also contains the following build, CI, container, packaging, manifest and configuration artifacts:
+{artifact_index}
+
+Include a short section titled "How it is built and run" that summarises how the project is built, tested, packaged and deployed, and links to the module documentation that covers these artifacts (for example a `Build, Deployment and Configuration` module) instead of repeating its content.
+""".strip()
+
 EXTENSION_TO_LANGUAGE = {
     ".py": "python",
     ".md": "markdown",
     ".sh": "bash",
+    ".bash": "bash",
     ".json": "json",
     ".yaml": "yaml",
+    ".yml": "yaml",
+    ".toml": "toml",
+    ".ini": "ini",
+    ".cfg": "ini",
+    ".conf": "text",
+    ".mk": "makefile",
+    ".gradle": "groovy",
+    ".proto": "protobuf",
+    ".gn": "text",
+    ".gni": "text",
+    ".rake": "ruby",
+    ".ps1": "powershell",
+    ".xml": "xml",
+    ".html": "html",
+    ".css": "css",
+    # extension-less artifact files are looked up by basename
+    "Dockerfile": "dockerfile",
+    "Containerfile": "dockerfile",
+    "Makefile": "makefile",
+    "GNUmakefile": "makefile",
+    "Jenkinsfile": "groovy",
+    "Rakefile": "ruby",
+    "Gemfile": "ruby",
     ".java": "java",
     ".js": "javascript",
     ".ts": "typescript",
@@ -360,6 +405,40 @@ def _format_module_tree_str(
     return "\n".join(lines)
 
 
+def _fence_language(path: str) -> str:
+    """Markdown fence language for ``path`` (falls back to ``text``)."""
+    base = path.replace("\\", "/").rsplit("/", 1)[-1]
+    if base in EXTENSION_TO_LANGUAGE:
+        return EXTENSION_TO_LANGUAGE[base]
+    if "." in base:
+        ext = "." + base.rsplit(".", 1)[-1].lower()
+        if ext in EXTENSION_TO_LANGUAGE:
+            return EXTENSION_TO_LANGUAGE[ext]
+        stem = base.split(".", 1)[0]  # Dockerfile.dev -> Dockerfile
+        if stem in EXTENSION_TO_LANGUAGE:
+            return EXTENSION_TO_LANGUAGE[stem]
+    return "text"
+
+
+def _artifact_group_source(component_ids: list[str], components: dict[str, Any]) -> str | None:
+    """Return the capped artifact text for a file group made only of artifact
+    nodes, or ``None`` when the group contains code components."""
+    nodes = [components[c] for c in component_ids if c in components]
+    if not nodes or any(getattr(n, "component_type", None) != "artifact" for n in nodes):
+        return None
+    file_nodes = [n for n in nodes if getattr(n, "node_type", None) == "artifact_file"]
+    if file_nodes:
+        return file_nodes[0].source_code or ""
+    # Only unit nodes were selected: the file node carries the full head, use
+    # it when present in the graph, otherwise join the unit slices.
+    rel = nodes[0].relative_path
+    file_id = f"{rel}::{rel.replace(chr(92), '/').rsplit('/', 1)[-1]}"
+    file_node = components.get(file_id)
+    if file_node is not None and file_node.source_code:
+        return file_node.source_code
+    return "\n\n".join((n.source_code or "") for n in nodes)
+
+
 def format_user_prompt(
     module_name: str,
     core_component_ids: list[str],
@@ -377,6 +456,8 @@ def format_user_prompt(
     Returns:
         Formatted user prompt string
     """
+    from codewiki.src.be.dependency_analyzer.analyzers.artifact import render_artifact_index
+
     formatted_module_tree = _format_module_tree_str(module_tree, module_name)
 
     # Group core component IDs by their file path
@@ -398,25 +479,38 @@ def format_user_prompt(
         for component_id in component_ids_in_file:
             core_component_codes += f"- {component_id}\n"
 
-        core_component_codes += (
-            f"\n## File Content:\n```{EXTENSION_TO_LANGUAGE['.' + path.split('.')[-1]]}\n"
+        core_component_codes += f"\n## File Content:\n```{_fence_language(path)}\n"
+
+        artifact_source = _artifact_group_source(component_ids_in_file, components)
+        if artifact_source is not None:
+            # Artifact files are inlined from their capped head, never re-read
+            # in full (a 150 KB YAML must not blow up the prompt).
+            core_component_codes += artifact_source
+        else:
+            # Read content of the file using the first component's file path
+            try:
+                core_component_codes += file_manager.load_text(
+                    components[component_ids_in_file[0]].file_path
+                )
+            except (OSError, FileNotFoundError) as e:
+                core_component_codes += f"# Error reading file: {e}\n"
+
+        core_component_codes += "\n```\n\n"
+
+    artifact_index = render_artifact_index(components)
+    artifact_section = f"\n\n{artifact_index}\n{ARTIFACT_USAGE_NOTE}" if artifact_index else ""
+
+    def _assemble(codes: str, tree: str) -> str:
+        return (
+            USER_PROMPT.format(
+                module_name=module_name,
+                formatted_core_component_codes=codes,
+                module_tree=tree,
+            )
+            + artifact_section
         )
 
-        # Read content of the file using the first component's file path
-        try:
-            core_component_codes += file_manager.load_text(
-                components[component_ids_in_file[0]].file_path
-            )
-        except (OSError, FileNotFoundError) as e:
-            core_component_codes += f"# Error reading file: {e}\n"
-
-        core_component_codes += "```\n\n"
-
-    prompt = USER_PROMPT.format(
-        module_name=module_name,
-        formatted_core_component_codes=core_component_codes,
-        module_tree=formatted_module_tree,
-    )
+    prompt = _assemble(core_component_codes, formatted_module_tree)
 
     if len(prompt) > MAX_USER_PROMPT_CHARS:
         full_len = len(prompt)
@@ -425,11 +519,7 @@ def format_user_prompt(
             + "\n\n"
             + _format_module_tree_str(module_tree, module_name, include_components=False)
         )
-        prompt = USER_PROMPT.format(
-            module_name=module_name,
-            formatted_core_component_codes=core_component_codes,
-            module_tree=formatted_module_tree,
-        )
+        prompt = _assemble(core_component_codes, formatted_module_tree)
         logger.warning(
             "Module %s: user prompt (%d chars) exceeds %d; "
             "module tree trimmed to names only (%d chars)",
@@ -447,11 +537,7 @@ def format_user_prompt(
         core_component_codes = (
             core_component_codes[: max(0, len(core_component_codes) - excess)] + CODE_TRUNCATED_NOTE
         )
-        prompt = USER_PROMPT.format(
-            module_name=module_name,
-            formatted_core_component_codes=core_component_codes,
-            module_tree=formatted_module_tree,
-        )
+        prompt = _assemble(core_component_codes, formatted_module_tree)
         logger.warning(
             "Module %s: user prompt still over %d chars after tree trim; "
             "truncated inlined file contents (now %d chars)",
