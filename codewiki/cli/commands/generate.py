@@ -308,6 +308,30 @@ def _invalidate_affected_modules(
          "normal calls if the provider rejects them (default: enabled)",
 )
 @click.option(
+    "--artifacts/--no-artifacts",
+    default=True,
+    help="Document build, CI, container, packaging, manifest, config, schema and "
+         "script files as part of the dependency graph (default: enabled)",
+)
+@click.option(
+    "--artifact-token-budget",
+    type=int,
+    default=200_000,
+    show_default=True,
+    help="Total token budget for artifact file contents added to the graph",
+)
+@click.option(
+    "--with-prose",
+    is_flag=True,
+    help="Also read the root README and docs/ as a `prose` artifact class (off by default)",
+)
+@click.option(
+    "--artifact-exclude",
+    type=str,
+    default=None,
+    help="Comma-separated patterns skipped by artifact analysis (e.g. 'docker/data/*,config/generated/*')",
+)
+@click.option(
     "--update",
     is_flag=True,
     help="Incremental update: only regenerate modules affected by changes since last generation",
@@ -337,6 +361,10 @@ def generate_command(
     max_token_per_leaf_module: Optional[int],
     max_depth: Optional[int],
     prompt_caching: Optional[bool],
+    artifacts: bool = True,
+    artifact_token_budget: int = 200_000,
+    with_prose: bool = False,
+    artifact_exclude: Optional[str] = None,
     update: bool = False,
     compare_to: Optional[str] = None
 ):
@@ -511,13 +539,14 @@ def generate_command(
         
         # Create runtime agent instructions from CLI options
         runtime_instructions = None
-        if any([include, exclude, focus, doc_type, instructions]):
+        if any([include, exclude, focus, doc_type, instructions, artifact_exclude]):
             runtime_instructions = AgentInstructions(
                 include_patterns=parse_patterns(include) if include else None,
                 exclude_patterns=parse_patterns(exclude) if exclude else None,
                 focus_modules=parse_patterns(focus) if focus else None,
                 doc_type=doc_type,
                 custom_instructions=instructions,
+                artifact_exclude=parse_patterns(artifact_exclude) if artifact_exclude else None,
             )
             
             if verbose:
@@ -531,6 +560,8 @@ def generate_command(
                     logger.debug(f"Doc type: {doc_type}")
                 if instructions:
                     logger.debug(f"Custom instructions: {instructions}")
+                if artifact_exclude:
+                    logger.debug(f"Artifact exclude patterns: {parse_patterns(artifact_exclude)}")
         
         # Log max token settings if verbose
         if verbose:
@@ -546,6 +577,7 @@ def generate_command(
             logger.debug(f"Max depth: {effective_max_depth}")
             logger.debug(f"Use gitignore: {effective_use_gitignore}")
             logger.debug(f"Prompt caching: {effective_prompt_caching}")
+            logger.debug(f"Artifacts: {artifacts} (token budget {artifact_token_budget}, prose {with_prose})")
         
         # Get agent instructions (merge runtime with persistent)
         agent_instructions_dict = None
@@ -557,6 +589,7 @@ def generate_command(
                 focus_modules=runtime_instructions.focus_modules or (config.agent_instructions.focus_modules if config.agent_instructions else None),
                 doc_type=runtime_instructions.doc_type or (config.agent_instructions.doc_type if config.agent_instructions else None),
                 custom_instructions=runtime_instructions.custom_instructions or (config.agent_instructions.custom_instructions if config.agent_instructions else None),
+                artifact_exclude=runtime_instructions.artifact_exclude or (config.agent_instructions.artifact_exclude if config.agent_instructions else None),
             )
             agent_instructions_dict = merged.to_dict()
         elif config.agent_instructions and not config.agent_instructions.is_empty():
@@ -587,6 +620,10 @@ def generate_command(
                 'use_gitignore': use_gitignore if use_gitignore is not None else config.use_gitignore,
                 # Prompt caching setting (runtime override takes precedence)
                 'prompt_caching': prompt_caching if prompt_caching is not None else config.prompt_caching,
+                # Artifact-aware generation (runtime-only flags)
+                'artifacts_enabled': artifacts,
+                'artifact_token_budget': artifact_token_budget,
+                'with_prose': with_prose,
             },
             verbose=verbose,
             generate_html=github_pages,

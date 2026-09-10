@@ -177,7 +177,92 @@ DEFAULT_INCLUDE_PATTERNS = [
     "*.toml",
     "*.cfg",
     "*.ini",
+    # Artifacts (build, container, CI, packaging, manifest, config, schema,
+    # script files). These reach the file tree so analyzers/artifact.py can
+    # turn them into `artifact` nodes; the language analyzers ignore them.
+    "Dockerfile*",
+    "*.dockerfile",
+    "docker-compose*",
+    "compose.yml",
+    "compose.yaml",
+    "Makefile",
+    "GNUmakefile",
+    "makefile",
+    "*.mk",
+    "CMakeLists.txt",
+    "*.cmake",
+    "*.gradle",
+    "*.gn",
+    "*.gni",
+    "DEPS",
+    "BUILD",
+    "BUILD.*",
+    "WORKSPACE",
+    "*.bzl",
+    "*.rake",
+    "Rakefile",
+    "Gemfile",
+    "*.gemspec",
+    "Jenkinsfile",
+    "*.sh",
+    "*.bash",
+    "*.ps1",
+    "*.spec",
+    "*.service",
+    "*.conf",
+    "*.options",
+    "*.properties",
+    "*.proto",
+    "*.fbs",
+    "*.avsc",
+    "*.thrift",
+    "*.graphql",
+    "*.tf",
+    "Procfile",
+    "go.mod",
+    ".editorconfig",
+    ".pre-commit-config.yaml",
+    ".eslintrc*",
+    ".prettierrc*",
+    ".nvmrc",
 ]
+
+# Paths that survive DEFAULT_IGNORE_PATTERNS (but never user --exclude or
+# .gitignore) because they are artifacts the documentation should cover.
+# Matched with fnmatch against the repo-relative path and the basename; a
+# directory is kept when some pattern lives underneath it (e.g. `.github`
+# for `.github/workflows/*`).
+ARTIFACT_WHITELIST = [
+    ".github/workflows/*",
+    ".github/actions/*",
+    ".github/actions/*/*",
+    ".github/dependabot.yml",
+    "*.ini",
+    "bin/*.sh",
+    "bin/*.bash",
+    "*.gradle",
+    "settings.gradle*",
+    "gradle.properties",
+]
+
+# Lock files are never read as artifacts: huge, generated, no design content.
+ARTIFACT_LOCKFILES = {
+    "package-lock.json",
+    "npm-shrinkwrap.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    "poetry.lock",
+    "Pipfile.lock",
+    "Cargo.lock",
+    "go.sum",
+    "Gemfile.lock",
+    "composer.lock",
+    "uv.lock",
+    "bun.lock",
+    "bun.lockb",
+    "flake.lock",
+    "pdm.lock",
+}
 
 CODE_EXTENSIONS = {
     ".py": "python",

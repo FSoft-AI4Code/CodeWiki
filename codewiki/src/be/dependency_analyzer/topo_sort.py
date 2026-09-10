@@ -321,8 +321,14 @@ def get_leaf_nodes(graph: dict[str, set[str]], components: dict[str, Node]) -> l
             count_before,
             LEAF_REDUCTION_THRESHOLD,
         )
-        # Remove nodes that are dependencies of other nodes
-        for deps in acyclic_graph.values():
+        # Remove nodes that are dependencies of other nodes. Edges that start
+        # at an artifact node (a Dockerfile COPY, a CI `run:` line, a manifest
+        # entry point) are references, not calls: they must not demote the
+        # code component they point at.
+        for node, deps in acyclic_graph.items():
+            owner = components.get(node)
+            if owner is not None and owner.component_type == "artifact":
+                continue
             for dep in deps:
                 leaf_nodes.discard(dep)
 

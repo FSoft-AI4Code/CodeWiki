@@ -123,7 +123,7 @@ class CawToolKit(
         description=(
             "Custom editing tool for viewing, creating and editing files.\n"
             "* If `path` is a file, `view` displays the result of applying `cat -n`. "
-            "If `path` is a directory, `view` lists non-hidden files and directories up to 2 levels deep.\n"
+            "If `path` is a directory, `view` lists non-hidden files and directories (plus `.github`) up to 2 levels deep.\n"
             "* The `create` command cannot be used if the specified `path` already exists as a file.\n"
             "* If a `command` generates a long output, it will be truncated and marked with `<response clipped>`.\n"
             "* The `undo_edit` command will revert the last edit made to the file at `path`.\n"

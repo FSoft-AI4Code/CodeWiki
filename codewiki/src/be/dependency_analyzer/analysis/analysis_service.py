@@ -9,7 +9,7 @@ AST parsing for call graph generation.
 import logging
 import traceback
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from codewiki.src.be.dependency_analyzer.analysis.call_graph_analyzer import CallGraphAnalyzer
 from codewiki.src.be.dependency_analyzer.analysis.cloning import (
@@ -21,6 +21,9 @@ from codewiki.src.be.dependency_analyzer.analysis.repo_analyzer import RepoAnaly
 from codewiki.src.be.dependency_analyzer.models.analysis import AnalysisResult
 from codewiki.src.be.dependency_analyzer.models.core import Repository
 from codewiki.src.be.dependency_analyzer.utils.security import assert_safe_path, safe_open_text
+
+if TYPE_CHECKING:  # pragma: no cover
+    from codewiki.src.be.dependency_analyzer.analyzers.artifact import ArtifactOptions
 
 logger = logging.getLogger(__name__)
 
@@ -288,14 +291,20 @@ class AnalysisService:
         logger.debug("No README file found in repository root.")
         return None
 
-    def _analyze_call_graph(self, file_tree: dict[str, Any], repo_dir: str) -> dict[str, Any]:
+    def _analyze_call_graph(
+        self,
+        file_tree: dict[str, Any],
+        repo_dir: str,
+        artifact_options: "ArtifactOptions | None" = None,
+    ) -> dict[str, Any]:
         """
         Perform multi-language call graph analysis.
 
-        This method will be expanded to handle:
-        - Python AST analysis (current)
-        - JavaScript/TypeScript AST analysis (planned)
-        - Additional language support (future)
+        When ``artifact_options`` is given and enabled, a second pass turns
+        build/CI/container/manifest/config files in the same file tree into
+        ``artifact`` nodes (see ``analyzers/artifact.py``) and appends them to
+        the ``functions``/``relationships`` lists so the rest of the pipeline
+        treats them like any other component.
         """
         logger.debug("Extracting code files from file tree...")
         code_files = self.call_graph_analyzer.extract_code_files(file_tree)
@@ -310,6 +319,19 @@ class AnalysisService:
 
         result["call_graph"]["supported_languages"] = self._get_supported_languages()
         result["call_graph"]["unsupported_files"] = len(code_files) - len(supported_files)
+
+        if artifact_options is not None and artifact_options.enabled:
+            from codewiki.src.be.dependency_analyzer.analyzers.artifact import analyze_artifacts
+
+            artifacts = analyze_artifacts(
+                file_tree, repo_dir, result.get("functions", []), artifact_options
+            )
+            result.setdefault("functions", []).extend(n.model_dump() for n in artifacts.nodes)
+            result.setdefault("relationships", []).extend(
+                r.model_dump() for r in artifacts.relationships
+            )
+            result["artifact_index"] = artifacts.index
+            result["call_graph"]["artifact_nodes"] = len(artifacts.nodes)
 
         return result
 

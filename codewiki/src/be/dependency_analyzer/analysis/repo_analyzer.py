@@ -6,6 +6,7 @@ detailed file tree representations with filtering capabilities.
 """
 
 import fnmatch
+import os
 import logging
 import shutil
 import subprocess
@@ -15,6 +16,7 @@ from typing import Dict, List, Optional
 from pathspec import GitIgnoreSpec
 
 from codewiki.src.be.dependency_analyzer.utils.patterns import (
+    ARTIFACT_WHITELIST,
     DEFAULT_IGNORE_PATTERNS,
     DEFAULT_INCLUDE_PATTERNS,
 )
@@ -184,12 +186,12 @@ class RepoAnalyzer:
         self.include_patterns = (
             include_patterns if include_patterns is not None else DEFAULT_INCLUDE_PATTERNS
         )
-        # Exclude patterns: if specified, MERGE with default ignore patterns
-        self.exclude_patterns = (
-            list(DEFAULT_IGNORE_PATTERNS) + exclude_patterns
-            if exclude_patterns is not None
-            else list(DEFAULT_IGNORE_PATTERNS)
-        )
+        # Exclude patterns: if specified, MERGE with default ignore patterns.
+        # The two sets are also kept apart: user excludes always win, while
+        # the defaults yield to ARTIFACT_WHITELIST (e.g. `.github/workflows`).
+        self.default_exclude_patterns = list(DEFAULT_IGNORE_PATTERNS)
+        self.user_exclude_patterns = list(exclude_patterns) if exclude_patterns is not None else []
+        self.exclude_patterns = self.default_exclude_patterns + self.user_exclude_patterns
         self.use_gitignore = use_gitignore
         self._gitignore_filter: Optional[GitIgnoreFilter] = None
 
@@ -261,8 +263,9 @@ class RepoAnalyzer:
 
         return build_tree(Path(repo_dir), Path(repo_dir))
 
-    def _should_exclude_path(self, path: str, filename: str, is_dir: bool = False) -> bool:
-        for pattern in self.exclude_patterns:
+    @staticmethod
+    def _matches_any(path: str, filename: str, patterns: List[str]) -> bool:
+        for pattern in patterns:
             if fnmatch.fnmatch(path, pattern) or fnmatch.fnmatch(filename, pattern):
                 return True
             if pattern.endswith("/") and path.startswith(pattern.rstrip("/")):
@@ -271,6 +274,33 @@ class RepoAnalyzer:
                 return True
             if pattern in path.split("/"):
                 return True
+        return False
+
+    @staticmethod
+    def _is_artifact_whitelisted(path: str, filename: str, is_dir: bool) -> bool:
+        """True when ``path`` is an artifact the default ignore list must not drop.
+
+        Directories count as whitelisted when a whitelist pattern lives below
+        them, so ``.github`` survives long enough for ``.github/workflows/*``
+        to be visited.
+        """
+        norm = path.replace(os.sep, "/")
+        for pattern in ARTIFACT_WHITELIST:
+            if fnmatch.fnmatch(norm, pattern) or fnmatch.fnmatch(filename, pattern):
+                return True
+            if is_dir and "/" in pattern and pattern.startswith(norm.rstrip("/") + "/"):
+                return True
+        return False
+
+    def _should_exclude_path(self, path: str, filename: str, is_dir: bool = False) -> bool:
+        # User-provided excludes always win.
+        if self._matches_any(path, filename, self.user_exclude_patterns):
+            return True
+        # Built-in ignores yield to the artifact whitelist.
+        if not self._is_artifact_whitelisted(path, filename, is_dir) and self._matches_any(
+            path, filename, self.default_exclude_patterns
+        ):
+            return True
         if self._gitignore_filter and self._gitignore_filter.is_ignored(path, is_dir):
             return True
         return False

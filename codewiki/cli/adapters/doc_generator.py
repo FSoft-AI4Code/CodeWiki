@@ -150,6 +150,9 @@ class CLIDocumentationGenerator:
                 agent_instructions=self.config.get('agent_instructions'),
                 use_gitignore=self.config.get('use_gitignore', True),
                 prompt_caching=self.config.get('prompt_caching', True),
+                artifacts_enabled=self.config.get('artifacts_enabled', True),
+                artifact_token_budget=self.config.get('artifact_token_budget', 200_000),
+                with_prose=self.config.get('with_prose', False),
             )
             
             # Run backend documentation generation
@@ -215,6 +218,7 @@ class CLIDocumentationGenerator:
         # Import clustering function
         from codewiki.src.be.cluster_modules import (
             cluster_modules,
+            ensure_artifact_module,
             get_clustering_input_token_count,
             super_group_modules,
         )
@@ -273,6 +277,10 @@ class CLIDocumentationGenerator:
                         backend_config,
                         completer=lambda p: doc_generator.backend.complete(p, model=cluster_model),
                     )
+                # Artifact nodes the clustering LLM dropped get a fixed module
+                # so build/CI/config coverage does not depend on the LLM.
+                if getattr(backend_config, "artifacts_enabled", True):
+                    module_tree = ensure_artifact_module(module_tree, leaf_nodes, components)
                 # Only freshly clustered trees are deduped: renaming a cached
                 # key whose .md already exists would orphan the doc.
                 from codewiki.src.be.module_naming import dedupe_module_tree_names

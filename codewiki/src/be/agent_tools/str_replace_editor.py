@@ -6,6 +6,7 @@ This tool is used to view the given source code and view/edit the documentation 
 
 import json
 import re
+import shlex
 import subprocess
 import sys
 from collections import defaultdict
@@ -487,8 +488,11 @@ class EditTool:
                 self.logs.append("The `view_range` parameter is not allowed when `path` points to a directory.")
                 return
 
+            # Hidden entries are skipped except `.github` (CI workflows are
+            # documentation-relevant artifacts the agent must be able to find).
             out = subprocess.run(
-                rf"find {path} -maxdepth 2 -not -path '*/\.*'",
+                rf"find {shlex.quote(str(path))} -maxdepth 2 "
+                r"\( -not -path '*/.*' -o -name .github -o -path '*/.github/*' \)",
                 shell=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -499,7 +503,7 @@ class EditTool:
 
             if not stderr:
                 stdout = stdout.replace(str(path), self._get_display_path(path))
-                stdout = f"Here's the files and directories up to 2 levels deep in {self._get_display_path(path)}, excluding hidden items:\n{stdout}\n"
+                stdout = f"Here's the files and directories up to 2 levels deep in {self._get_display_path(path)}, excluding hidden items (except .github):\n{stdout}\n"
                 self.logs.append(stdout)
             return
 
@@ -747,14 +751,14 @@ async def str_replace_editor(
     """
     Custom editing tool for viewing, creating and editing files
         * State is persistent across command calls and discussions with the user
-        * If `path` is a file, `view` displays the result of applying `cat -n`. If `path` is a directory, `view` lists non-hidden files and directories up to 2 levels deep.
+        * If `path` is a file, `view` displays the result of applying `cat -n`. If `path` is a directory, `view` lists non-hidden files and directories (plus `.github`) up to 2 levels deep.
         * The `create` command cannot be used if the specified `path` already exists as a file
         * If a `command` generates a long output, it will be truncated and marked with `<response clipped>`
         * The `undo_edit` command will revert the last edit made to the file at `path`
         * Only `view` command is allowed when `working_dir` is `repo`.
 
     Args:
-        working_dir: The working directory to use. Choose `repo` to work with the repository files, or `docs` to work with the generated documentation files.
+        working_dir: The working directory to use. Choose `repo` to view repository files (source code, and build/CI/container/manifest/config artifacts such as Dockerfile, Makefile, .github/workflows/*.yml, pyproject.toml), or `docs` to work with the generated documentation files.
         command: The command to run. Allowed options are: `view`, `create`, `str_replace`, `insert`, `undo_edit`.
         path: Path to file or directory, e.g. `./chat_core.md` or `./agents/`
         file: Alias for `path` parameter (for compatibility with some models)
@@ -805,7 +809,7 @@ str_replace_editor_tool = Tool(
     description="""
 Custom editing tool for viewing, creating and editing files
     * State is persistent across command calls and discussions with the user
-    * If `path` is a file, `view` displays the result of applying `cat -n`. If `path` is a directory, `view` lists non-hidden files and directories up to 2 levels deep.
+    * If `path` is a file, `view` displays the result of applying `cat -n`. If `path` is a directory, `view` lists non-hidden files and directories (plus `.github`) up to 2 levels deep.
     * The `create` command cannot be used if the specified `path` already exists as a file
     * If a `command` generates a long output, it will be truncated and marked with `<response clipped>`
     * The `undo_edit` command will revert the last edit made to the file at `path`

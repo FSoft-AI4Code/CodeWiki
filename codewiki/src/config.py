@@ -26,6 +26,9 @@ DEFAULT_MIN_MODULES_FOR_SUPER_GROUPING = 3
 # this many leaf nodes (and further bounded by an output-token budget derived
 # from max_tokens).
 DEFAULT_MAX_LEAF_NODES_PER_CLUSTER = 600
+# Artifact-aware generation: total token budget for build/CI/container/
+# manifest/config file contents added to the dependency graph.
+DEFAULT_ARTIFACT_TOKEN_BUDGET = 200_000
 # Legacy constants (for backward compatibility)
 MAX_TOKEN_PER_MODULE = DEFAULT_MAX_TOKEN_PER_MODULE
 MAX_TOKEN_PER_LEAF_MODULE = DEFAULT_MAX_TOKEN_PER_LEAF_MODULE
@@ -87,7 +90,21 @@ class Config:
     agent_instructions: Optional[Dict[str, Any]] = None
     # Apply Git ignore rules before dependency analysis
     use_gitignore: bool = True
+    # Artifact-aware generation (Dockerfiles, CI workflows, Makefiles,
+    # manifests, config, schemas, scripts become `artifact` graph nodes)
+    artifacts_enabled: bool = True
+    artifact_token_budget: int = DEFAULT_ARTIFACT_TOKEN_BUDGET
+    # Also read the root README and docs/ as a `prose` artifact class (off by
+    # default: documentation without existing prose is the benchmark setting)
+    with_prose: bool = False
     
+    @property
+    def artifact_exclude(self) -> Optional[List[str]]:
+        """Extra patterns excluded from artifact analysis (from agent instructions)."""
+        if self.agent_instructions:
+            return self.agent_instructions.get('artifact_exclude')
+        return None
+
     @property
     def include_patterns(self) -> Optional[List[str]]:
         """Get file include patterns from agent instructions."""
@@ -193,6 +210,9 @@ class Config:
         agent_instructions: Optional[Dict[str, Any]] = None,
         use_gitignore: bool = True,
         prompt_caching: bool = True,
+        artifacts_enabled: bool = True,
+        artifact_token_budget: int = DEFAULT_ARTIFACT_TOKEN_BUDGET,
+        with_prose: bool = False,
     ) -> 'Config':
         """
         Create configuration for CLI context.
@@ -221,6 +241,10 @@ class Config:
             agent_instructions: Custom agent instructions dict
             use_gitignore: Whether to apply Git ignore rules
             prompt_caching: Whether to add prompt-cache breakpoints to agentic calls
+            artifacts_enabled: Add build/CI/container/manifest/config files to
+                the dependency graph and document them
+            artifact_token_budget: Total token budget for artifact file contents
+            with_prose: Also read README and docs/ as a `prose` artifact class
 
         Returns:
             Config instance
@@ -251,4 +275,7 @@ class Config:
             agent_instructions=agent_instructions,
             use_gitignore=use_gitignore,
             prompt_caching=prompt_caching,
+            artifacts_enabled=artifacts_enabled,
+            artifact_token_budget=artifact_token_budget,
+            with_prose=with_prose,
         )

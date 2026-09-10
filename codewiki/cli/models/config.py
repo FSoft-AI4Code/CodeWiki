@@ -40,6 +40,7 @@ class AgentInstructions:
     focus_modules: Optional[List[str]] = None  # e.g., ["src/core", "src/api"]
     doc_type: Optional[str] = None  # e.g., "api", "architecture", "user-guide"
     custom_instructions: Optional[str] = None  # Free-form instructions
+    artifact_exclude: Optional[List[str]] = None  # e.g., ["docker/data/*"] skipped by artifact analysis
     
     def to_dict(self) -> dict:
         """Convert to dictionary, excluding None values."""
@@ -48,6 +49,8 @@ class AgentInstructions:
             result['include_patterns'] = self.include_patterns
         if self.exclude_patterns:
             result['exclude_patterns'] = self.exclude_patterns
+        if self.artifact_exclude:
+            result['artifact_exclude'] = self.artifact_exclude
         if self.focus_modules:
             result['focus_modules'] = self.focus_modules
         if self.doc_type:
@@ -65,6 +68,7 @@ class AgentInstructions:
             focus_modules=data.get('focus_modules'),
             doc_type=data.get('doc_type'),
             custom_instructions=data.get('custom_instructions'),
+            artifact_exclude=data.get('artifact_exclude'),
         )
     
     def is_empty(self) -> bool:
@@ -72,6 +76,7 @@ class AgentInstructions:
         return not any([
             self.include_patterns,
             self.exclude_patterns,
+            self.artifact_exclude,
             self.focus_modules,
             self.doc_type,
             self.custom_instructions,

@@ -43,6 +43,10 @@ class Node(BaseModel):
 
     qualified_name: Optional[str] = None
 
+    # Set only on artifact nodes (component_type == "artifact"): one of the
+    # classes in analyzers/artifact.py CLASS_PRIORITY (build, ci, container, ...).
+    artifact_class: Optional[str] = None
+
     def get_display_name(self) -> str:
         return self.display_name or self.name
 

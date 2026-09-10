@@ -43,8 +43,11 @@ def format_potential_core_components(leaf_nodes: List[str], components: Dict[str
     potential_core_components = ""
     potential_core_components_with_code = ""
     for file, leaf_nodes in dict(sorted(leaf_nodes_by_file.items())).items():
-        potential_core_components += f"# {file}\n"
-        potential_core_components_with_code += f"# {file}\n"
+        header = f"# {file}"
+        if all(components[n].component_type == "artifact" for n in leaf_nodes):
+            header += f" (artifact: {components[leaf_nodes[0]].artifact_class or 'config'})"
+        potential_core_components += f"{header}\n"
+        potential_core_components_with_code += f"{header}\n"
         for leaf_node in leaf_nodes:
             potential_core_components += f"\t{leaf_node}\n"
             potential_core_components_with_code += f"\t{leaf_node}\n"
@@ -603,3 +606,85 @@ def super_group_modules(
         len(subsystems),
     )
     return result
+
+
+# --------------------------------------------------------------------------- #
+# Guaranteed artifact module
+# --------------------------------------------------------------------------- #
+
+ARTIFACT_MODULE_NAME = "Build, Deployment and Configuration"
+# Insert the fallback module when clustering kept less than this share of the
+# artifact leaf nodes.
+ARTIFACT_MIN_SHARE = 0.8
+
+
+def collect_module_tree_component_ids(module_tree: Dict[str, Any]) -> set:
+    """Return every component id referenced anywhere in ``module_tree``."""
+    ids: set = set()
+
+    def _walk(tree: Dict[str, Any]) -> None:
+        for module_info in tree.values():
+            if not isinstance(module_info, dict):
+                continue
+            ids.update(module_info.get("components", []) or [])
+            children = module_info.get("children", {})
+            if isinstance(children, dict):
+                _walk(children)
+
+    _walk(module_tree)
+    return ids
+
+
+def ensure_artifact_module(
+    module_tree: Dict[str, Any],
+    leaf_nodes: List[str],
+    components: Dict[str, Node],
+    min_share: float = ARTIFACT_MIN_SHARE,
+) -> Dict[str, Any]:
+    """Guarantee that artifact leaf nodes are documented.
+
+    Clustering is an LLM call and may drop or scatter artifact nodes despite
+    the prompt. If fewer than ``min_share`` of the artifact leaf nodes landed
+    in ``module_tree``, add a fixed top-level module holding every unassigned
+    artifact node. Returns ``module_tree`` unchanged in whole-repository mode
+    (empty tree: one agent documents all leaf nodes anyway).
+    """
+    if not module_tree:
+        return module_tree
+    artifact_leaves = [
+        n for n in leaf_nodes
+        if n in components and components[n].component_type == "artifact"
+    ]
+    if not artifact_leaves:
+        return module_tree
+    assigned = collect_module_tree_component_ids(module_tree)
+    unassigned = [n for n in artifact_leaves if n not in assigned]
+    share = 1.0 - len(unassigned) / len(artifact_leaves)
+    logger.info(
+        "Artifact coverage after clustering: %d/%d artifact leaf nodes assigned (%.0f%%)",
+        len(artifact_leaves) - len(unassigned), len(artifact_leaves), share * 100,
+    )
+    if not unassigned or share >= min_share:
+        return module_tree
+
+    from codewiki.src.be.dependency_analyzer.analyzers.artifact import CLASS_PRIORITY
+    from codewiki.src.be.module_naming import collect_module_tree_names
+
+    def _order(node_id: str):
+        node = components[node_id]
+        cls = node.artifact_class or "config"
+        rank = CLASS_PRIORITY.index(cls) if cls in CLASS_PRIORITY else len(CLASS_PRIORITY)
+        return (rank, node.relative_path, node_id)
+
+    unassigned.sort(key=_order)
+    name = resolve_unique_name(ARTIFACT_MODULE_NAME, None, collect_module_tree_names(module_tree))
+    module_tree[name] = {
+        "path": _common_path_prefix([components[n].relative_path for n in unassigned]) or ".",
+        "components": unassigned,
+        "children": {},
+    }
+    logger.info(
+        "Artifact coverage %.0f%% < %.0f%%; inserted top-level module '%s' with %d components",
+        share * 100, min_share * 100, name, len(unassigned),
+    )
+    return module_tree
