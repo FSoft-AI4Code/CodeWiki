@@ -45,6 +45,7 @@ tests/*
 !tests/test_processing_order_update.py
 !tests/test_leaf_selection.py
 !tests/test_artifact_analyzer.py
+!tests/test_scala_analyzer.py
 
 # Jupyter
 *.ipynb

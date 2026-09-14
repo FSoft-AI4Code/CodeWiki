@@ -149,7 +149,7 @@ CodeWiki is an open-source framework for **automated repository-level documentat
 
 ### Supported Languages
 
-**🐍 Python** • **☕ Java** • **🟨 JavaScript** • **🔷 TypeScript** • **⚙️ C** • **🔧 C++** • **🪟 C#** • **🎯 Kotlin** • **🐘 PHP** • **💎 Ruby**
+**🐍 Python** • **☕ Java** • **🟨 JavaScript** • **🔷 TypeScript** • **⚙️ C** • **🔧 C++** • **🪟 C#** • **🎯 Kotlin** • **🐘 PHP** • **💎 Ruby** • **🔺 Scala**
 
 ---
 

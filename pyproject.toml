@@ -40,6 +40,7 @@ dependencies = [
     "tree-sitter-php>=0.23.0",
     "tree-sitter-kotlin>=1.1.0",
     "tree-sitter-ruby>=0.23.1",
+    "tree-sitter-scala>=0.23.2,<0.24.0",
     "openai>=1.107.0",
     "litellm>=1.77.0",
     "pydantic>=2.11.7",

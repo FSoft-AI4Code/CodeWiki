@@ -166,6 +166,7 @@ def detect_supported_languages(directory: Path) -> list[tuple[str, int]]:
         "PHP": [".php", ".phtml", ".inc"],
         "Kotlin": [".kt", ".kts"],
         "Ruby": [".rb"],
+        "Scala": [".scala", ".sc"],
     }
 
     # Directories to exclude from counting
