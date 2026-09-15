@@ -64,7 +64,11 @@ dependencies = [
 ]
 
 [external]
-# Node.js is required for mermaid-py which validates mermaid diagrams in generated documentation
+# NOTE: mermaid-py (>=0.8.0, the version pinned below) validates diagrams via
+# an HTTP call to a remote rendering service (mermaid.ink by default), not a
+# local Node.js process -- this nodejs requirement may no longer be needed for
+# that purpose specifically; kept as-is pending confirmation it isn't used
+# elsewhere.
 build-requires = [
     { name = "nodejs", version = ">=14.0.0" }
 ]

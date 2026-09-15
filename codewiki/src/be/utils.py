@@ -151,8 +151,11 @@ def extract_mermaid_blocks(content: str) -> List[Tuple[int, str]]:
 # Skip it proactively so SpiderMonkey is never loaded into the process.
 _PYTHONMONKEY_BROKEN = sys.version_info >= (3, 12)
 
-# mermaid-py spawns a Node.js subprocess that can hang indefinitely (e.g. when
-# Node.js is missing or the mermaid CLI is misconfigured).  Enabled by default;
+# mermaid-py validates diagrams by sending them to a remote rendering service
+# (https://mermaid.ink by default, overridable via the MERMAID_INK_SERVER env
+# var understood by mermaid-py itself) rather than spawning a local Node.js
+# subprocess. It can still hang or fail when that service is unreachable
+# (no network egress, DNS/firewall issues, or an outage). Enabled by default;
 # set MERMAID_VALIDATE=0 to disable.
 _MERMAID_PY_BROKEN = os.environ.get("MERMAID_VALIDATE", "1") == "0"
 _MERMAID_PY_PROBED = True  # Skip probing — rely on env var
