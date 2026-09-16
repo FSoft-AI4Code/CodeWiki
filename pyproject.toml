@@ -65,7 +65,10 @@ dependencies = [
 ]
 
 [external]
-# Node.js is required for mermaid-py which validates mermaid diagrams in generated documentation
+# Node.js/npm are required at *install* time by PythonMonkey (pulled in via
+# mermaid-parser-py), whose pminit helper shells out to npm to populate its JS
+# dependencies. mermaid-py itself does not need Node.js: it validates diagrams
+# with an HTTP call to a remote rendering service (mermaid.ink by default).
 build-requires = [
     { name = "nodejs", version = ">=14.0.0" }
 ]
@@ -127,6 +130,11 @@ disallow_incomplete_defs = false
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+
+[tool.ruff.lint]
+# ruff 0.16 widened its default rule set considerably; pin the previous
+# defaults so an unpinned `pip install ruff` in CI stays stable.
+select = ["E4", "E7", "E9", "F"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
