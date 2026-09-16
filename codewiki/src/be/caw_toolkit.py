@@ -204,6 +204,15 @@ class CawToolKit(
                 f"Pass a path that stays inside the working directory."
             )
 
+        if command != "view":
+            from codewiki.src.be.agent_tools.str_replace_editor import check_write_allowed
+
+            denied = check_write_allowed(
+                absolute_path, getattr(self._deps, "allowed_write_paths", None)
+            )
+            if denied:
+                return denied
+
         edit_tool(
             command=command,
             path=absolute_path,

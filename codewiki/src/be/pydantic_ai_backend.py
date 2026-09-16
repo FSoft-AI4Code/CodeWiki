@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 import traceback
 from typing import Any
 
@@ -21,9 +22,9 @@ from codewiki.src.be.agent_tools.generate_sub_module_documentations import (
 )
 from codewiki.src.be.agent_tools.read_code_components import read_code_components_tool
 from codewiki.src.be.agent_tools.str_replace_editor import str_replace_editor_tool
-from codewiki.src.be.backend import LLMBackend
+from codewiki.src.be.backend import AgentReply, LLMBackend, usage_to_dict
 from codewiki.src.be.dependency_analyzer.models.core import Node
-from codewiki.src.be.llm_services import call_llm, create_fallback_models
+from codewiki.src.be.llm_services import call_llm, create_fallback_models, pop_last_usage
 from codewiki.src.be.prompt_template import (
     format_leaf_system_prompt,
     format_system_prompt,
@@ -36,6 +37,18 @@ from codewiki.src.utils import file_manager
 logger = logging.getLogger(__name__)
 
 
+def _run_usage(result: Any) -> dict[str, Any] | None:
+    """Token usage of a pydantic-ai run; ``usage`` is a property in pydantic-ai
+    2.x and a method in earlier releases."""
+    try:
+        usage = getattr(result, "usage", None)
+        if callable(usage):
+            usage = usage()
+        return usage_to_dict(usage)
+    except Exception:  # noqa: BLE001 — usage is optional telemetry
+        return None
+
+
 class PydanticAIBackend(LLMBackend):
     """API-key based backend using pydantic-ai + openai/litellm clients."""
 
@@ -43,6 +56,7 @@ class PydanticAIBackend(LLMBackend):
         self._config = config
         self._fallback_models = create_fallback_models(config)
         self._custom_instructions = config.get_prompt_addition()
+        self.last_usage: dict[str, Any] | None = None
 
     def complete(
         self,
@@ -50,7 +64,31 @@ class PydanticAIBackend(LLMBackend):
         *,
         model: str | None = None,
     ) -> str:
-        return call_llm(prompt, self._config, model=model)
+        pop_last_usage()
+        result = call_llm(prompt, self._config, model=model)
+        self.last_usage = pop_last_usage()
+        return result
+
+    async def run_update_agent(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        deps: CodeWikiDeps,
+    ) -> AgentReply:
+        agent = Agent(
+            self._fallback_models,
+            name=f"update:{deps.current_module_name}",
+            deps_type=CodeWikiDeps,
+            tools=[read_code_components_tool, str_replace_editor_tool],
+            system_prompt=system_prompt,
+        )
+        started = time.time()
+        result = await agent.run(user_prompt, deps=deps)
+        seconds = time.time() - started
+        usage = _run_usage(result)
+        self.last_usage = usage
+        text = result.output if isinstance(result.output, str) else str(result.output)
+        return AgentReply(text=text, usage=usage, seconds=seconds)
 
     async def run_module_agent(
         self,
@@ -114,7 +152,7 @@ class PydanticAIBackend(LLMBackend):
         )
 
         try:
-            await agent.run(
+            result = await agent.run(
                 format_user_prompt(
                     module_name=module_name,
                     core_component_ids=core_component_ids,
@@ -123,6 +161,7 @@ class PydanticAIBackend(LLMBackend):
                 ),
                 deps=deps,
             )
+            self.last_usage = _run_usage(result)
             file_manager.save_json(deps.module_tree, module_tree_path)
             return deps.module_tree
         except Exception as e:

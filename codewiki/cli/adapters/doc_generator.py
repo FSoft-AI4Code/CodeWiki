@@ -186,6 +186,17 @@ class CLIDocumentationGenerator:
         # Create documentation generator
         doc_generator = DocumentationGenerator(backend_config, commit_id=self.commit_id)
 
+        # Incremental update (component-level): keep the previous graph before
+        # the builder overwrites it, so the updater can diff old against new.
+        update_opts = self._update_options()
+        prev_graph_path = None
+        if update_opts is not None:
+            from codewiki.src.be.updater.graph_store import snapshot_old_graph
+
+            prev_graph_path = snapshot_old_graph(
+                backend_config.dependency_graph_dir, str(self.repo_path)
+            )
+
         if self.verbose:
             self.progress_tracker.update_stage(0.5, "Parsing source files...")
 
@@ -210,6 +221,16 @@ class CLIDocumentationGenerator:
             raise APIError(f"Dependency analysis failed: {e}")
 
         self.progress_tracker.complete_stage()
+
+        if update_opts is not None:
+            outcome = await self._run_incremental_update(
+                backend_config, doc_generator, update_opts, prev_graph_path, components, leaf_nodes
+            )
+            if outcome in ("incremental", "no_change"):
+                return
+            # full_fallback / detector_failure: preserve the old docs, rebuild from scratch
+            self._move_docs_aside()
+            components, leaf_nodes = doc_generator.graph_builder.build_dependency_graph()
 
         # Stage 2: Module Clustering
         self.progress_tracker.start_stage(2, "Module Clustering")
@@ -334,6 +355,7 @@ class CLIDocumentationGenerator:
 
             # Create metadata
             doc_generator.create_documentation_metadata(working_dir, components, len(leaf_nodes))
+            self._merge_update_summary(working_dir)
 
             # Collect generated files
             for file_path in os.listdir(working_dir):
@@ -355,6 +377,111 @@ class CLIDocumentationGenerator:
             )
 
         self.progress_tracker.complete_stage()
+
+    # ------------------------------------------------------------------
+    # Incremental update helpers
+    # ------------------------------------------------------------------
+
+    def _update_options(self):
+        """Return ``UpdateOptions`` when this run is a component-level update, else None."""
+        if not self.config.get("update"):
+            return None
+        raw = dict(self.config.get("update_options") or {})
+        rung = str(raw.pop("rung", "3") or "3")
+        if rung == "0":
+            return None  # legacy path handled in generate.py
+        if not (self.output_dir / "module_tree.json").exists():
+            return None  # nothing to update against: normal generation
+        from codewiki.src.be.updater.options import UpdateOptions
+
+        return UpdateOptions.from_rung(rung, **raw)
+
+    async def _run_incremental_update(
+        self, backend_config, doc_generator, update_opts, prev_graph_path, components, leaf_nodes
+    ) -> str:
+        import json
+
+        from codewiki.src.be.updater.orchestrator import IncrementalUpdater
+
+        self.progress_tracker.start_stage(2, "Incremental Update")
+        prev_commit = None
+        try:
+            with open(self.output_dir / "metadata.json", encoding="utf-8") as f:
+                prev_commit = (json.load(f).get("generation_info") or {}).get("commit_id")
+        except (OSError, json.JSONDecodeError, AttributeError):
+            pass
+        revision = {
+            "old_commit": prev_commit,
+            "new_commit": self.commit_id,
+            "repo_path": str(self.repo_path),
+        }
+        updater = IncrementalUpdater(
+            backend_config, doc_generator.backend, doc_generator, update_opts
+        )
+        record = await updater.run(prev_graph_path, components, leaf_nodes, revision)
+        self._last_update_record = record
+        summary = record.summary()
+        if self.verbose:
+            self.progress_tracker.update_stage(
+                0.9,
+                f"Update outcome: {record.outcome} (diff {summary['diff_counts']}, "
+                f"{summary['n_active']} active leaves, {summary['n_calls']} LLM calls)",
+            )
+        working_dir = str(self.output_dir.absolute())
+        if record.outcome in ("incremental", "no_change"):
+            doc_generator.create_documentation_metadata(working_dir, components, len(leaf_nodes))
+            self._merge_update_summary(working_dir)
+            for file_path in os.listdir(working_dir):
+                if file_path.endswith((".md", ".json")):
+                    self.job.files_generated.append(file_path)
+            tree_path = os.path.join(working_dir, "module_tree.json")
+            if os.path.exists(tree_path):
+                with open(tree_path, encoding="utf-8") as f:
+                    self.job.module_count = len(json.load(f))
+            missing_docs = doc_generator.validate_generated_docs(working_dir)
+            if missing_docs:
+                raise IncompleteGenerationError(
+                    "Incremental update finished but these module docs are missing: "
+                    + ", ".join(f"{name}.md" for name in missing_docs),
+                    missing_modules=missing_docs,
+                )
+        self.progress_tracker.complete_stage()
+        return record.outcome
+
+    def _move_docs_aside(self) -> None:
+        """Keep the previous docs (and the failed attempt's record) next to the output dir."""
+        import shutil
+
+        suffix = (self.commit_id or "unknown")[:8]
+        target = self.output_dir.parent / f"{self.output_dir.name}.prev-{suffix}"
+        n = 2
+        while target.exists():
+            target = self.output_dir.parent / f"{self.output_dir.name}.prev-{suffix}-{n}"
+            n += 1
+        shutil.move(str(self.output_dir), str(target))
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self._preserved_docs_dir = str(target)
+        record = getattr(self, "_last_update_record", None)
+        if record is not None:
+            record.detector_notes.append(f"previous docs moved to {target}")
+        if self.verbose:
+            self.progress_tracker.update_stage(0.1, f"Previous docs preserved at {target}")
+
+    def _merge_update_summary(self, working_dir: str) -> None:
+        record = getattr(self, "_last_update_record", None)
+        if record is None:
+            return
+        from codewiki.src.be.updater.record import merge_into_metadata
+
+        summary = record.summary()
+        preserved = getattr(self, "_preserved_docs_dir", None)
+        if preserved:
+            summary["previous_docs"] = preserved
+        merge_into_metadata(working_dir, summary)
+        try:
+            record.save(working_dir)
+        except OSError:
+            pass
 
     def _run_html_generation(self):
         """Run HTML generation stage."""

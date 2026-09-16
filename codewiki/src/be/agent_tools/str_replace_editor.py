@@ -5,6 +5,7 @@ This tool is used to view the given source code and view/edit the documentation 
 import io
 import json
 import logging
+import os
 import re
 import shlex
 import subprocess
@@ -50,7 +51,13 @@ InsertLine = Annotated[int | None, BeforeValidator(_coerce_json_string)]
 # There are some super strange "ascii can't decode x" errors,
 # that can be solved with setting the default encoding for stdout
 # (note that python3.6 doesn't have the reconfigure method)
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+# Only rewrap when stdout is not already UTF-8. Replacing sys.stdout
+# unconditionally drops the previous wrapper, which closes the underlying
+# buffer when garbage-collected; under pytest that kills output capture.
+if (getattr(sys.stdout, "encoding", "") or "").lower().replace("-", "") != "utf8" and hasattr(
+    sys.stdout, "buffer"
+):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
 TRUNCATED_MESSAGE: str = "<response clipped><NOTE>To save on context only part of this file has been shown to you. You should retry this tool after you have searched inside the file with `grep -n` in order to find the line numbers of what you are looking for.</NOTE>"
 MAX_RESPONSE_LEN: int = 16000
@@ -803,6 +810,35 @@ class EditTool:
         )
 
 
+def check_write_allowed(absolute_path: str, allowed: "set[str] | None") -> str | None:
+    """Return an error message when ``absolute_path`` is outside the write set.
+
+    ``allowed`` holds absolute paths; both sides are resolved so symlinks and
+    ``..`` segments cannot slip a write past the guard. ``None`` means the
+    agent may write anywhere under its working dir (normal generation).
+    """
+    if allowed is None:
+        return None
+    try:
+        resolved = str(Path(absolute_path).resolve())
+    except OSError:
+        resolved = os.path.abspath(absolute_path)
+    allowed_resolved = set()
+    for a in allowed:
+        try:
+            allowed_resolved.add(str(Path(a).resolve()))
+        except OSError:
+            allowed_resolved.add(os.path.abspath(a))
+    if resolved in allowed_resolved:
+        return None
+    names = sorted(os.path.basename(a) for a in allowed_resolved)
+    return (
+        f"Error: {os.path.basename(absolute_path)!r} is not in this agent's write set. "
+        f"You may only edit these pages: {names}. Everything else must stay untouched; "
+        f"if it needs a change, say so in your final verdict instead."
+    )
+
+
 async def str_replace_editor(
     ctx: RunContext[CodeWikiDeps],
     working_dir: Literal["repo", "docs"],
@@ -842,14 +878,30 @@ async def str_replace_editor(
         path = file
 
     tool = EditTool(ctx.deps.registry, ctx.deps.absolute_docs_path)
-    if working_dir == "docs":
-        absolute_path = str(Path(ctx.deps.absolute_docs_path) / path)
-    else:
-        absolute_path = str(Path(ctx.deps.absolute_repo_path) / path)
+    # Absolute paths would resolve *outside* the chosen working dir
+    # (``Path(base) / "/abs"`` == ``/abs``); force relative paths like the caw path does.
+    if os.path.isabs(path):
+        return (
+            f"Error: `path` must be relative to `working_dir` ({working_dir!r}), "
+            f"got absolute path {path!r}."
+        )
+    base_dir = ctx.deps.absolute_docs_path if working_dir == "docs" else ctx.deps.absolute_repo_path
+    absolute_path = str(Path(base_dir) / path)
+    try:
+        Path(absolute_path).resolve().relative_to(Path(base_dir).resolve())
+    except ValueError:
+        return (
+            f"Error: resolved path {absolute_path!r} escapes working_dir={working_dir!r} "
+            f"root {base_dir!r}."
+        )
 
     # validate command
     if command != "view" and working_dir == "repo":
         return "The `view` command is the only allowed command when `working_dir` is `repo`."
+    if command != "view":
+        denied = check_write_allowed(absolute_path, getattr(ctx.deps, "allowed_write_paths", None))
+        if denied:
+            return denied
 
     tool(
         command=command,
