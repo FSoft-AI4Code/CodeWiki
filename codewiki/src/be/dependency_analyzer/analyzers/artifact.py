@@ -241,6 +241,7 @@ _MANIFEST_NAMES = {
     "build.gradle.kts",
     "settings.gradle",
     "settings.gradle.kts",
+    "build.sbt",
     "Package.swift",
     "pubspec.yaml",
     "Pipfile",
@@ -293,7 +294,7 @@ _BUILD_NAMES = {
     "Gruntfile.js",
     "Herebyfile.mjs",
 }
-_BUILD_EXTS = {".gn", ".gni", ".gradle", ".rake", ".mk", ".cmake", ".bzl", ".ninja"}
+_BUILD_EXTS = {".gn", ".gni", ".gradle", ".rake", ".mk", ".cmake", ".bzl", ".ninja", ".sbt"}
 _BUILD_CONFIG_RE = re.compile(r"^(webpack|rollup|vite|esbuild|tsup|babel)\.config\.[cm]?[jt]s$")
 _BUILD_TOPS = {"build", "rakelib", "cmake"}
 _TEST_INFRA_NAMES = {
@@ -427,6 +428,8 @@ def classify_artifact(
         ".cs",
         ".php",
         ".kt",
+        ".scala",
+        ".sc",
     }:
         if name in _TEST_INFRA_NAMES:
             return "test_infra"

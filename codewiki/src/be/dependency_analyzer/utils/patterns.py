@@ -161,6 +161,7 @@ DEFAULT_INCLUDE_PATTERNS = [
     "*.kt",
     "*.kts",
     "*.scala",
+    "*.sc",
     "*.clj",
     "*.hs",
     "*.ml",
@@ -287,6 +288,7 @@ CODE_EXTENSIONS = {
     ".swift": "swift",
     ".kt": "kotlin",
     ".scala": "scala",
+    ".sc": "scala",
     ".cs": "csharp",
 }
 
@@ -515,6 +517,14 @@ FUNCTION_DEFINITION_PATTERNS = {
         "protected fun {name}",
     ],
     "ruby": ["def {name}", "def self.{name}"],
+    "scala": [
+        "def {name}",
+        "private def {name}",
+        "protected def {name}",
+        "class {name}",
+        "trait {name}",
+        "object {name}",
+    ],
     "general": ["{name}("],  # Fallback pattern
 }
 

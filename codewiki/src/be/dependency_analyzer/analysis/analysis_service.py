@@ -354,6 +354,7 @@ class AnalysisService:
             "go",
             "rust",
             "kotlin",
+            "scala",
         }
 
         return [
@@ -375,6 +376,7 @@ class AnalysisService:
             "php",
             "ruby",
             "kotlin",
+            "scala",
         ]
 
     def _cleanup_repository(self, temp_dir: str):

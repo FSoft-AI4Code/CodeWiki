@@ -350,6 +350,8 @@ EXTENSION_TO_LANGUAGE = {
     ".cs": "csharp",
     ".kt": "kotlin",
     ".kts": "kotlin",
+    ".scala": "scala",
+    ".sc": "scala",
     ".php": "php",
     ".phtml": "php",
     ".inc": "php",

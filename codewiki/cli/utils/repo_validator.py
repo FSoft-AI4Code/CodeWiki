@@ -31,6 +31,8 @@ SUPPORTED_EXTENSIONS = {
     ".kt",  # Kotlin
     ".kts",  # Kotlin Scripts
     ".rb",  # Ruby
+    ".scala",  # Scala
+    ".sc",  # Scala Scripts
 }
 
 

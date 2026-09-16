@@ -186,6 +186,8 @@ class DependencyParser:
             ".kt",
             ".kts",
             ".rb",
+            ".scala",
+            ".sc",
         ]
         for ext in extensions:
             if path.endswith(ext):
