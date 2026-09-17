@@ -14,15 +14,15 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Annotated, Literal
 
-# Configure logging and monitoring
-
-logger = logging.getLogger(__name__)
-
 from pydantic import BeforeValidator
 from pydantic_ai import RunContext, Tool
 
 from ..utils import validate_mermaid_diagrams
 from .deps import CodeWikiDeps
+
+# Configure logging and monitoring
+
+logger = logging.getLogger(__name__)
 
 
 def _coerce_json_string(value):
