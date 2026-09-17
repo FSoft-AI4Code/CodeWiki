@@ -227,6 +227,17 @@ class CLIDocumentationGenerator:
                 backend_config, doc_generator, update_opts, prev_graph_path, components, leaf_nodes
             )
             if outcome in ("incremental", "no_change"):
+                # The builder wrote the new graph under this checkout's name. Drop graphs
+                # left by earlier checkouts so the next update has exactly one to pick.
+                from codewiki.src.be.updater.graph_store import (
+                    graph_file_path,
+                    prune_superseded_graphs,
+                )
+
+                prune_superseded_graphs(
+                    backend_config.dependency_graph_dir,
+                    keep=graph_file_path(backend_config.dependency_graph_dir, str(self.repo_path)),
+                )
                 return
             # full_fallback / detector_failure: preserve the old docs, rebuild from scratch
             self._move_docs_aside()
