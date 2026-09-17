@@ -331,6 +331,49 @@ def _invalidate_affected_modules(output_dir: Path, changed_files: list[str], log
     help="Incremental update: only regenerate modules affected by changes since last generation",
 )
 @click.option(
+    "--update-rung",
+    type=click.Choice(["0", "1", "2", "3", "3b"]),
+    default="3",
+    show_default=True,
+    help=(
+        "Incremental updater variant used with --update. 0 = legacy file-level "
+        "invalidation; 1-3 = component-level updater ablation rungs; 3b = rung 3 with 2 hops."
+    ),
+)
+@click.option(
+    "--tau-ren", type=float, default=None, help="Rename similarity threshold (default 0.95)."
+)
+@click.option(
+    "--tau-nb", type=float, default=None, help="Neighbour-majority routing share (default 0.5)."
+)
+@click.option(
+    "--tau-grow",
+    type=float,
+    default=None,
+    help="Leaf growth share that re-clusters (default 0.33).",
+)
+@click.option(
+    "--tau-full",
+    type=float,
+    default=None,
+    help="Active-leaf share that forces a full build (default 0.5).",
+)
+@click.option(
+    "--tau-tree",
+    type=float,
+    default=None,
+    help="Structural-change share that forces a full build (default 0.3).",
+)
+@click.option(
+    "--k-hop", type=int, default=None, help="Dependency hops followed for Up (default 1)."
+)
+@click.option(
+    "--max-diff-tokens",
+    type=int,
+    default=None,
+    help="Cap on one component diff in a report (default 8000).",
+)
+@click.option(
     "--compare-to",
     type=str,
     default=None,
@@ -361,6 +404,14 @@ def generate_command(
     artifact_exclude: str | None = None,
     update: bool = False,
     compare_to: str | None = None,
+    update_rung: str = "3",
+    tau_ren: float | None = None,
+    tau_nb: float | None = None,
+    tau_grow: float | None = None,
+    tau_full: float | None = None,
+    tau_tree: float | None = None,
+    k_hop: int | None = None,
+    max_diff_tokens: int | None = None,
 ):
     """
     Generate comprehensive documentation for a code repository.
@@ -485,12 +536,23 @@ def generate_command(
                     "No changes detected since last generation. Documentation is up to date."
                 )
                 sys.exit(EXIT_SUCCESS)
-            if changed_files is not None:
+            if changed_files is not None and update_rung == "0":
                 logger.info(
                     f"  Detected {len(changed_files)} changed files — regenerating affected modules."
                 )
                 # Remove cached module docs for affected files so they get regenerated
                 _invalidate_affected_modules(output_dir, changed_files, logger, verbose)
+            elif update_rung != "0":
+                if changed_files is not None:
+                    logger.info(
+                        f"  Detected {len(changed_files)} changed files — running the "
+                        f"component-level updater (rung {update_rung})."
+                    )
+                else:
+                    logger.info(
+                        f"  Git diff unavailable — the component-level updater (rung {update_rung}) "
+                        f"will compare the saved dependency graph instead."
+                    )
 
         # Check for existing documentation
         if (
@@ -665,6 +727,18 @@ def generate_command(
                 "artifacts_enabled": artifacts,
                 "artifact_token_budget": artifact_token_budget,
                 "with_prose": with_prose,
+                # Incremental updater (runtime-only)
+                "update": update,
+                "update_options": {
+                    "rung": update_rung,
+                    "tau_ren": tau_ren,
+                    "tau_nb": tau_nb,
+                    "tau_grow": tau_grow,
+                    "tau_full": tau_full,
+                    "tau_tree": tau_tree,
+                    "k_hop": k_hop,
+                    "max_diff_tokens": max_diff_tokens,
+                },
             },
             verbose=verbose,
             generate_html=github_pages,

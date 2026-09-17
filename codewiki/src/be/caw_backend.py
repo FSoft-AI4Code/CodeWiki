@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 import shutil
 from typing import Any
 
@@ -29,7 +30,7 @@ from caw import Agent as CawAgent
 from caw import ToolGroup
 
 from codewiki.src.be.agent_tools.deps import CodeWikiDeps
-from codewiki.src.be.backend import LLMBackend
+from codewiki.src.be.backend import AgentReply, LLMBackend, usage_to_dict
 from codewiki.src.be.cluster_modules import format_potential_core_components
 from codewiki.src.be.dependency_analyzer.models.core import Node
 from codewiki.src.be.prompt_template import (
@@ -257,7 +258,58 @@ class CawBackend(LLMBackend):
             tools=ToolGroup.READER,
         )
         traj = agent.completion(prompt)
+        self.last_usage = usage_to_dict(getattr(traj, "total_usage", None))
         return traj.result
+
+    # ------------------------------------------------------------------
+    # Update agent (incremental updater): read tools + str_replace_editor,
+    # no delegation, final message returned.
+    # ------------------------------------------------------------------
+
+    async def run_update_agent(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        deps: CodeWikiDeps,
+    ) -> AgentReply:
+        set_main_loop(asyncio.get_running_loop())
+        return await asyncio.to_thread(
+            self._run_update_agent_sync, system_prompt, user_prompt, deps
+        )
+
+    def _run_update_agent_sync(
+        self, system_prompt: str, user_prompt: str, deps: CodeWikiDeps
+    ) -> AgentReply:
+        from codewiki.src.be.caw_toolkit import CawToolKit  # local import to avoid cycles
+
+        toolkit = CawToolKit(deps=deps, backend=self, allow_subagent=False)
+        agent = CawAgent(
+            provider=self._caw_provider,
+            model=self._model,
+            system_prompt=system_prompt,
+            tools=_agent_tool_group_for_provider(self._caw_provider),
+            tool_servers=[toolkit],
+        )
+        original_cwd = os.getcwd()
+        run_cwd = deps.absolute_docs_path if self._caw_provider == "codex" else self._repo_root
+        started = time.time()
+        try:
+            os.chdir(run_cwd)
+            try:
+                traj = agent.completion(user_prompt)
+            finally:
+                os.chdir(original_cwd)
+        except Exception as e:
+            logger.error("Update agent for %s failed via caw: %s", deps.current_module_name, e)
+            raise
+        usage = usage_to_dict(getattr(traj, "total_usage", None))
+        self.last_usage = usage
+        return AgentReply(
+            text=traj.result or "",
+            usage=usage,
+            seconds=time.time() - started,
+            meta={"turns": traj.num_turns, "tool_calls": traj.total_tool_calls},
+        )
 
     # ------------------------------------------------------------------
     # Per-module agent loop
@@ -434,6 +486,7 @@ class CawBackend(LLMBackend):
                 traj.num_turns,
                 traj.total_tool_calls,
             )
+            self.last_usage = usage_to_dict(getattr(traj, "total_usage", None))
             file_manager.save_json(deps.module_tree, module_tree_path)
             return deps.module_tree
         except Exception as e:

@@ -6,6 +6,7 @@ return slightly non-standard responses (e.g. choices[].index = None).
 
 Supports multiple providers: openai-compatible, anthropic, bedrock, azure-openai.
 """
+
 import inspect
 import logging
 from typing import Optional
@@ -80,12 +81,8 @@ def _build_model_settings(config: Config, model_name: str) -> OpenAIChatModelSet
     provider default.
     """
     if _should_use_max_completion_tokens(model_name, config.llm_base_url):
-        return OpenAIChatModelSettings(
-            max_completion_tokens=config.max_tokens
-        )
-    return OpenAIChatModelSettings(
-        max_tokens=config.max_tokens
-    )
+        return OpenAIChatModelSettings(max_completion_tokens=config.max_tokens)
+    return OpenAIChatModelSettings(max_tokens=config.max_tokens)
 
 
 def _get_litellm_model_name(model_name: str, provider: str) -> str:
@@ -218,6 +215,7 @@ def _create_litellm_openai_client(config: Config) -> OpenAI:
     # Configure litellm for the provider
     if config.provider == "bedrock":
         import os
+
         os.environ.setdefault("AWS_DEFAULT_REGION", config.aws_region)
         os.environ.setdefault("AWS_REGION_NAME", config.aws_region)
 
@@ -236,11 +234,8 @@ def create_main_model(config: Config) -> CachingOpenAIModel:
         model_name=config.main_model,
         prompt_caching=config.prompt_caching,
         cache_registry_key=config.llm_base_url or "",
-        provider=OpenAIProvider(
-            base_url=config.llm_base_url,
-            api_key=config.llm_api_key
-        ),
-        settings=_build_model_settings(config, config.main_model)
+        provider=OpenAIProvider(base_url=config.llm_base_url, api_key=config.llm_api_key),
+        settings=_build_model_settings(config, config.main_model),
     )
 
 
@@ -250,11 +245,8 @@ def create_fallback_model(config: Config) -> CachingOpenAIModel:
         model_name=config.fallback_model,
         prompt_caching=config.prompt_caching,
         cache_registry_key=config.llm_base_url or "",
-        provider=OpenAIProvider(
-            base_url=config.llm_base_url,
-            api_key=config.llm_api_key
-        ),
-        settings=_build_model_settings(config, config.fallback_model)
+        provider=OpenAIProvider(base_url=config.llm_base_url, api_key=config.llm_api_key),
+        settings=_build_model_settings(config, config.fallback_model),
     )
 
 
@@ -267,10 +259,26 @@ def create_fallback_models(config: Config) -> FallbackModel:
 
 def create_openai_client(config: Config) -> OpenAI:
     """Create OpenAI client from configuration."""
-    return OpenAI(
-        base_url=config.llm_base_url,
-        api_key=config.llm_api_key
-    )
+    return OpenAI(base_url=config.llm_base_url, api_key=config.llm_api_key)
+
+
+# Usage of the most recent completion, read by LLMBackend.complete implementations.
+_LAST_USAGE: dict = {"usage": None}
+
+
+def pop_last_usage() -> Optional[dict]:
+    usage = _LAST_USAGE["usage"]
+    _LAST_USAGE["usage"] = None
+    return usage
+
+
+def _remember_usage(response) -> None:
+    from codewiki.src.be.backend import usage_to_dict
+
+    try:
+        _LAST_USAGE["usage"] = usage_to_dict(getattr(response, "usage", None))
+    except Exception:  # noqa: BLE001 — usage is optional telemetry
+        _LAST_USAGE["usage"] = None
 
 
 def _extract_content(response, model: str) -> Optional[str]:
@@ -280,6 +288,7 @@ def _extract_content(response, model: str) -> Optional[str]:
     which some proxies pair with ``content: null``) is visible in the logs
     instead of surfacing later as an opaque NoneType error.
     """
+    _remember_usage(response)
     choice = response.choices[0]
     content = choice.message.content
     finish_reason = getattr(choice, "finish_reason", None)
@@ -299,11 +308,7 @@ def _extract_content(response, model: str) -> Optional[str]:
     return content
 
 
-def call_llm(
-    prompt: str,
-    config: Config,
-    model: str = None
-) -> Optional[str]:
+def call_llm(prompt: str, config: Config, model: str = None) -> Optional[str]:
     """
     Call LLM with the given prompt.
 
@@ -356,7 +361,9 @@ def call_llm(
         if _is_unsupported_token_param_error(e, primary_key):
             logger.info(
                 "Provider rejected %s for model %s; retrying with %s.",
-                primary_key, model, fallback_key,
+                primary_key,
+                model,
+                fallback_key,
             )
             response = client.chat.completions.create(
                 **base_kwargs,
@@ -380,11 +387,7 @@ def _is_unsupported_token_param_error(err: BadRequestError, param: str) -> bool:
     return "unsupported parameter" in msg and param in msg
 
 
-def _call_llm_via_litellm(
-    prompt: str,
-    config: Config,
-    model: str
-) -> Optional[str]:
+def _call_llm_via_litellm(prompt: str, config: Config, model: str) -> Optional[str]:
     """
     Call LLM via litellm for Bedrock/Anthropic providers.
 
@@ -411,11 +414,7 @@ def _call_llm_via_litellm(
     return _extract_content(response, litellm_model)
 
 
-def _call_llm_via_azure(
-    prompt: str,
-    config: Config,
-    model: str
-) -> Optional[str]:
+def _call_llm_via_azure(prompt: str, config: Config, model: str) -> Optional[str]:
     """
     Call LLM via Azure OpenAI.
 
@@ -431,7 +430,9 @@ def _call_llm_via_azure(
     )
 
     deployment = config.azure_deployment or model
-    logger.debug("Calling Azure OpenAI deployment %s (api_version=%s)", deployment, config.api_version)
+    logger.debug(
+        "Calling Azure OpenAI deployment %s (api_version=%s)", deployment, config.api_version
+    )
 
     response = client.chat.completions.create(
         model=deployment,
