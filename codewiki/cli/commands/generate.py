@@ -13,6 +13,7 @@ import click
 from codewiki.cli.adapters.doc_generator import CLIDocumentationGenerator
 from codewiki.cli.config_manager import ConfigManager
 from codewiki.cli.models.config import AgentInstructions
+from codewiki.cli.utils.branding import print_banner
 from codewiki.cli.utils.errors import (
     EXIT_SUCCESS,
     APIError,
@@ -461,6 +462,7 @@ def generate_command(
     # Override max depth for hierarchical decomposition
     $ codewiki generate --max-depth 3
     """
+    print_banner()
     logger = create_logger(verbose=verbose)
     start_time = time.time()
 

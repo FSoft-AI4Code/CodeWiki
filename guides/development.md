@@ -151,6 +151,19 @@ with Python 3.12: the test suite, then `ruff check` and `ruff format --check`
 on the Python files the change touched. The lint rule set is pinned in
 `pyproject.toml`.
 
+The same two ruff checks run locally as a `pre-commit` hook. Enable it once
+per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The hook (`.githooks/pre-commit`) lints the staged content of every Python
+file in the commit and aborts the commit if either check fails. It uses
+`.venv/bin/ruff` when present, otherwise `ruff` on `PATH`. Fix the reported
+files with `ruff check --fix` and `ruff format`, stage them, and commit again.
+`git commit --no-verify` skips the hook; CI will still fail on the same errors.
+
 Test files worth knowing: `test_artifact_analyzer.py`,
 `test_updater_*.py` with the toy repository in `updater_toy.py`,
 `test_cluster_partitioning.py`, `test_leaf_selection.py`,
@@ -187,8 +200,9 @@ Common problems:
 ## Contributing
 
 1. Fork and create a branch: `git checkout -b feat/your-feature`.
-2. Make the change and add or update tests.
-3. Run the tests and lint above.
-4. Open a pull request against `main`. Describe what changed and why.
+2. Enable the lint hook: `git config core.hooksPath .githooks`.
+3. Make the change and add or update tests.
+4. Run the tests and lint above.
+5. Open a pull request against `main`. Describe what changed and why.
 
 Questions: https://github.com/FSoft-AI4Code/CodeWiki/issues

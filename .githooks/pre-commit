@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Pre-commit lint gate. Runs the same ruff checks as CI on the Python files
+# staged for this commit and aborts the commit if any of them fail.
+#
+# Install once per clone:   git config core.hooksPath .githooks
+# Bypass in an emergency:   git commit --no-verify
+
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+# Python files that are added, copied, modified or renamed in the index.
+staged=()
+while IFS= read -r -d '' file; do
+    staged+=("$file")
+done < <(git diff --cached --name-only --diff-filter=ACMR -z -- '*.py')
+if [[ ${#staged[@]} -eq 0 ]]; then
+    exit 0
+fi
+
+# Prefer the project venv, then PATH, then a module install.
+if [[ -x "$repo_root/.venv/bin/ruff" ]]; then
+    ruff=("$repo_root/.venv/bin/ruff")
+elif command -v ruff >/dev/null 2>&1; then
+    ruff=(ruff)
+elif python -m ruff --version >/dev/null 2>&1; then
+    ruff=(python -m ruff)
+else
+    echo "pre-commit: ruff is not installed. Install it with 'pip install ruff'" >&2
+    echo "pre-commit: (or 'pip install -e .[dev]') and retry the commit." >&2
+    exit 1
+fi
+
+# Lint the staged blobs rather than the working tree so partially staged
+# files are judged on what will actually be committed.
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+git checkout-index --prefix="$tmp/" -- "${staged[@]}"
+cp pyproject.toml "$tmp/pyproject.toml"
+
+status=0
+echo "pre-commit: ruff check on ${#staged[@]} staged Python file(s)"
+(cd "$tmp" && "${ruff[@]}" check "${staged[@]}") || status=1
+
+echo "pre-commit: ruff format --check"
+(cd "$tmp" && "${ruff[@]}" format --check "${staged[@]}") || status=1
+
+if [[ $status -ne 0 ]]; then
+    echo >&2
+    echo "pre-commit: lint failed, commit aborted." >&2
+    echo "pre-commit: fix with 'ruff check --fix <files>' and 'ruff format <files>'," >&2
+    echo "pre-commit: then 'git add' the changes and commit again." >&2
+    exit 1
+fi

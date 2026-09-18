@@ -8,27 +8,36 @@ import click
 from codewiki import __version__
 from codewiki.cli.commands.config import config_group
 from codewiki.cli.commands.generate import generate_command
+from codewiki.cli.utils.branding import print_banner
 
 
-@click.group()
+@click.group(invoke_without_command=True)
 @click.version_option(version=__version__, prog_name="CodeWiki CLI")
 @click.pass_context
 def cli(ctx):
     """
-    CodeWiki: Transform codebases into comprehensive documentation.
+    CodeWiki: repository-level documentation for large codebases.
 
-    Generate AI-powered documentation for your code repositories with support
-    for Python, Java, JavaScript, TypeScript, C, C++, and C#.
+    AI agents write the documentation from your dependency graph. Supports
+    Python, Java, JavaScript, TypeScript, C, C++, C#, Kotlin, PHP, Ruby,
+    and Scala.
     """
     # Ensure context object exists
     ctx.ensure_object(dict)
+
+    # Bare `codewiki`: show the branded banner, then the usual help text.
+    if ctx.invoked_subcommand is None:
+        print_banner()
+        click.echo(ctx.get_help())
+        ctx.exit(0)
 
 
 @cli.command()
 def version():
     """Display version information."""
+    print_banner(force=True)
     click.echo(f"CodeWiki CLI v{__version__}")
-    click.echo("Python-based documentation generator using AI analysis")
+    click.echo("Repository-level documentation for large codebases, written by AI agents")
 
 
 # Register command groups
