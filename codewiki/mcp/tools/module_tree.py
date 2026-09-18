@@ -10,10 +10,9 @@ from __future__ import annotations
 import json
 import logging
 import os
-from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-from codewiki.mcp.session import SessionState, SessionStore
+from codewiki.mcp.session import SessionStore
 from codewiki.src.config import FIRST_MODULE_TREE_FILENAME, MODULE_TREE_FILENAME
 
 logger = logging.getLogger(__name__)
@@ -30,7 +29,9 @@ def _cap(ids: List[str]) -> Tuple[List[str], bool]:
     return ids[:_MAX_IDS_IN_RESPONSE], True
 
 
-def _get_processing_order(module_tree: Dict[str, Any], parent_path: List[str] | None = None) -> List[Dict[str, Any]]:
+def _get_processing_order(
+    module_tree: Dict[str, Any], parent_path: List[str] | None = None
+) -> List[Dict[str, Any]]:
     """Compute leaf-first processing order from a module tree.
 
     Returns a list of dicts with module path, name, leaf status, and
@@ -48,20 +49,24 @@ def _get_processing_order(module_tree: Dict[str, Any], parent_path: List[str] | 
 
             if has_children:
                 _collect(children, current_path)
-                order.append({
-                    "module": module_name,
-                    "path": current_path,
-                    "is_leaf": False,
-                    "children": list(children.keys()),
-                    "components": module_info.get("components", []),
-                })
+                order.append(
+                    {
+                        "module": module_name,
+                        "path": current_path,
+                        "is_leaf": False,
+                        "children": list(children.keys()),
+                        "components": module_info.get("components", []),
+                    }
+                )
             else:
-                order.append({
-                    "module": module_name,
-                    "path": current_path,
-                    "is_leaf": True,
-                    "components": module_info.get("components", []),
-                })
+                order.append(
+                    {
+                        "module": module_name,
+                        "path": current_path,
+                        "is_leaf": True,
+                        "components": module_info.get("components", []),
+                    }
+                )
 
     _collect(module_tree, parent_path)
     return order
@@ -140,9 +145,7 @@ def handle_save_module_tree(
     # silently dropped from docs. Unmatched ids are checked against the full
     # index; leftovers only against the clustering candidate set (leaf nodes),
     # since the cluster prompt deliberately excludes non-essential components.
-    unmatched_ids, leftover_ids = _validate_module_tree(
-        module_tree, known_ids, candidate_ids
-    )
+    unmatched_ids, leftover_ids = _validate_module_tree(module_tree, known_ids, candidate_ids)
     full_validation = {
         "unmatched_ids": unmatched_ids,
         "unmatched_count": len(unmatched_ids),
@@ -232,9 +235,7 @@ def handle_get_processing_order(
                 module_tree = json.load(f)
             session.module_tree = module_tree
         else:
-            return json.dumps({
-                "error": "Module tree not found. Call save_module_tree first."
-            })
+            return json.dumps({"error": "Module tree not found. Call save_module_tree first."})
 
     order = _get_processing_order(module_tree)
 

@@ -6,11 +6,6 @@ from copy import deepcopy
 from typing import Any
 
 from codewiki import __version__
-
-# Configure logging and monitoring
-logger = logging.getLogger(__name__)
-
-# Local imports
 from codewiki.src.be.backend import LLMBackend, get_backend
 from codewiki.src.be.cluster_modules import (
     cluster_modules,
@@ -37,6 +32,9 @@ from codewiki.src.config import (
     Config,
 )
 from codewiki.src.utils import file_manager
+
+# Configure logging and monitoring
+logger = logging.getLogger(__name__)
 
 
 class IncompleteDocumentationError(Exception):

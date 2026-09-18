@@ -11,6 +11,7 @@ import os
 from typing import Any, Dict, List, Optional, Set
 
 import logging
+
 logger = logging.getLogger(__name__)
 
 # Filename stems used by CodeWiki itself; never assign them to a module.
@@ -60,9 +61,7 @@ def resolve_unique_name(name: str, parent_name: Optional[str], taken: Set[str]) 
 def _existing_doc_stems(working_dir: str) -> Set[str]:
     try:
         return {
-            os.path.splitext(entry)[0]
-            for entry in os.listdir(working_dir)
-            if entry.endswith(".md")
+            os.path.splitext(entry)[0] for entry in os.listdir(working_dir) if entry.endswith(".md")
         }
     except OSError:
         return set()

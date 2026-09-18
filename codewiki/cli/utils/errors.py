@@ -12,7 +12,6 @@ Exit Codes:
 
 import sys
 import click
-from typing import Optional
 
 
 # Exit codes
@@ -26,7 +25,7 @@ EXIT_FILESYSTEM_ERROR = 5
 
 class CodeWikiError(Exception):
     """Base exception for CodeWiki CLI errors."""
-    
+
     def __init__(self, message: str, exit_code: int = EXIT_GENERAL_ERROR):
         self.message = message
         self.exit_code = exit_code
@@ -35,21 +34,21 @@ class CodeWikiError(Exception):
 
 class ConfigurationError(CodeWikiError):
     """Configuration-related errors."""
-    
+
     def __init__(self, message: str):
         super().__init__(message, EXIT_CONFIG_ERROR)
 
 
 class RepositoryError(CodeWikiError):
     """Repository-related errors."""
-    
+
     def __init__(self, message: str):
         super().__init__(message, EXIT_REPOSITORY_ERROR)
 
 
 class APIError(CodeWikiError):
     """LLM API-related errors."""
-    
+
     def __init__(self, message: str):
         super().__init__(message, EXIT_API_ERROR)
 
@@ -72,11 +71,11 @@ class IncompleteGenerationError(CodeWikiError):
 def handle_error(error: Exception, verbose: bool = False) -> int:
     """
     Handle errors and return appropriate exit code.
-    
+
     Args:
         error: The exception to handle
         verbose: Whether to show detailed error information
-        
+
     Returns:
         Exit code for the error
     """
@@ -87,6 +86,7 @@ def handle_error(error: Exception, verbose: bool = False) -> int:
         click.secho(f"\n✗ Unexpected error: {error}", fg="red", err=True)
         if verbose:
             import traceback
+
             click.echo(traceback.format_exc(), err=True)
         return EXIT_GENERAL_ERROR
 
@@ -94,7 +94,7 @@ def handle_error(error: Exception, verbose: bool = False) -> int:
 def error_with_suggestion(message: str, suggestion: str, exit_code: int = EXIT_GENERAL_ERROR):
     """
     Display error message with actionable suggestion and exit.
-    
+
     Args:
         message: The error message
         suggestion: Suggested action to resolve the error
@@ -118,4 +118,3 @@ def success(message: str):
 def info(message: str):
     """Display an info message."""
     click.echo(message)
-

@@ -22,8 +22,8 @@ setup_logging(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Local imports
-from codewiki.src.be.documentation_generator import DocumentationGenerator
-from codewiki.src.config import (
+from codewiki.src.be.documentation_generator import DocumentationGenerator  # noqa: E402
+from codewiki.src.config import (  # noqa: E402
     Config,
 )
 
@@ -31,15 +31,10 @@ from codewiki.src.config import (
 def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description='Generate comprehensive documentation for Python components in dependency order.'
+        description="Generate comprehensive documentation for Python components in dependency order."
     )
-    parser.add_argument(
-        '--repo-path',
-        type=str,
-        required=True,
-        help='Path to the repository'
-    )
-    
+    parser.add_argument("--repo-path", type=str, required=True, help="Path to the repository")
+
     return parser.parse_args()
 
 
@@ -49,11 +44,11 @@ async def main() -> None:
         # Parse arguments and create configuration
         args = parse_arguments()
         config = Config.from_args(args)
-        
+
         # Create and run documentation generator
         doc_generator = DocumentationGenerator(config)
         await doc_generator.run()
-        
+
     except KeyboardInterrupt:
         logger.debug("Documentation generation interrupted by user")
     except Exception as e:

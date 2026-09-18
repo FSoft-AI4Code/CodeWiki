@@ -13,14 +13,14 @@ from .github_processor import GitHubRepoProcessor
 from .routes import WebRoutes
 
 __all__ = [
-    'app',
-    'main',
-    'JobStatus',
-    'JobStatusResponse', 
-    'RepositorySubmission',
-    'CacheEntry',
-    'CacheManager',
-    'BackgroundWorker',
-    'GitHubRepoProcessor',
-    'WebRoutes'
+    "app",
+    "main",
+    "JobStatus",
+    "JobStatusResponse",
+    "RepositorySubmission",
+    "CacheEntry",
+    "CacheManager",
+    "BackgroundWorker",
+    "GitHubRepoProcessor",
+    "WebRoutes",
 ]

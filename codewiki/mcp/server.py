@@ -38,7 +38,6 @@ Usage:
 import asyncio
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
@@ -64,6 +63,7 @@ server = Server("codewiki")
 # ===================================================================
 #  Tool definitions
 # ===================================================================
+
 
 def _fine_grained_tools() -> list[Tool]:
     """Return the zero-config, IDE-driven tool set."""
@@ -365,6 +365,7 @@ def _legacy_tools() -> list[Tool]:
 #  Tool dispatch
 # ===================================================================
 
+
 @server.list_tools()
 async def list_tools() -> list[Tool]:
     """List all available CodeWiki MCP tools."""
@@ -380,6 +381,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         # block the event loop (which would hang the MCP stdio server).
         if name == "analyze_repo":
             from codewiki.mcp.tools.analysis import handle_analyze_repo
+
             # NOTE: Tree-sitter C extensions are not thread-safe, so this
             # must run on the main thread (blocking the event loop is
             # acceptable for this one-time heavy operation).
@@ -387,28 +389,34 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
         elif name == "read_code_components":
             from codewiki.mcp.tools.code_reader import handle_read_code_components
+
             return [_text(await asyncio.to_thread(handle_read_code_components, arguments, _store))]
 
         elif name == "write_doc_file":
             from codewiki.mcp.tools.doc_writer import handle_write_doc_file
+
             result = await handle_write_doc_file(arguments, _store)
             return [_text(result)]
 
         elif name == "edit_doc_file":
             from codewiki.mcp.tools.doc_writer import handle_edit_doc_file
+
             result = await handle_edit_doc_file(arguments, _store)
             return [_text(result)]
 
         elif name == "save_module_tree":
             from codewiki.mcp.tools.module_tree import handle_save_module_tree
+
             return [_text(await asyncio.to_thread(handle_save_module_tree, arguments, _store))]
 
         elif name == "get_processing_order":
             from codewiki.mcp.tools.module_tree import handle_get_processing_order
+
             return [_text(await asyncio.to_thread(handle_get_processing_order, arguments, _store))]
 
         elif name == "get_prompt":
             from codewiki.mcp.tools.prompt_server import handle_get_prompt
+
             return [_text(await asyncio.to_thread(handle_get_prompt, arguments, _store))]
 
         elif name == "close_session":
@@ -429,10 +437,16 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 if session.workspace is not None:
                     session.workspace.cleanup()
             removed = _store.remove(sid)
-            return [_text(json.dumps({
-                "status": "closed" if removed else "not_found",
-                "session_id": sid,
-            }))]
+            return [
+                _text(
+                    json.dumps(
+                        {
+                            "status": "closed" if removed else "not_found",
+                            "session_id": sid,
+                        }
+                    )
+                )
+            ]
 
         # --- Legacy tools (require CodeWiki LLM config) ---
         elif name == "generate_docs":
@@ -453,14 +467,14 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 #  Legacy tool handlers (require _load_config)
 # ===================================================================
 
+
 def _load_config():
     """Load CodeWiki configuration from ~/.codewiki/config.json + keyring."""
     from codewiki.cli.config_manager import ConfigManager
+
     manager = ConfigManager()
     if not manager.load():
-        raise RuntimeError(
-            "CodeWiki not configured. Run 'codewiki config set' first."
-        )
+        raise RuntimeError("CodeWiki not configured. Run 'codewiki config set' first.")
     return manager
 
 
@@ -477,19 +491,31 @@ async def _legacy_generate_docs(arguments: dict[str, Any]) -> list[TextContent]:
     api_key = manager.get_api_key()
 
     from codewiki.src.be.backend import is_caw_provider
+
     caw_mode = bool(config) and is_caw_provider(getattr(config, "provider", ""))
     if not api_key and not caw_mode:
-        return [_text(json.dumps({"error": "API key not configured. Run 'codewiki config set --api-key <key>'"}))]
+        return [
+            _text(
+                json.dumps(
+                    {"error": "API key not configured. Run 'codewiki config set --api-key <key>'"}
+                )
+            )
+        ]
 
     agent_instructions = {}
     if arguments.get("doc_type"):
         agent_instructions["doc_type"] = arguments["doc_type"]
     if arguments.get("include_patterns"):
-        agent_instructions["include_patterns"] = [p.strip() for p in arguments["include_patterns"].split(",")]
+        agent_instructions["include_patterns"] = [
+            p.strip() for p in arguments["include_patterns"].split(",")
+        ]
     if arguments.get("exclude_patterns"):
-        agent_instructions["exclude_patterns"] = [p.strip() for p in arguments["exclude_patterns"].split(",")]
+        agent_instructions["exclude_patterns"] = [
+            p.strip() for p in arguments["exclude_patterns"].split(",")
+        ]
 
     from codewiki.src.config import Config as BackendConfig, set_cli_context
+
     set_cli_context(True)
 
     backend_config = BackendConfig.from_cli(
@@ -509,7 +535,10 @@ async def _legacy_generate_docs(arguments: dict[str, Any]) -> list[TextContent]:
 
     from codewiki.cli.utils.repo_validator import get_git_commit_hash
     from codewiki.src.be.documentation_generator import DocumentationGenerator
-    doc_gen = DocumentationGenerator(backend_config, commit_id=get_git_commit_hash(repo_path) or None)
+
+    doc_gen = DocumentationGenerator(
+        backend_config, commit_id=get_git_commit_hash(repo_path) or None
+    )
     await doc_gen.run()
 
     generated_files = []
@@ -538,9 +567,15 @@ async def _legacy_get_module_tree(arguments: dict[str, Any]) -> list[TextContent
 
     module_tree_path = output_dir / "module_tree.json"
     if not module_tree_path.exists():
-        return [_text(json.dumps({
-            "error": f"Module tree not found at {module_tree_path}. Run 'codewiki generate' first."
-        }))]
+        return [
+            _text(
+                json.dumps(
+                    {
+                        "error": f"Module tree not found at {module_tree_path}. Run 'codewiki generate' first."
+                    }
+                )
+            )
+        ]
 
     module_tree = json.loads(module_tree_path.read_text(encoding="utf-8"))
 
@@ -570,6 +605,7 @@ async def _legacy_get_module_tree(arguments: dict[str, Any]) -> list[TextContent
 #  Helpers
 # ===================================================================
 
+
 def _text(content: str) -> TextContent:
     return TextContent(type="text", text=content)
 
@@ -591,6 +627,7 @@ def _write_generation_metadata(session: SessionState) -> None:
         commit_id: str | None = session.analyzed_commit
         if not commit_id:
             from codewiki.cli.utils.repo_validator import get_git_commit_hash
+
             commit_id = get_git_commit_hash(repo_path) or None
 
         from datetime import datetime
@@ -620,6 +657,7 @@ def _write_generation_metadata(session: SessionState) -> None:
 # ===================================================================
 #  Entry point
 # ===================================================================
+
 
 async def main():
     """Run the MCP server with stdio transport."""

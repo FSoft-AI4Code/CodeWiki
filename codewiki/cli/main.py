@@ -4,9 +4,10 @@ Main CLI application for CodeWiki using Click framework.
 
 import sys
 import click
-from pathlib import Path
 
 from codewiki import __version__
+from codewiki.cli.commands.config import config_group
+from codewiki.cli.commands.generate import generate_command
 
 
 @click.group()
@@ -15,7 +16,7 @@ from codewiki import __version__
 def cli(ctx):
     """
     CodeWiki: Transform codebases into comprehensive documentation.
-    
+
     Generate AI-powered documentation for your code repositories with support
     for Python, Java, JavaScript, TypeScript, C, C++, and C#.
     """
@@ -28,11 +29,7 @@ def version():
     """Display version information."""
     click.echo(f"CodeWiki CLI v{__version__}")
     click.echo("Python-based documentation generator using AI analysis")
-    
 
-# Import commands
-from codewiki.cli.commands.config import config_group
-from codewiki.cli.commands.generate import generate_command
 
 # Register command groups
 cli.add_command(config_group)
@@ -58,6 +55,7 @@ def mcp_command():
     """
     import asyncio
     from codewiki.mcp.server import main as mcp_main
+
     asyncio.run(mcp_main())
 
 
@@ -75,4 +73,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

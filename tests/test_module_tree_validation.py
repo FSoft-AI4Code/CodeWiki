@@ -246,8 +246,10 @@ def test_id_lists_capped_in_response(tmp_path):
 
 def test_missing_session_errors(tmp_path):
     store = SessionStore()
-    result = json.loads(handle_save_module_tree(
-        {"session_id": "nope", "module_tree": {}},
-        store,
-    ))
+    result = json.loads(
+        handle_save_module_tree(
+            {"session_id": "nope", "module_tree": {}},
+            store,
+        )
+    )
     assert "error" in result

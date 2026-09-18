@@ -49,6 +49,7 @@ async def _validate_mermaid(file_path: str, relative_path: str) -> str:
     """Run Mermaid validation and return the result string."""
     try:
         from codewiki.src.be.utils import validate_mermaid_diagrams
+
         return await validate_mermaid_diagrams(file_path, relative_path)
     except Exception as e:
         return f"Mermaid validation skipped: {e}"
@@ -90,9 +91,9 @@ async def handle_write_doc_file(
     await asyncio.to_thread(_ensure_parent_dirs, doc_path)
 
     if await asyncio.to_thread(doc_path.exists):
-        return json.dumps({
-            "error": f"File already exists: {filename}. Use edit_doc_file to modify it."
-        })
+        return json.dumps(
+            {"error": f"File already exists: {filename}. Use edit_doc_file to modify it."}
+        )
 
     await asyncio.to_thread(doc_path.write_text, content, "utf-8")
     session.docs_written += 1
@@ -142,14 +143,19 @@ async def handle_edit_doc_file(
 
         # Validate Mermaid after undo
         mermaid_result = await _validate_mermaid(str(doc_path), filename)
-        return json.dumps({
-            "status": "undone",
-            "filename": filename,
-            "mermaid_validation": mermaid_result,
-        }, ensure_ascii=False)
+        return json.dumps(
+            {
+                "status": "undone",
+                "filename": filename,
+                "mermaid_validation": mermaid_result,
+            },
+            ensure_ascii=False,
+        )
 
     if not await asyncio.to_thread(doc_path.exists):
-        return json.dumps({"error": f"File not found: {filename}. Use write_doc_file to create it."})
+        return json.dumps(
+            {"error": f"File not found: {filename}. Use write_doc_file to create it."}
+        )
 
     current_content = await asyncio.to_thread(doc_path.read_text, "utf-8")
 
@@ -163,7 +169,9 @@ async def handle_edit_doc_file(
         if occurrences == 0:
             return json.dumps({"error": f"old_str not found in {filename}."})
         if occurrences > 1:
-            return json.dumps({"error": f"old_str appears {occurrences} times in {filename}. Make it unique."})
+            return json.dumps(
+                {"error": f"old_str appears {occurrences} times in {filename}. Make it unique."}
+            )
 
         new_content = current_content.replace(old_str, new_str, 1)
         # Save history only for edits that actually happen, so undo never
@@ -197,7 +205,9 @@ async def handle_edit_doc_file(
         snippet = "\n".join(f"{i + 1:6}\t{lines[i]}" for i in range(start, end))
 
     else:
-        return json.dumps({"error": f"Unknown command: {command}. Use str_replace, insert, or undo."})
+        return json.dumps(
+            {"error": f"Unknown command: {command}. Use str_replace, insert, or undo."}
+        )
 
     session.docs_written += 1
 

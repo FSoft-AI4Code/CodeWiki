@@ -48,7 +48,11 @@ class ConfigManager:
         """Initialize the configuration manager."""
         self._api_key: Optional[str] = None
         self._config: Optional[Configuration] = None
-        self._force_no_keyring = os.environ.get("CODEWIKI_NO_KEYRING", "").strip() in ("1", "true", "yes")
+        self._force_no_keyring = os.environ.get("CODEWIKI_NO_KEYRING", "").strip() in (
+            "1",
+            "true",
+            "yes",
+        )
         self._keyring_available = self._check_keyring_available()
 
     def _check_keyring_available(self) -> bool:
@@ -84,29 +88,29 @@ class ConfigManager:
             CREDENTIALS_FILE.chmod(0o600)
         except OSError:
             pass
-    
+
     def load(self) -> bool:
         """
         Load configuration from file and keyring.
-        
+
         Returns:
             True if configuration exists, False otherwise
         """
         # Load from JSON file
         if not CONFIG_FILE.exists():
             return False
-        
+
         try:
             content = safe_read(CONFIG_FILE)
             data = json.loads(content)
-            
+
             # Validate version
-            if data.get('version') != CONFIG_VERSION:
+            if data.get("version") != CONFIG_VERSION:
                 # Could implement migration here
                 pass
-            
+
             self._config = Configuration.from_dict(data)
-            
+
             # Load API key from keyring, falling back to file
             if self._keyring_available:
                 try:
@@ -115,11 +119,11 @@ class ConfigManager:
                     pass
             if self._api_key is None:
                 self._api_key = self._load_api_key_from_file()
-            
+
             return True
         except (json.JSONDecodeError, FileSystemError) as e:
             raise ConfigurationError(f"Failed to load configuration: {e}")
-    
+
     def save(
         self,
         api_key: Optional[str] = None,
@@ -165,22 +169,23 @@ class ConfigManager:
             ensure_directory(CONFIG_DIR)
         except FileSystemError as e:
             raise ConfigurationError(f"Cannot create config directory: {e}")
-        
+
         # Load existing config or create new
         if self._config is None:
             if CONFIG_FILE.exists():
                 self.load()
             else:
                 from codewiki.cli.models.config import AgentInstructions
+
                 self._config = Configuration(
                     base_url="",
                     main_model="",
                     cluster_model="",
                     fallback_model="glm-4p5",
                     default_output="docs",
-                    agent_instructions=AgentInstructions()
+                    agent_instructions=AgentInstructions(),
                 )
-        
+
         # Update fields if provided
         if base_url is not None:
             self._config.base_url = base_url
@@ -218,12 +223,13 @@ class ConfigManager:
         # cluster_model on top of that.  The validate() method itself routes
         # by provider, so we only gate on whether enough is set to validate.
         from codewiki.src.be.backend import is_caw_provider
+
         if is_caw_provider(self._config.provider):
             if self._config.main_model:
                 self._config.validate()
         elif self._config.base_url and self._config.main_model and self._config.cluster_model:
             self._config.validate()
-        
+
         # Save API key to keyring, falling back to file
         if api_key is not None:
             self._api_key = api_key
@@ -237,22 +243,19 @@ class ConfigManager:
                     logger.warning(
                         "System keychain unavailable. API key stored in %s "
                         "(plaintext). Set CODEWIKI_NO_KEYRING=1 to suppress this warning.",
-                        CREDENTIALS_FILE
+                        CREDENTIALS_FILE,
                     )
             else:
                 self._save_api_key_to_file(api_key)
-        
+
         # Save non-sensitive config to JSON
-        config_data = {
-            "version": CONFIG_VERSION,
-            **self._config.to_dict()
-        }
-        
+        config_data = {"version": CONFIG_VERSION, **self._config.to_dict()}
+
         try:
             safe_write(CONFIG_FILE, json.dumps(config_data, indent=2))
         except FileSystemError as e:
             raise ConfigurationError(f"Failed to save configuration: {e}")
-    
+
     def get_api_key(self) -> Optional[str]:
         """
         Get API key from keyring or fallback file.
@@ -270,16 +273,16 @@ class ConfigManager:
                 self._api_key = self._load_api_key_from_file()
 
         return self._api_key
-    
+
     def get_config(self) -> Optional[Configuration]:
         """
         Get current configuration.
-        
+
         Returns:
             Configuration object or None if not loaded
         """
         return self._config
-    
+
     def is_configured(self) -> bool:
         """
         Check if configuration is complete and valid.
@@ -294,6 +297,7 @@ class ConfigManager:
             return False
 
         from codewiki.src.be.backend import is_caw_provider
+
         if not is_caw_provider(self._config.provider):
             # Check if API key is set
             if self.get_api_key() is None:
@@ -301,7 +305,7 @@ class ConfigManager:
 
         # Check if config is complete
         return self._config.is_complete()
-    
+
     def delete_api_key(self):
         """Delete API key from keyring and fallback file."""
         if self._keyring_available:
@@ -316,24 +320,24 @@ class ConfigManager:
             except OSError:
                 pass
         self._api_key = None
-    
+
     def clear(self):
         """Clear all configuration (file and keyring)."""
         # Delete API key from keyring
         self.delete_api_key()
-        
+
         # Delete config file
         if CONFIG_FILE.exists():
             CONFIG_FILE.unlink()
-        
+
         self._config = None
         self._api_key = None
-    
+
     @property
     def keyring_available(self) -> bool:
         """Check if keyring is available."""
         return self._keyring_available
-    
+
     @property
     def config_file_path(self) -> Path:
         """Get configuration file path."""

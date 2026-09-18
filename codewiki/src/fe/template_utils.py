@@ -9,10 +9,10 @@ from typing import Dict, Any
 
 class StringTemplateLoader(BaseLoader):
     """Custom Jinja2 loader for string templates."""
-    
+
     def __init__(self, template_string: str):
         self.template_string = template_string
-    
+
     def get_source(self, environment, template):
         return self.template_string, None, lambda: True
 
@@ -20,41 +20,41 @@ class StringTemplateLoader(BaseLoader):
 def render_template(template: str, context: Dict[str, Any]) -> str:
     """
     Render template using Jinja2.
-    
+
     Args:
         template: HTML template string with Jinja2 syntax
         context: Dictionary of variables to substitute
-    
+
     Returns:
         Rendered HTML string
     """
     # Create Jinja2 environment with string template
     env = Environment(
         loader=StringTemplateLoader(template),
-        autoescape=select_autoescape(['html', 'xml']),
+        autoescape=select_autoescape(["html", "xml"]),
         trim_blocks=True,
-        lstrip_blocks=True
+        lstrip_blocks=True,
     )
-    
+
     # Get template and render
-    jinja_template = env.get_template('')
+    jinja_template = env.get_template("")
     return jinja_template.render(**context)
 
 
 def render_navigation(module_tree: Dict[str, Any], current_page: str = "") -> str:
     """
     Render navigation HTML from module tree structure.
-    
+
     Args:
         module_tree: Dictionary representing the module tree
         current_page: Current page filename for highlighting
-    
+
     Returns:
         HTML string for navigation
     """
     if not module_tree:
         return ""
-    
+
     nav_template = """
     {%- for section_key, section_data in module_tree.items() %}
     <div class="nav-section">
@@ -72,26 +72,23 @@ def render_navigation(module_tree: Dict[str, Any], current_page: str = "") -> st
     </div>
     {%- endfor %}
     """
-    
-    return render_template(nav_template, {
-        'module_tree': module_tree,
-        'current_page': current_page
-    })
+
+    return render_template(nav_template, {"module_tree": module_tree, "current_page": current_page})
 
 
 def render_job_list(jobs: list) -> str:
     """
     Render job list HTML.
-    
+
     Args:
         jobs: List of job objects
-    
+
     Returns:
         HTML string for job list
     """
     if not jobs:
         return ""
-    
+
     job_list_template = """
     {%- for job in jobs %}
     <div class="job-item">
@@ -110,5 +107,5 @@ def render_job_list(jobs: list) -> str:
     </div>
     {%- endfor %}
     """
-    
-    return render_template(job_list_template, {'jobs': jobs})
+
+    return render_template(job_list_template, {"jobs": jobs})

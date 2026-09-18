@@ -18,15 +18,48 @@ logger = logging.getLogger(__name__)
 
 # PHP primitive and built-in types to exclude from dependencies
 PHP_PRIMITIVES: Set[str] = {
-    "string", "int", "float", "bool", "array", "object", "callable",
-    "iterable", "mixed", "void", "null", "false", "true", "never",
-    "self", "static", "parent", "integer", "boolean", "double",
+    "string",
+    "int",
+    "float",
+    "bool",
+    "array",
+    "object",
+    "callable",
+    "iterable",
+    "mixed",
+    "void",
+    "null",
+    "false",
+    "true",
+    "never",
+    "self",
+    "static",
+    "parent",
+    "integer",
+    "boolean",
+    "double",
     # Common PHP classes that are built-in
-    "Exception", "Error", "Throwable", "Closure", "Generator",
-    "Iterator", "IteratorAggregate", "Traversable", "ArrayAccess",
-    "Serializable", "Countable", "JsonSerializable", "Stringable",
-    "DateTime", "DateTimeInterface", "DateTimeImmutable", "DateInterval",
-    "stdClass", "ArrayObject", "SplObjectStorage", "WeakReference",
+    "Exception",
+    "Error",
+    "Throwable",
+    "Closure",
+    "Generator",
+    "Iterator",
+    "IteratorAggregate",
+    "Traversable",
+    "ArrayAccess",
+    "Serializable",
+    "Countable",
+    "JsonSerializable",
+    "Stringable",
+    "DateTime",
+    "DateTimeInterface",
+    "DateTimeImmutable",
+    "DateInterval",
+    "stdClass",
+    "ArrayObject",
+    "SplObjectStorage",
+    "WeakReference",
 }
 
 # Template file patterns to skip
@@ -130,12 +163,12 @@ class TreeSitterPHPAnalyzer:
             rel_path = str(self.file_path)
 
         # Remove .php extension
-        for ext in ['.php', '.phtml', '.inc']:
+        for ext in [".php", ".phtml", ".inc"]:
             if rel_path.endswith(ext):
-                rel_path = rel_path[:-len(ext)]
+                rel_path = rel_path[: -len(ext)]
                 break
 
-        return rel_path.replace('/', '.').replace('\\', '.')
+        return rel_path.replace("/", ".").replace("\\", ".")
 
     def _get_relative_path(self) -> str:
         """Get relative path from repo root."""
@@ -210,7 +243,11 @@ class TreeSitterPHPAnalyzer:
                     alias_node = self._find_child_by_type(child, "namespace_aliasing_clause")
 
                     if name_node:
-                        fqn = f"{prefix}\\{name_node.text.decode()}" if prefix else name_node.text.decode()
+                        fqn = (
+                            f"{prefix}\\{name_node.text.decode()}"
+                            if prefix
+                            else name_node.text.decode()
+                        )
                         alias = None
                         if alias_node:
                             alias_name = self._find_child_by_type(alias_node, "name")
@@ -221,8 +258,9 @@ class TreeSitterPHPAnalyzer:
             # Handle simple use: use App\User; or use App\User as U;
             for child in node.children:
                 if child.type == "namespace_use_clause":
-                    name_node = self._find_child_by_type(child, "qualified_name") or \
-                                self._find_child_by_type(child, "namespace_name")
+                    name_node = self._find_child_by_type(
+                        child, "qualified_name"
+                    ) or self._find_child_by_type(child, "namespace_name")
                     alias_node = self._find_child_by_type(child, "namespace_aliasing_clause")
 
                     if name_node:
@@ -250,8 +288,8 @@ class TreeSitterPHPAnalyzer:
         if node.type == "class_declaration":
             # Check for abstract class
             is_abstract = any(
-                c.type == "abstract_modifier" or
-                (c.type == "modifier" and c.text.decode() == "abstract")
+                c.type == "abstract_modifier"
+                or (c.type == "modifier" and c.text.decode() == "abstract")
                 for c in node.children
             )
             node_type = "abstract class" if is_abstract else "class"
@@ -309,7 +347,7 @@ class TreeSitterPHPAnalyzer:
                 component_type=node_type,
                 file_path=str(self.file_path),
                 relative_path=relative_path,
-                source_code="\n".join(lines[node.start_point[0]:node.end_point[0]+1]),
+                source_code="\n".join(lines[node.start_point[0] : node.end_point[0] + 1]),
                 start_line=node.start_point[0] + 1,
                 end_line=node.end_point[0] + 1,
                 has_docstring=bool(docstring),
@@ -319,7 +357,7 @@ class TreeSitterPHPAnalyzer:
                 base_classes=base_classes,
                 class_name=parent_class,
                 display_name=f"{node_type} {node_name}",
-                component_id=component_id
+                component_id=component_id,
             )
             self.nodes.append(node_obj)
             self._top_level_nodes[node_name] = node_obj
@@ -349,12 +387,14 @@ class TreeSitterPHPAnalyzer:
                 base_name = self._get_type_from_clause(base_clause)
                 if base_name and not self._is_primitive(base_name):
                     resolved_base = self.namespace_resolver.resolve(base_name)
-                    self.call_relationships.append(CallRelationship(
-                        caller=self._get_component_id(class_name),
-                        callee=resolved_base.replace("\\", "."),
-                        call_line=node.start_point[0] + 1,
-                        is_resolved=False
-                    ))
+                    self.call_relationships.append(
+                        CallRelationship(
+                            caller=self._get_component_id(class_name),
+                            callee=resolved_base.replace("\\", "."),
+                            call_line=node.start_point[0] + 1,
+                            is_resolved=False,
+                        )
+                    )
 
         # 3. Interface implementation (implements)
         if node.type in ("class_declaration", "enum_declaration"):
@@ -366,60 +406,71 @@ class TreeSitterPHPAnalyzer:
                         interface_name = child.text.decode()
                         if not self._is_primitive(interface_name):
                             resolved_interface = self.namespace_resolver.resolve(interface_name)
-                            self.call_relationships.append(CallRelationship(
-                                caller=self._get_component_id(implementer_name),
-                                callee=resolved_interface.replace("\\", "."),
-                                call_line=node.start_point[0] + 1,
-                                is_resolved=False
-                            ))
+                            self.call_relationships.append(
+                                CallRelationship(
+                                    caller=self._get_component_id(implementer_name),
+                                    callee=resolved_interface.replace("\\", "."),
+                                    call_line=node.start_point[0] + 1,
+                                    is_resolved=False,
+                                )
+                            )
 
         # 4. Object creation (new)
         if node.type == "object_creation_expression":
             containing_class = self._find_containing_class_name(node)
-            type_node = self._find_child_by_type(node, "name") or \
-                       self._find_child_by_type(node, "qualified_name")
+            type_node = self._find_child_by_type(node, "name") or self._find_child_by_type(
+                node, "qualified_name"
+            )
             if type_node:
                 created_type = type_node.text.decode()
                 if not self._is_primitive(created_type) and containing_class:
                     resolved_type = self.namespace_resolver.resolve(created_type)
-                    self.call_relationships.append(CallRelationship(
-                        caller=self._get_component_id(containing_class),
-                        callee=resolved_type.replace("\\", "."),
-                        call_line=node.start_point[0] + 1,
-                        is_resolved=False
-                    ))
+                    self.call_relationships.append(
+                        CallRelationship(
+                            caller=self._get_component_id(containing_class),
+                            callee=resolved_type.replace("\\", "."),
+                            call_line=node.start_point[0] + 1,
+                            is_resolved=False,
+                        )
+                    )
 
         # 5. Static method calls (::)
         if node.type == "scoped_call_expression":
             containing_class = self._find_containing_class_name(node)
-            scope_node = self._find_child_by_type(node, "name") or \
-                        self._find_child_by_type(node, "qualified_name")
+            scope_node = self._find_child_by_type(node, "name") or self._find_child_by_type(
+                node, "qualified_name"
+            )
             if scope_node and containing_class:
                 target_class = scope_node.text.decode()
                 if not self._is_primitive(target_class):
                     resolved_target = self.namespace_resolver.resolve(target_class)
-                    self.call_relationships.append(CallRelationship(
-                        caller=self._get_component_id(containing_class),
-                        callee=resolved_target.replace("\\", "."),
-                        call_line=node.start_point[0] + 1,
-                        is_resolved=False
-                    ))
+                    self.call_relationships.append(
+                        CallRelationship(
+                            caller=self._get_component_id(containing_class),
+                            callee=resolved_target.replace("\\", "."),
+                            call_line=node.start_point[0] + 1,
+                            is_resolved=False,
+                        )
+                    )
 
         # 6. Property promotion in constructor (PHP 8+)
         if node.type == "property_promotion_parameter":
             containing_class = self._find_containing_class_name(node)
-            type_node = self._find_child_by_type(node, "type_list") or \
-                       self._find_child_by_type(node, "named_type")
+            type_node = self._find_child_by_type(node, "type_list") or self._find_child_by_type(
+                node, "named_type"
+            )
             if type_node and containing_class:
                 type_name = self._extract_type_name(type_node)
                 if type_name and not self._is_primitive(type_name):
                     resolved_type = self.namespace_resolver.resolve(type_name)
-                    self.call_relationships.append(CallRelationship(
-                        caller=self._get_component_id(containing_class),
-                        callee=resolved_type.replace("\\", "."),
-                        call_line=node.start_point[0] + 1,
-                        is_resolved=False
-                    ))
+                    self.call_relationships.append(
+                        CallRelationship(
+                            caller=self._get_component_id(containing_class),
+                            callee=resolved_type.replace("\\", "."),
+                            call_line=node.start_point[0] + 1,
+                            is_resolved=False,
+                        )
+                    )
 
         # Recursively process children
         for child in node.children:
@@ -430,18 +481,21 @@ class TreeSitterPHPAnalyzer:
         # Get all use clauses from the declaration
         for child in node.children:
             if child.type == "namespace_use_clause":
-                name_node = self._find_child_by_type(child, "qualified_name") or \
-                           self._find_child_by_type(child, "namespace_name")
+                name_node = self._find_child_by_type(
+                    child, "qualified_name"
+                ) or self._find_child_by_type(child, "namespace_name")
                 if name_node:
                     fqn = name_node.text.decode().replace("\\", ".")
                     # Add relationship from file to imported class
                     file_id = self._get_relative_path()
-                    self.call_relationships.append(CallRelationship(
-                        caller=file_id,
-                        callee=fqn,
-                        call_line=node.start_point[0] + 1,
-                        is_resolved=False
-                    ))
+                    self.call_relationships.append(
+                        CallRelationship(
+                            caller=file_id,
+                            callee=fqn,
+                            call_line=node.start_point[0] + 1,
+                            is_resolved=False,
+                        )
+                    )
             elif child.type == "namespace_use_group":
                 prefix_node = self._find_child_by_type(node, "namespace_name")
                 prefix = prefix_node.text.decode() if prefix_node else ""
@@ -450,14 +504,20 @@ class TreeSitterPHPAnalyzer:
                     if group_child.type == "namespace_use_group_clause":
                         name_node = self._find_child_by_type(group_child, "namespace_name")
                         if name_node:
-                            fqn = f"{prefix}\\{name_node.text.decode()}" if prefix else name_node.text.decode()
+                            fqn = (
+                                f"{prefix}\\{name_node.text.decode()}"
+                                if prefix
+                                else name_node.text.decode()
+                            )
                             file_id = self._get_relative_path()
-                            self.call_relationships.append(CallRelationship(
-                                caller=file_id,
-                                callee=fqn.replace("\\", "."),
-                                call_line=node.start_point[0] + 1,
-                                is_resolved=False
-                            ))
+                            self.call_relationships.append(
+                                CallRelationship(
+                                    caller=file_id,
+                                    callee=fqn.replace("\\", "."),
+                                    call_line=node.start_point[0] + 1,
+                                    is_resolved=False,
+                                )
+                            )
 
     def _find_child_by_type(self, node, child_type: str):
         """Find first child of a specific type."""
@@ -481,8 +541,9 @@ class TreeSitterPHPAnalyzer:
     def _extract_type_name(self, type_node) -> Optional[str]:
         """Extract type name from a type node."""
         if type_node.type == "named_type":
-            name_node = self._find_child_by_type(type_node, "name") or \
-                       self._find_child_by_type(type_node, "qualified_name")
+            name_node = self._find_child_by_type(type_node, "name") or self._find_child_by_type(
+                type_node, "qualified_name"
+            )
             if name_node:
                 return name_node.text.decode()
         elif type_node.type in ("name", "qualified_name"):
@@ -492,14 +553,18 @@ class TreeSitterPHPAnalyzer:
             for child in type_node.children:
                 if child.type == "named_type":
                     return self._extract_type_name(child)
-        return type_node.text.decode() if hasattr(type_node, 'text') else None
+        return type_node.text.decode() if hasattr(type_node, "text") else None
 
     def _find_containing_class_name(self, node) -> Optional[str]:
         """Find the name of the containing class/interface/trait/enum."""
         current = node.parent
         while current:
-            if current.type in ("class_declaration", "interface_declaration",
-                               "trait_declaration", "enum_declaration"):
+            if current.type in (
+                "class_declaration",
+                "interface_declaration",
+                "trait_declaration",
+                "enum_declaration",
+            ):
                 name_node = self._find_child_by_type(current, "name")
                 if name_node:
                     return name_node.text.decode()
@@ -541,14 +606,19 @@ class TreeSitterPHPAnalyzer:
         if params_node:
             params = []
             for child in params_node.children:
-                if child.type in ("simple_parameter", "property_promotion_parameter", "variadic_parameter"):
+                if child.type in (
+                    "simple_parameter",
+                    "property_promotion_parameter",
+                    "variadic_parameter",
+                ):
                     # Get the variable name
                     var_node = self._find_child_by_type(child, "variable_name")
                     if var_node:
                         param_text = var_node.text.decode()
                         # Get type if present
-                        type_node = self._find_child_by_type(child, "named_type") or \
-                                   self._find_child_by_type(child, "primitive_type")
+                        type_node = self._find_child_by_type(
+                            child, "named_type"
+                        ) or self._find_child_by_type(child, "primitive_type")
                         if type_node:
                             param_text = f"{type_node.text.decode()} {param_text}"
                         params.append(param_text)
@@ -582,7 +652,9 @@ class TreeSitterPHPAnalyzer:
         return clean_name.lower() in {p.lower() for p in PHP_PRIMITIVES}
 
 
-def analyze_php_file(file_path: str, content: str, repo_path: str = None) -> Tuple[List[Node], List[CallRelationship]]:
+def analyze_php_file(
+    file_path: str, content: str, repo_path: str = None
+) -> Tuple[List[Node], List[CallRelationship]]:
     """
     Analyze a PHP file and extract nodes and call relationships.
 

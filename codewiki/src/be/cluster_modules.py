@@ -5,8 +5,6 @@ from collections import defaultdict
 from collections.abc import Callable
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from codewiki.src.be.dependency_analyzer.models.core import Node
 from codewiki.src.be.llm_services import call_llm
 from codewiki.src.be.module_naming import resolve_unique_name, sanitize_module_name
@@ -17,6 +15,8 @@ from codewiki.src.config import (
     DEFAULT_MIN_MODULES_FOR_SUPER_GROUPING,
     Config,
 )
+
+logger = logging.getLogger(__name__)
 
 Completer = Callable[[str], str | None]
 

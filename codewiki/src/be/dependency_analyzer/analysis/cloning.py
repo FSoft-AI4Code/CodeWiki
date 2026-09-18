@@ -4,7 +4,6 @@ import tempfile
 import subprocess
 import stat
 import time
-from typing import Optional
 
 GIT_EXECUTABLE_PATH = shutil.which("git")
 
@@ -31,8 +30,6 @@ def sanitize_github_url(github_url: str) -> str:
 
     if url.startswith("www."):
         url = url[4:]
-
-    parts = url.split("/")
 
     if url.startswith("github.com/"):
         url_parts = url.split("/")
@@ -93,7 +90,7 @@ def clone_repository(github_url: str) -> str:
                     capture_output=True,
                     text=True,
                 )
-            except:
+            except Exception:
                 pass
 
         subprocess.run(
@@ -149,14 +146,14 @@ def clone_repository(github_url: str) -> str:
                     capture_output=True,
                     text=True,
                 )
-            except:
+            except Exception:
                 pass
         return temp_dir
     except subprocess.TimeoutExpired:
         if os.path.exists(temp_dir):
             cleanup_repository_safe(temp_dir)
         raise RuntimeError(
-            f"Repository cloning timed out after 5 minutes. The repository may be too large or network is slow."
+            "Repository cloning timed out after 5 minutes. The repository may be too large or network is slow."
         )
     except subprocess.CalledProcessError as e:
         if os.path.exists(temp_dir):
@@ -197,7 +194,7 @@ def cleanup_repository_safe(repo_dir: str) -> bool:
                 shutil.rmtree(repo_dir)
             return True
         return False
-    except PermissionError as e:
+    except PermissionError:
         try:
             time.sleep(1)
             if os.path.exists(repo_dir):

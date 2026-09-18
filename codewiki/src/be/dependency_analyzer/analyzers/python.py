@@ -25,7 +25,6 @@ def is_project_import(target: str, project_modules: Set[str]) -> bool:
 
 
 class PythonASTAnalyzer(ast.NodeVisitor):
-
     def __init__(
         self,
         file_path: str,
@@ -86,15 +85,15 @@ class PythonASTAnalyzer(ast.NodeVisitor):
     def _get_module_path(self) -> str:
         try:
             path = self._get_relative_path()
-            for ext in ['.py', '.pyx']:
+            for ext in [".py", ".pyx"]:
                 if path.endswith(ext):
-                    path = path[:-len(ext)]
+                    path = path[: -len(ext)]
                     break
-            module = path.replace('/', '.').replace('\\', '.')
+            module = path.replace("/", ".").replace("\\", ".")
         except Exception:
-            module = str(self.file_path).replace('/', '.').replace('\\', '.')
-        if module.endswith('.__init__'):
-            module = module[: -len('.__init__')]
+            module = str(self.file_path).replace("/", ".").replace("\\", ".")
+        if module.endswith(".__init__"):
+            module = module[: -len(".__init__")]
         return module
 
     def _current_class_dotted(self) -> Optional[str]:
@@ -111,12 +110,14 @@ class PythonASTAnalyzer(ast.NodeVisitor):
         caller = self._caller_id()
         if not caller:
             return
-        self.call_relationships.append(CallRelationship(
-            caller=caller,
-            callee=callee,
-            call_line=line,
-            is_resolved=is_resolved,
-        ))
+        self.call_relationships.append(
+            CallRelationship(
+                caller=caller,
+                callee=callee,
+                call_line=line,
+                is_resolved=is_resolved,
+            )
+        )
 
     # ------------------------------------------------------------------
     # Imports
@@ -154,9 +155,7 @@ class PythonASTAnalyzer(ast.NodeVisitor):
         root = target.split(".")[0]
         if not root or root in PYTHON_STDLIB_MODULES:
             return
-        if self.project_modules is not None and not is_project_import(
-            target, self.project_modules
-        ):
+        if self.project_modules is not None and not is_project_import(target, self.project_modules):
             self.external_import_roots.add(root)
 
     # ------------------------------------------------------------------
@@ -215,12 +214,14 @@ class PythonASTAnalyzer(ast.NodeVisitor):
         for base_name in base_classes:
             resolved = self._resolve_name_reference(base_name)
             if resolved:
-                self.call_relationships.append(CallRelationship(
-                    caller=component_id,
-                    callee=resolved[0],
-                    call_line=node.lineno,
-                    is_resolved=resolved[1],
-                ))
+                self.call_relationships.append(
+                    CallRelationship(
+                        caller=component_id,
+                        callee=resolved[0],
+                        call_line=node.lineno,
+                        is_resolved=resolved[1],
+                    )
+                )
 
         self.scope_stack.append(("class", node.name))
         self.component_stack.append(component_id)
@@ -424,8 +425,11 @@ class PythonASTAnalyzer(ast.NodeVisitor):
         if rest:
             method = rest[-1]
             if root in self.var_types:
-                return self._resolve_method_on_class(self.var_types[root], method) if len(rest) == 1 else (
-                    ".".join([self.var_types[root], *rest]), False)
+                return (
+                    self._resolve_method_on_class(self.var_types[root], method)
+                    if len(rest) == 1
+                    else (".".join([self.var_types[root], *rest]), False)
+                )
             if root in self.class_methods and len(rest) == 1:
                 return self._resolve_method_on_class(root, method)
             if root in self.from_imports:
@@ -459,7 +463,9 @@ class PythonASTAnalyzer(ast.NodeVisitor):
             return (self.module_imports[name], False)
         return (name, False)
 
-    def _resolve_method_on_class(self, class_dotted: Optional[str], method: str) -> Tuple[str, bool]:
+    def _resolve_method_on_class(
+        self, class_dotted: Optional[str], method: str
+    ) -> Tuple[str, bool]:
         if class_dotted:
             if method in self.class_methods.get(class_dotted, ()):
                 return (f"{self._get_relative_path()}::{class_dotted}.{method}", True)
@@ -469,7 +475,9 @@ class PythonASTAnalyzer(ast.NodeVisitor):
             return (f"{self._get_module_path()}.{class_dotted}.{method}", False)
         return (method, False)
 
-    def _resolve_method_via_bases(self, class_dotted: str, method: str) -> Optional[Tuple[str, bool]]:
+    def _resolve_method_via_bases(
+        self, class_dotted: str, method: str
+    ) -> Optional[Tuple[str, bool]]:
         seen = set()
         queue = list(self.class_bases.get(class_dotted, ()))
         while queue:

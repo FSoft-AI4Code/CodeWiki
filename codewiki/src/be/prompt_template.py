@@ -1,3 +1,9 @@
+import logging
+from collections import defaultdict
+from typing import Any
+
+from codewiki.src.utils import file_manager
+
 SYSTEM_PROMPT = """
 <ROLE>
 You are an AI documentation assistant. Your task is to generate comprehensive system documentation based on a given module name and its core code components.
@@ -260,12 +266,6 @@ Please shortlist the files, folders representing the core functionality and igno
 
 Reasoning at first, then return the list of relative paths in JSON format.
 """
-
-import logging
-from collections import defaultdict
-from typing import Any
-
-from codewiki.src.utils import file_manager
 
 logger = logging.getLogger(__name__)
 

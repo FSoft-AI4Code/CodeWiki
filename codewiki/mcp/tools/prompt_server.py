@@ -84,10 +84,12 @@ def handle_get_prompt(
 
     if prompt_type not in _PROMPT_CATALOG:
         available = list(_PROMPT_CATALOG.keys())
-        return json.dumps({
-            "error": f"Unknown prompt_type: {prompt_type}",
-            "available_types": available,
-        })
+        return json.dumps(
+            {
+                "error": f"Unknown prompt_type: {prompt_type}",
+                "available_types": available,
+            }
+        )
 
     catalog_entry = _PROMPT_CATALOG[prompt_type]
 
@@ -107,7 +109,9 @@ def _resolve_prompt(prompt_type: str, variables: Dict[str, Any]) -> str:
     """Resolve a prompt template with optional variable substitution."""
 
     if prompt_type == "cluster":
-        potential_core_components = variables.get("potential_core_components", "<POTENTIAL_CORE_COMPONENTS placeholder>")
+        potential_core_components = variables.get(
+            "potential_core_components", "<POTENTIAL_CORE_COMPONENTS placeholder>"
+        )
         module_tree = variables.get("module_tree", {})
         module_name = variables.get("module_name", None)
         return format_cluster_prompt(
@@ -133,10 +137,12 @@ def _resolve_prompt(prompt_type: str, variables: Dict[str, Any]) -> str:
         # Return the template with placeholders filled as possible
         return USER_PROMPT.format(
             module_name=module_name,
-            module_tree=json.dumps(module_tree, indent=2) if module_tree else "<MODULE_TREE placeholder>",
+            module_tree=json.dumps(module_tree, indent=2)
+            if module_tree
+            else "<MODULE_TREE placeholder>",
             formatted_core_component_codes=variables.get(
                 "formatted_core_component_codes",
-                "<CORE_COMPONENT_CODES placeholder — use read_code_components to get source code>"
+                "<CORE_COMPONENT_CODES placeholder — use read_code_components to get source code>",
             ),
         )
 
@@ -145,7 +151,9 @@ def _resolve_prompt(prompt_type: str, variables: Dict[str, Any]) -> str:
         repo_structure = variables.get("repo_structure", "<REPO_STRUCTURE placeholder>")
         return MODULE_OVERVIEW_PROMPT.format(
             module_name=module_name,
-            repo_structure=repo_structure if isinstance(repo_structure, str) else json.dumps(repo_structure, indent=4),
+            repo_structure=repo_structure
+            if isinstance(repo_structure, str)
+            else json.dumps(repo_structure, indent=4),
         )
 
     elif prompt_type == "overview_repo":
@@ -153,7 +161,9 @@ def _resolve_prompt(prompt_type: str, variables: Dict[str, Any]) -> str:
         repo_structure = variables.get("repo_structure", "<REPO_STRUCTURE placeholder>")
         return REPO_OVERVIEW_PROMPT.format(
             repo_name=repo_name,
-            repo_structure=repo_structure if isinstance(repo_structure, str) else json.dumps(repo_structure, indent=4),
+            repo_structure=repo_structure
+            if isinstance(repo_structure, str)
+            else json.dumps(repo_structure, indent=4),
         )
 
     return f"Unknown prompt type: {prompt_type}"

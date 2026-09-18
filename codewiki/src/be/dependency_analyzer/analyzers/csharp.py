@@ -52,9 +52,26 @@ _TYPE_DECLS = {
 
 # C# primitive / contextual keyword types — never project components.
 _CSHARP_PRIMITIVES = {
-    "bool", "byte", "sbyte", "char", "decimal", "double", "float", "int",
-    "uint", "nint", "nuint", "long", "ulong", "short", "ushort", "string",
-    "object", "void", "var", "dynamic",
+    "bool",
+    "byte",
+    "sbyte",
+    "char",
+    "decimal",
+    "double",
+    "float",
+    "int",
+    "uint",
+    "nint",
+    "nuint",
+    "long",
+    "ulong",
+    "short",
+    "ushort",
+    "string",
+    "object",
+    "void",
+    "var",
+    "dynamic",
 }
 
 
@@ -154,9 +171,15 @@ class TreeSitterCSharpAnalyzer:
         class_name = None
 
         if node.type == "class_declaration":
-            is_abstract = any(c.type == "modifier" and c.text.decode() == "abstract" for c in node.children)
-            is_static = any(c.type == "modifier" and c.text.decode() == "static" for c in node.children)
-            node_type = "static class" if is_static else ("abstract class" if is_abstract else "class")
+            is_abstract = any(
+                c.type == "modifier" and c.text.decode() == "abstract" for c in node.children
+            )
+            is_static = any(
+                c.type == "modifier" and c.text.decode() == "static" for c in node.children
+            )
+            node_type = (
+                "static class" if is_static else ("abstract class" if is_abstract else "class")
+            )
             node_name = self._decl_name(node)
             qualified_name = self._qualify(node, *self._find_containing_type_names(node), node_name)
         elif node.type == "interface_declaration":
@@ -202,9 +225,9 @@ class TreeSitterCSharpAnalyzer:
                 component_type=node_type,
                 file_path=str(self.file_path),
                 relative_path=self._get_relative_path(),
-                source_code="\n".join(lines[node.start_point[0]:node.end_point[0]+1]),
-                start_line=node.start_point[0]+1,
-                end_line=node.end_point[0]+1,
+                source_code="\n".join(lines[node.start_point[0] : node.end_point[0] + 1]),
+                start_line=node.start_point[0] + 1,
+                end_line=node.end_point[0] + 1,
                 has_docstring=has_docstring,
                 docstring=docstring,
                 parameters=None,
@@ -262,12 +285,14 @@ class TreeSitterCSharpAnalyzer:
                 caller_id = self._get_component_id(decl_name)
                 for base_type in self._base_list_types(base_list):
                     if not self._skip_type(base_type, node):
-                        self.call_relationships.append(CallRelationship(
-                            caller=caller_id,
-                            callee=self._resolve_cs_type(base_type, node, top_level_nodes),
-                            call_line=node.start_point[0]+1,
-                            is_resolved=False,
-                        ))
+                        self.call_relationships.append(
+                            CallRelationship(
+                                caller=caller_id,
+                                callee=self._resolve_cs_type(base_type, node, top_level_nodes),
+                                call_line=node.start_point[0] + 1,
+                                is_resolved=False,
+                            )
+                        )
 
         # 2. Field / property / event type use + primary-constructor params.
         if node.type == "field_declaration":
@@ -282,7 +307,9 @@ class TreeSitterCSharpAnalyzer:
             if param_list:
                 for param in param_list.children:
                     if param.type == "parameter":
-                        self._emit_type_use(param.child_by_field_name("type"), node, top_level_nodes)
+                        self._emit_type_use(
+                            param.child_by_field_name("type"), node, top_level_nodes
+                        )
 
         # 3. Method / function invocations.
         if node.type == "invocation_expression":
@@ -295,12 +322,14 @@ class TreeSitterCSharpAnalyzer:
             if containing_class and type_node:
                 created_type = self._unwrap_type(type_node)
                 if created_type and not self._skip_type(created_type, node):
-                    self.call_relationships.append(CallRelationship(
-                        caller=containing_class,
-                        callee=self._resolve_cs_type(created_type, node, top_level_nodes),
-                        call_line=node.start_point[0]+1,
-                        is_resolved=False,
-                    ))
+                    self.call_relationships.append(
+                        CallRelationship(
+                            caller=containing_class,
+                            callee=self._resolve_cs_type(created_type, node, top_level_nodes),
+                            call_line=node.start_point[0] + 1,
+                            is_resolved=False,
+                        )
+                    )
 
         for child in node.children:
             self._extract_relationships(child, top_level_nodes)
@@ -313,12 +342,14 @@ class TreeSitterCSharpAnalyzer:
             return
         type_name = self._unwrap_type(type_node)
         if type_name and not self._skip_type(type_name, context_node):
-            self.call_relationships.append(CallRelationship(
-                caller=containing_class,
-                callee=self._resolve_cs_type(type_name, context_node, top_level_nodes),
-                call_line=context_node.start_point[0]+1,
-                is_resolved=False,
-            ))
+            self.call_relationships.append(
+                CallRelationship(
+                    caller=containing_class,
+                    callee=self._resolve_cs_type(type_name, context_node, top_level_nodes),
+                    call_line=context_node.start_point[0] + 1,
+                    is_resolved=False,
+                )
+            )
 
     def _handle_invocation(self, node, top_level_nodes):
         containing_class = self._find_containing_class(node, top_level_nodes)
@@ -395,12 +426,14 @@ class TreeSitterCSharpAnalyzer:
             self._add_edge(caller_id, callee, node)
 
     def _add_edge(self, caller, callee, node):
-        self.call_relationships.append(CallRelationship(
-            caller=caller,
-            callee=callee,
-            call_line=node.start_point[0]+1,
-            is_resolved=False,
-        ))
+        self.call_relationships.append(
+            CallRelationship(
+                caller=caller,
+                callee=callee,
+                call_line=node.start_point[0] + 1,
+                is_resolved=False,
+            )
+        )
 
     def _enclosing_member_candidates(self, node, member_name):
         containing_types = self._find_containing_type_names(node)
@@ -420,7 +453,11 @@ class TreeSitterCSharpAnalyzer:
                     types.append(name)
             elif child.type == "primary_constructor_base_type":
                 inner = next(
-                    (c for c in child.children if c.type in ("identifier", "qualified_name", "generic_name")),
+                    (
+                        c
+                        for c in child.children
+                        if c.type in ("identifier", "qualified_name", "generic_name")
+                    ),
                     None,
                 )
                 name = self._unwrap_type(inner) if inner else None
@@ -495,12 +532,21 @@ class TreeSitterCSharpAnalyzer:
         params = set()
         current = node
         while current:
-            if current.type in (*_TYPE_DECLS, "delegate_declaration", "method_declaration", "local_function_statement"):
-                type_params = next((c for c in current.children if c.type == "type_parameter_list"), None)
+            if current.type in (
+                *_TYPE_DECLS,
+                "delegate_declaration",
+                "method_declaration",
+                "local_function_statement",
+            ):
+                type_params = next(
+                    (c for c in current.children if c.type == "type_parameter_list"), None
+                )
                 if type_params:
                     for param in type_params.children:
                         if param.type == "type_parameter":
-                            ident = next((c for c in param.children if c.type == "identifier"), None)
+                            ident = next(
+                                (c for c in param.children if c.type == "identifier"), None
+                            )
                             if ident:
                                 params.add(ident.text.decode())
             current = current.parent
@@ -592,7 +638,9 @@ class TreeSitterCSharpAnalyzer:
         # Method / constructor / local-function scope: parameters and locals.
         method_node = node.parent
         while method_node and method_node.type not in (
-            "method_declaration", "constructor_declaration", "local_function_statement"
+            "method_declaration",
+            "constructor_declaration",
+            "local_function_statement",
         ):
             method_node = method_node.parent
 
@@ -621,7 +669,9 @@ class TreeSitterCSharpAnalyzer:
             if body:
                 for member in body.children:
                     if member.type in ("field_declaration", "event_field_declaration"):
-                        vd = next((c for c in member.children if c.type == "variable_declaration"), None)
+                        vd = next(
+                            (c for c in member.children if c.type == "variable_declaration"), None
+                        )
                         if vd and self._declares_variable(vd, variable_name):
                             return self._unwrap_type(self._first_type_child(vd))
                     elif member.type == "property_declaration":
@@ -665,15 +715,26 @@ class TreeSitterCSharpAnalyzer:
                     if type_node is not None and type_node.type != "implicit_type":
                         return self._unwrap_type(type_node)
                     # `var` — recover the type only from a `new T()` initializer.
-                    init = next((c for c in decl.children if c.type == "object_creation_expression"), None)
+                    init = next(
+                        (c for c in decl.children if c.type == "object_creation_expression"), None
+                    )
                     if init is not None:
                         return self._unwrap_type(init.child_by_field_name("type"))
                     return None
             elif child.type in (
-                "block", "if_statement", "else_clause", "for_statement",
-                "foreach_statement", "while_statement", "do_statement",
-                "using_statement", "try_statement", "catch_clause",
-                "finally_clause", "switch_statement", "lock_statement",
+                "block",
+                "if_statement",
+                "else_clause",
+                "for_statement",
+                "foreach_statement",
+                "while_statement",
+                "do_statement",
+                "using_statement",
+                "try_statement",
+                "catch_clause",
+                "finally_clause",
+                "switch_statement",
+                "lock_statement",
                 "switch_section",
             ):
                 result = self._search_variable_declaration(child, variable_name)
@@ -682,6 +743,8 @@ class TreeSitterCSharpAnalyzer:
         return None
 
 
-def analyze_csharp_file(file_path: str, content: str, repo_path: str = None) -> Tuple[List[Node], List[CallRelationship]]:
+def analyze_csharp_file(
+    file_path: str, content: str, repo_path: str = None
+) -> Tuple[List[Node], List[CallRelationship]]:
     analyzer = TreeSitterCSharpAnalyzer(file_path, content, repo_path)
     return analyzer.nodes, analyzer.call_relationships
