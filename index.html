@@ -431,12 +431,13 @@
 
     <!-- Hero Section -->
     <div class="hero">
-        <h1>CodeWiki: Evaluating AI's Ability to Generate Holistic Documentation for Large-Scale Codebases</h1>
-        <p>The first open-source framework for holistic, structured repository-level documentation across multilingual codebases</p>
+        <h1>CodeWiki 2.0</h1>
+        <p>Repository-level documentation for large codebases, written by AI agents from the dependency graph</p>
         
         <div class="badges">
             <span class="badge">🐍 Python 3.12+</span>
-            <span class="badge">📝 7 Languages Supported</span>
+            <span class="badge">🏷️ v2.0.0</span>
+            <span class="badge">📝 11 Languages Supported</span>
             <span class="badge">🚀 Open Source</span>
             <span class="badge">📊 Benchmarked</span>
         </div>
@@ -445,7 +446,7 @@
             <a href="https://github.com/FSoft-AI4Code/CodeWiki" class="btn btn-primary" target="_blank">
                 View on GitHub
             </a>
-            <a href="https://arxiv.org/abs/2510.24428" class="btn btn-secondary" target="_blank">
+            <a href="https://aclanthology.org/2026.findings-acl.288/" class="btn btn-secondary" target="_blank">
                 Read Paper
             </a>
             <a href="https://fsoft-ai4code.github.io/codewiki-demo/" class="btn btn-secondary" target="_blank">
@@ -470,20 +471,20 @@
                 Developers spend nearly <span class="highlight">58% of their time</span> understanding codebases, yet maintaining comprehensive documentation remains challenging. While recent Large Language Models (LLMs) show promise for function-level documentation, they fail at the repository level, where capturing architectural patterns and cross-module interactions is essential.
             </p>
             <p style="font-size: 1.1rem; line-height: 1.8; margin-top: 1rem;">
-                <strong>CodeWiki</strong> is the first open-source framework for holistic repository-level documentation across seven programming languages, introducing innovations in hierarchical decomposition, recursive agentic processing, and multi-modal synthesis.
+                <strong>CodeWiki</strong> is an open-source framework for holistic repository-level documentation across eleven programming languages. It builds the dependency graph, decomposes it into a module hierarchy, and has recursive agents write text and diagrams. <strong>Version 2.0</strong> makes the graph more complete, documents build, CI, container, and configuration files alongside code, and keeps documentation current with component-level incremental updates.
             </p>
             
             <div class="stats-grid">
                 <div class="stat-card">
-                    <div class="stat-number">68.79%</div>
-                    <div class="stat-label">Quality Score (Proprietary Models)</div>
+                    <div class="stat-number">82.23</div>
+                    <div class="stat-label">Weighted Rubric Score, CodeWiki 2.0 (DeepWiki: 65.06)</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-number">64.80%</div>
-                    <div class="stat-label">Quality Score (Open-Source Models)</div>
+                    <div class="stat-number">+12.44</div>
+                    <div class="stat-label">Average Gain of 2.0 over 1.0</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-number">7</div>
+                    <div class="stat-number">11</div>
                     <div class="stat-label">Programming Languages</div>
                 </div>
                 <div class="stat-card">
@@ -526,6 +527,30 @@
                     <h3>Multi-Modal Synthesis</h3>
                     <p>Generates comprehensive documentation including textual descriptions, architecture diagrams, data flows, and sequence diagrams for holistic understanding.</p>
                 </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🕸️</div>
+                    <h3>More Complete Graphs <span style="font-size:0.7em; color: var(--text-light);">2.0</span></h3>
+                    <p>Free functions become documentation units. Call resolution in C, C++, Java, and C# is scope-, namespace-, and import-aware, and library calls are filtered out. Ruby and Scala added.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">📦</div>
+                    <h3>Artifact-Aware Generation <span style="font-size:0.7em; color: var(--text-light);">2.0</span></h3>
+                    <p>Dockerfiles, CI workflows, build files, manifests, packaging, configuration, and schemas join the dependency graph and get documented next to the code they build or configure.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🔁</div>
+                    <h3>Incremental Updates <span style="font-size:0.7em; color: var(--text-light);">2.0</span></h3>
+                    <p><code>codewiki generate --update</code> diffs the saved graph against the current code and patches only the pages the change affects. One commit on svelte: $0.34 instead of $21.48 for a full build.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🔌</div>
+                    <h3>Subscription Mode &amp; MCP <span style="font-size:0.7em; color: var(--text-light);">2.0</span></h3>
+                    <p>Run on a Claude or Codex subscription with no API key, or start <code>codewiki mcp</code> and let Cursor, Claude Desktop, Claude Code, or CodeBuddy drive the toolchain.</p>
+                </div>
             </div>
 
             <h3 style="margin-top: 3rem;">🌐 Multilingual Support</h3>
@@ -537,112 +562,182 @@
                 <span class="language-tag">🔧 C</span>
                 <span class="language-tag">⚙️ C++</span>
                 <span class="language-tag">💎 C#</span>
+                <span class="language-tag">🎯 Kotlin</span>
+                <span class="language-tag">🐘 PHP</span>
+                <span class="language-tag">♦️ Ruby</span>
+                <span class="language-tag">🔺 Scala</span>
             </div>
         </section>
 
         <!-- Results -->
         <section id="results">
-            <h2>📊 Experimental Results</h2>
+            <h2>📊 Benchmark Results</h2>
             <p style="font-size: 1.1rem; margin-bottom: 2rem;">
-                Evaluated on <strong>CodeWikiBench</strong>, the first benchmark specifically designed for repository-level documentation quality assessment across 21 repositories.
+                Evaluated on <strong>CodeWikiBench</strong>: seven repositories, 486 rubric requirements, the same LLM judge for every system. Scores are weighted rubric scores from 0 to 100. DeepWiki and CodeWiki 1.0 were re-run under the same setting as 2.0 (September 2026), so they differ from the numbers in the paper. README files and <code>docs/</code> were excluded from CodeWiki's inputs.
             </p>
 
-            <h3>Performance by Language Category</h3>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Language Category</th>
-                        <th>CodeWiki (Sonnet-4)</th>
-                        <th>DeepWiki</th>
-                        <th>Improvement</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><strong>High-Level (Python, JS, TS)</strong></td>
-                        <td><span class="success">79.14%</span></td>
-                        <td>68.67%</td>
-                        <td><span class="success">+10.47%</span></td>
-                    </tr>
-                    <tr>
-                        <td><strong>Managed (C#, Java)</strong></td>
-                        <td><span class="success">68.84%</span></td>
-                        <td>64.80%</td>
-                        <td><span class="success">+4.04%</span></td>
-                    </tr>
-                    <tr>
-                        <td><strong>Systems (C, C++)</strong></td>
-                        <td>53.24%</td>
-                        <td>56.39%</td>
-                        <td>-3.15%</td>
-                    </tr>
-                    <tr style="background: var(--light-bg); font-weight: bold;">
-                        <td><strong>Overall Average</strong></td>
-                        <td><span class="success">68.79%</span></td>
-                        <td>64.06%</td>
-                        <td><span class="success">+4.73%</span></td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <h3 style="margin-top: 3rem;">Results on Representative Repositories</h3>
+            <h3>Score by Repository</h3>
             <table>
                 <thead>
                     <tr>
                         <th>Repository</th>
                         <th>Language</th>
-                        <th>LOC</th>
-                        <th>CodeWiki</th>
+                        <th>LoC</th>
                         <th>DeepWiki</th>
-                        <th>Improvement</th>
+                        <th>CodeWiki 1.0</th>
+                        <th>CodeWiki 2.0</th>
+                        <th>2.0 vs 1.0</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
-                        <td>All-Hands-AI--OpenHands</td>
+                        <td>OpenHands</td>
                         <td>Python</td>
-                        <td>229K</td>
-                        <td><span class="success">82.45%</span></td>
-                        <td>73.04%</td>
-                        <td><span class="success">+9.41%</span></td>
+                        <td>229,909</td>
+                        <td>74.12</td>
+                        <td>83.31</td>
+                        <td><span class="success">83.53</span></td>
+                        <td><span class="success">+0.22</span></td>
                     </tr>
                     <tr>
-                        <td>puppeteer--puppeteer</td>
-                        <td>TypeScript</td>
-                        <td>136K</td>
-                        <td><span class="success">83.00%</span></td>
-                        <td>64.46%</td>
-                        <td><span class="success">+18.54%</span></td>
-                    </tr>
-                    <tr>
-                        <td>sveltejs--svelte</td>
+                        <td>svelte</td>
                         <td>JavaScript</td>
-                        <td>125K</td>
-                        <td><span class="success">71.96%</span></td>
-                        <td>68.51%</td>
-                        <td><span class="success">+3.45%</span></td>
+                        <td>124,576</td>
+                        <td>69.83</td>
+                        <td>73.21</td>
+                        <td><span class="success">80.09</span></td>
+                        <td><span class="success">+6.88</span></td>
                     </tr>
                     <tr>
-                        <td>Unity-Technologies--ml-agents</td>
+                        <td>puppeteer</td>
+                        <td>TypeScript</td>
+                        <td>136,302</td>
+                        <td>65.57</td>
+                        <td>84.16</td>
+                        <td><span class="success">85.04</span></td>
+                        <td><span class="success">+0.88</span></td>
+                    </tr>
+                    <tr>
+                        <td>ml-agents</td>
                         <td>C#</td>
-                        <td>86K</td>
-                        <td><span class="success">79.78%</span></td>
-                        <td>74.80%</td>
-                        <td><span class="success">+4.98%</span></td>
+                        <td>86,106</td>
+                        <td>75.74</td>
+                        <td>80.92</td>
+                        <td><span class="success">89.35</span></td>
+                        <td><span class="success">+8.43</span></td>
                     </tr>
                     <tr>
-                        <td>elastic--logstash</td>
+                        <td>logstash</td>
                         <td>Java</td>
-                        <td>117K</td>
-                        <td><span class="success">57.90%</span></td>
-                        <td>54.80%</td>
-                        <td><span class="success">+3.10%</span></td>
+                        <td>117,485</td>
+                        <td>56.31</td>
+                        <td>59.42</td>
+                        <td><span class="success">77.85</span></td>
+                        <td><span class="success">+18.43</span></td>
+                    </tr>
+                    <tr>
+                        <td>Wazuh</td>
+                        <td>C</td>
+                        <td>1,446,730</td>
+                        <td>69.91</td>
+                        <td>65.38</td>
+                        <td><span class="success">88.14</span></td>
+                        <td><span class="success">+22.76</span></td>
+                    </tr>
+                    <tr>
+                        <td>Electron</td>
+                        <td>C++</td>
+                        <td>184,234</td>
+                        <td>43.92</td>
+                        <td>42.12</td>
+                        <td><span class="success">71.59</span></td>
+                        <td><span class="success">+29.47</span></td>
+                    </tr>
+                    <tr style="background: var(--light-bg); font-weight: bold;">
+                        <td><strong>Average</strong></td>
+                        <td></td>
+                        <td></td>
+                        <td>65.06</td>
+                        <td>69.79</td>
+                        <td><span class="success">82.23</span></td>
+                        <td><span class="success">+12.44</span></td>
                     </tr>
                 </tbody>
             </table>
-            
+
+            <h3 style="margin-top: 3rem;">Score by Topic</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Topic</th>
+                        <th>Requirements</th>
+                        <th>DeepWiki</th>
+                        <th>CodeWiki 1.0</th>
+                        <th>CodeWiki 2.0</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Architecture</td>
+                        <td>128</td>
+                        <td>72.95</td>
+                        <td>78.02</td>
+                        <td><span class="success">82.00</span></td>
+                    </tr>
+                    <tr>
+                        <td>Functionality</td>
+                        <td>211</td>
+                        <td>61.62</td>
+                        <td>70.46</td>
+                        <td><span class="success">88.65</span></td>
+                    </tr>
+                    <tr>
+                        <td>Operations</td>
+                        <td>63</td>
+                        <td>67.71</td>
+                        <td>78.24</td>
+                        <td><span class="success">78.10</span></td>
+                    </tr>
+                    <tr>
+                        <td>Build and deployment</td>
+                        <td>27</td>
+                        <td>62.84</td>
+                        <td>28.16</td>
+                        <td><span class="success">71.90</span></td>
+                    </tr>
+                    <tr>
+                        <td>Security</td>
+                        <td>29</td>
+                        <td>48.73</td>
+                        <td>64.91</td>
+                        <td><span class="success">83.20</span></td>
+                    </tr>
+                    <tr>
+                        <td>Testing</td>
+                        <td>12</td>
+                        <td>61.43</td>
+                        <td>41.93</td>
+                        <td><span class="success">63.25</span></td>
+                    </tr>
+                    <tr>
+                        <td>Performance</td>
+                        <td>16</td>
+                        <td>43.33</td>
+                        <td>49.06</td>
+                        <td><span class="success">70.90</span></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="architecture" style="margin-top: 3rem;">
+                <img src="./img/benchmark-2.0.png" alt="Graph growth and score by stage" />
+                <p style="margin-top: 1.5rem; color: var(--text-light);">
+                    <strong>Figure 2:</strong> (a) how much the 2.0 code graph grew over 1.0; (b) nodes and edges added by artifacts; (c) score by stage. "Conference version" is CodeWiki 1.0, "C1 + C2" is CodeWiki 2.0.
+                </p>
+            </div>
+
             <p style="margin-top: 1.5rem; font-style: italic; color: var(--text-light);">
-                View comprehensive results for all 21 repositories in our <a href="https://arxiv.org/abs/2510.24428" target="_blank">paper</a>.
+                The 21-repository study of CodeWiki 1.0 is in the <a href="https://aclanthology.org/2026.findings-acl.288/" target="_blank">paper</a>.
             </p>
         </section>
 
@@ -675,8 +770,9 @@
             <h3>Prerequisites</h3>
             <ul style="margin: 1rem 0 2rem 2rem; line-height: 2;">
                 <li>Python 3.12+</li>
-                <li>Node.js (for Mermaid diagram validation)</li>
-                <li>LLM API access (Anthropic Claude, OpenAI, etc.)</li>
+                <li>Node.js and npm at install time</li>
+                <li>Git</li>
+                <li>An LLM API key, or a Claude Code / Codex subscription, or an MCP-capable AI IDE</li>
             </ul>
 
             <h3>Installation</h3>
@@ -688,11 +784,17 @@ codewiki --version</code></pre>
 
             <h3>Quick Start</h3>
             <p><strong>1. Configure CodeWiki:</strong></p>
-            <pre><code>codewiki config set \
+            <pre><code># Any OpenAI-compatible endpoint
+codewiki config set \
+  --provider openai-compatible \
   --api-key YOUR_API_KEY \
-  --base-url https://api.anthropic.com \
+  --base-url https://api.example.com/v1 \
   --main-model claude-sonnet-4 \
   --cluster-model claude-sonnet-4
+
+# Or run on your Claude Code subscription, no API key
+codewiki config set --provider claude-code \
+  --main-model claude-sonnet-4-6 --cluster-model claude-sonnet-4-6
 
 # Verify configuration
 codewiki config show
@@ -708,6 +810,9 @@ codewiki generate
 # Generate with GitHub Pages HTML viewer
 codewiki generate --github-pages
 
+# Later: refresh only what changed
+codewiki generate --update
+
 # Full-featured generation
 codewiki generate --create-branch --github-pages --verbose</code></pre>
 
@@ -719,6 +824,8 @@ codewiki generate --create-branch --github-pages --verbose</code></pre>
 ├── module_tree.json         # Hierarchical module structure
 ├── first_module_tree.json   # Initial clustering result
 ├── metadata.json            # Generation metadata
+├── update_record.json       # Decisions of the last --update run
+├── temp/                    # Saved dependency graph and artifact index
 └── index.html               # Interactive viewer (with --github-pages)</code></pre>
         </section>
 
@@ -726,16 +833,17 @@ codewiki generate --create-branch --github-pages --verbose</code></pre>
         <section id="citation">
             <h2>📚 Citation</h2>
             <p style="margin-bottom: 1.5rem;">If you use CodeWiki in your research, please cite our paper:</p>
-            <pre><code>@misc{hoang2025codewikievaluatingaisability,
-      title={CodeWiki: Evaluating AI's Ability to Generate Holistic 
-             Documentation for Large-Scale Codebases}, 
-      author={Anh Nguyen Hoang and Minh Le-Anh and Bach Le 
-              and Nghi D. Q. Bui},
-      year={2025},
-      eprint={2510.24428},
-      archivePrefix={arXiv},
-      primaryClass={cs.SE},
-      url={https://arxiv.org/abs/2510.24428}, 
+            <pre><code>@inproceedings{hoang-etal-2026-codewiki,
+    title = "{C}ode{W}iki: Evaluating {AI}{'}s Ability to Generate Holistic Documentation for Large-Scale Codebases",
+    author = "Hoang, Anh Nguyen and Le-Anh, Minh and Le, Bach and Bui, Nghi D. Q.",
+    booktitle = "Findings of the {A}ssociation for {C}omputational {L}inguistics: {ACL} 2026",
+    month = jul,
+    year = "2026",
+    address = "San Diego, California, United States",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2026.findings-acl.288/",
+    doi = "10.18653/v1/2026.findings-acl.288",
+    pages = "5812--5827",
 }</code></pre>
         </section>
 
@@ -746,9 +854,9 @@ codewiki generate --create-branch --github-pages --verbose</code></pre>
                 <div class="feature-card">
                     <div class="feature-icon">📄</div>
                     <h3>Research Paper</h3>
-                    <p>Read the full paper on arXiv</p>
-                    <a href="https://arxiv.org/abs/2510.24428" target="_blank" class="btn btn-primary" style="margin-top: 1rem; display: inline-block;">
-                        arXiv
+                    <p>Findings of ACL 2026</p>
+                    <a href="https://aclanthology.org/2026.findings-acl.288/" target="_blank" class="btn btn-primary" style="margin-top: 1rem; display: inline-block;">
+                        ACL Anthology
                     </a>
                 </div>
                 
@@ -789,10 +897,28 @@ codewiki generate --create-branch --github-pages --verbose</code></pre>
                 </div>
                 
                 <div class="feature-card">
+                    <div class="feature-icon">📘</div>
+                    <h3>Guides</h3>
+                    <p>CLI reference, providers, artifacts, incremental updates, MCP mode</p>
+                    <a href="https://github.com/FSoft-AI4Code/CodeWiki/blob/main/guides/README.md" target="_blank" class="btn btn-primary" style="margin-top: 1rem; display: inline-block;">
+                        All Guides
+                    </a>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">📝</div>
+                    <h3>Changelog</h3>
+                    <p>What changed in 2.0.0</p>
+                    <a href="https://github.com/FSoft-AI4Code/CodeWiki/blob/main/CHANGELOG.md" target="_blank" class="btn btn-primary" style="margin-top: 1rem; display: inline-block;">
+                        CHANGELOG
+                    </a>
+                </div>
+
+                <div class="feature-card">
                     <div class="feature-icon">🐳</div>
                     <h3>Docker Deployment</h3>
-                    <p>Containerized deployment guide</p>
-                    <a href="https://github.com/FSoft-AI4Code/CodeWiki/blob/main/docker/DOCKER_README.md" target="_blank" class="btn btn-primary" style="margin-top: 1rem; display: inline-block;">
+                    <p>Run the web application in a container</p>
+                    <a href="https://github.com/FSoft-AI4Code/CodeWiki/blob/main/guides/docker.md" target="_blank" class="btn btn-primary" style="margin-top: 1rem; display: inline-block;">
                         Docker Guide
                     </a>
                 </div>
@@ -801,7 +927,7 @@ codewiki generate --create-branch --github-pages --verbose</code></pre>
                     <div class="feature-icon">📖</div>
                     <h3>Development Guide</h3>
                     <p>Contributing and architecture details</p>
-                    <a href="https://github.com/FSoft-AI4Code/CodeWiki/blob/main/DEVELOPMENT.md" target="_blank" class="btn btn-primary" style="margin-top: 1rem; display: inline-block;">
+                    <a href="https://github.com/FSoft-AI4Code/CodeWiki/blob/main/guides/development.md" target="_blank" class="btn btn-primary" style="margin-top: 1rem; display: inline-block;">
                         Dev Guide
                     </a>
                 </div>
@@ -813,7 +939,7 @@ codewiki generate --create-branch --github-pages --verbose</code></pre>
     <footer>
         <div class="footer-links">
             <a href="https://github.com/FSoft-AI4Code/CodeWiki" target="_blank">GitHub</a>
-            <a href="https://arxiv.org/abs/2510.24428" target="_blank">Paper</a>
+            <a href="https://aclanthology.org/2026.findings-acl.288/" target="_blank">Paper</a>
             <a href="https://fsoft-ai4code.github.io/codewiki-demo/" target="_blank">Demo</a>
             <a href="./docs/index.html">Repo Docs</a>
             <a href="https://github.com/FSoft-AI4Code/CodeWikiBench" target="_blank">Benchmark</a>

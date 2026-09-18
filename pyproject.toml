@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "codewiki"
-version = "1.0.1"
+version = "2.0.0"
 description = "Transform codebases into comprehensive documentation using AI-powered analysis"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -14,7 +14,7 @@ authors = [
 ]
 keywords = ["documentation", "code-analysis", "ai", "llm", "developer-tools"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
@@ -87,10 +87,10 @@ dev = [
 codewiki = "codewiki.cli.main:cli"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/codewiki"
-Documentation = "https://github.com/yourusername/codewiki/docs"
-Repository = "https://github.com/yourusername/codewiki"
-Issues = "https://github.com/yourusername/codewiki/issues"
+Homepage = "https://github.com/FSoft-AI4Code/CodeWiki"
+Documentation = "https://fsoft-ai4code.github.io/CodeWiki/docs/index.html"
+Repository = "https://github.com/FSoft-AI4Code/CodeWiki"
+Issues = "https://github.com/FSoft-AI4Code/CodeWiki/issues"
 
 [tool.setuptools]
 packages = [

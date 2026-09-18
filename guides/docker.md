@@ -1,10 +1,9 @@
-# CodeWiki Docker Setup
+# Docker setup (web app)
 
-This document explains how to run CodeWiki using Docker and Docker Compose.
-
-## Overview
-
-The Docker setup provides a containerized environment for running the CodeWiki web application, which allows you to generate documentation for GitHub repositories through a web interface.
+This guide explains how to run the **CodeWiki web application** with Docker
+and Docker Compose. The web app takes a GitHub URL and generates
+documentation through a browser. It is not needed for the CLI or the MCP
+server, which you install with `pip` (see the [README](../README.md)).
 
 ## File Structure
 
@@ -14,8 +13,7 @@ All Docker-related files are located in the `docker/` directory:
 docker/
 ├── Dockerfile           # Container image definition
 ├── docker-compose.yml   # Service orchestration
-├── env.example          # Environment variables template
-└── DOCKER_README.md     # This file
+└── env.example          # Environment variables template
 ```
 
 The Dockerfile builds from the project root context to include all necessary application code.
@@ -27,7 +25,7 @@ The Dockerfile builds from the project root context to include all necessary app
 ### 1. Clone the Repository
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/FSoft-AI4Code/CodeWiki.git
 cd CodeWiki
 ```
 
@@ -418,9 +416,9 @@ services:
 
 ## More Information
 
-- **Main Documentation**: See [../README.md](../README.md) for complete feature list and usage
-- **CLI Tool**: For command-line documentation generation
-- **Web Interface**: For GitHub URL-based documentation generation
+- [README](../README.md): features and quick start
+- [CLI reference](cli-reference.md): command-line generation without Docker
+- [MCP / IDE-driven mode](mcp-ide-mode.md): run inside an AI IDE
 
 ---
 
@@ -430,7 +428,7 @@ For issues related to Docker deployment:
 1. Check logs: `docker logs codewiki`
 2. Verify configuration: `docker exec codewiki env | grep -E '(LLM|APP)'`
 3. Test connectivity: `docker exec codewiki curl -I http://localhost:8000`
-4. Report issues: https://github.com/yourusername/codewiki/issues
+4. Report issues: https://github.com/FSoft-AI4Code/CodeWiki/issues
 
 ---
 

@@ -36,7 +36,7 @@ cd CodeWiki && pip install -e .
 Then add to MCP configuration:
 
 ```json
-{"mcpServers":{"codewiki":{"command":"python","args":["-m","codewiki.mcp.server"],"cwd":"/path/to/CodeWiki"}}}
+{"mcpServers":{"codewiki":{"command":"codewiki","args":["mcp"]}}}
 ```
 
 ## Five-Phase Workflow

@@ -5,6 +5,8 @@ import traceback
 from copy import deepcopy
 from typing import Any
 
+from codewiki import __version__
+
 # Configure logging and monitoring
 logger = logging.getLogger(__name__)
 
@@ -69,7 +71,7 @@ class DocumentationGenerator:
             "generation_info": {
                 "timestamp": datetime.now(UTC).isoformat(),
                 "main_model": self.config.main_model,
-                "generator_version": "1.0.1",
+                "generator_version": __version__,
                 "repo_path": self.config.repo_path,
                 "commit_id": self.commit_id,
             },

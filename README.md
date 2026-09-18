@@ -1,455 +1,259 @@
-<h1 align="center">CodeWiki: Evaluating AI's Ability to Generate Holistic Documentation for Large-Scale Codebases</h1>
+<h1 align="center">CodeWiki</h1>
 
 <p align="center">
-  <strong>AI-Powered Repository Documentation Generation</strong> • <strong>Multi-Language Support</strong> • <strong>Architecture-Aware Analysis</strong>
-</p>
-
-<p align="center">
-  Generate holistic, structured documentation for large-scale codebases • Cross-module interactions • Visual artifacts and diagrams
+  <strong>Repository-level documentation for large codebases, written by AI agents from the dependency graph.</strong>
 </p>
 
 <p align="center">
   <a href="https://python.org/"><img alt="Python version" src="https://img.shields.io/badge/python-3.12+-blue?style=flat-square" /></a>
+  <img alt="Version" src="https://img.shields.io/badge/version-2.0.0-blue?style=flat-square" />
   <a href="./LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-green.svg?style=flat-square" /></a>
+  <a href="https://github.com/FSoft-AI4Code/CodeWiki/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/FSoft-AI4Code/CodeWiki/ci.yml?branch=main&style=flat-square&label=CI" /></a>
+  <a href="https://aclanthology.org/2026.findings-acl.288/"><img alt="Paper: Findings of ACL 2026" src="https://img.shields.io/badge/paper-Findings%20of%20ACL%202026-b31b1b?style=flat-square" /></a>
   <a href="https://github.com/FSoft-AI4Code/CodeWiki/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/FSoft-AI4Code/CodeWiki?style=flat-square" /></a>
-  <a href="https://arxiv.org/abs/2510.24428"><img alt="arXiv" src="https://img.shields.io/badge/arXiv-2510.24428-b31b1b?style=flat-square" /></a>
 </p>
 
 <p align="center">
-  <a href="#quick-start"><strong>Quick Start</strong></a> •
-  <a href="#cli-commands"><strong>CLI Commands</strong></a> •
-  <a href="#documentation-output"><strong>Output Structure</strong></a> •
-  <a href="./docs/index.html"><strong>Repo Docs</strong></a> •
-  <a href="https://arxiv.org/abs/2510.24428"><strong>Paper</strong></a>
+  <a href="#quick-start"><strong>Quick start</strong></a> •
+  <a href="#whats-new-in-20"><strong>What's new in 2.0</strong></a> •
+  <a href="#features"><strong>Features</strong></a> •
+  <a href="#benchmark-results"><strong>Benchmark</strong></a> •
+  <a href="./guides/README.md"><strong>Guides</strong></a> •
+  <a href="https://aclanthology.org/2026.findings-acl.288/"><strong>Paper</strong></a>
 </p>
 
 <p align="center">
-  📚 <strong>CodeWiki documents itself</strong> — browse the generated documentation for this repository at
+  📚 <strong>CodeWiki documents itself.</strong> Browse the documentation it generated for this repository at
   <a href="https://fsoft-ai4code.github.io/CodeWiki/docs/index.html">CodeWiki docs</a>.
 </p>
 
 <p align="center">
-  <img src="./img/framework-overview.png" alt="CodeWiki Framework" width="600" style="border: 2px solid #e1e4e8; border-radius: 12px; padding: 20px;"/>
+  <img src="./img/framework-overview.png" alt="CodeWiki framework" width="600" style="border: 2px solid #e1e4e8; border-radius: 12px; padding: 20px;"/>
 </p>
 
 ---
 
-## Quick Start
+CodeWiki reads a repository, builds its dependency graph, splits the graph into
+a hierarchy of modules, and has agents write one page per module plus an
+overview, with Mermaid diagrams. It works on codebases from a few thousand to
+over a million lines, in 11 languages. It needs an LLM API key, or a Claude or
+Codex subscription, or an AI IDE that speaks MCP.
 
-### 1. Install CodeWiki
+## Quick start
+
+**1. Install**
 
 ```bash
-# Install from source
 pip install git+https://github.com/FSoft-AI4Code/CodeWiki.git
-
-# Verify installation
 codewiki --version
 ```
 
-### 2. Configure Your Environment
+Needs Python 3.12+, Git, and Node.js with npm at install time.
 
-CodeWiki supports multiple LLM providers: **OpenAI-compatible**, **Atlas Cloud**, **Anthropic**, **AWS Bedrock**, **Azure OpenAI**, plus subscription mode via **Claude Code** and **Codex** CLIs (no API key required).
+**2. Pick a provider**
 
 ```bash
-# OpenAI-compatible
+# Any OpenAI-compatible endpoint (OpenAI, LiteLLM proxy, OpenRouter, ...)
 codewiki config set \
   --provider openai-compatible \
   --api-key YOUR_API_KEY \
-  --base-url https://api.anthropic.com \
+  --base-url https://api.example.com/v1 \
   --main-model claude-sonnet-4 \
-  --cluster-model claude-sonnet-4 \
-  --fallback-model glm-4p5
+  --cluster-model claude-sonnet-4
 
-# Atlas Cloud — base URL auto-set to https://api.atlascloud.ai/v1;
-# API key read from $ATLASCLOUD_API_KEY when --api-key is omitted.
-codewiki config set \
-  --provider atlas-cloud \
-  --main-model anthropic/claude-sonnet-4.6 \
-  --cluster-model anthropic/claude-sonnet-4.6 \
-  --fallback-model zai-org/GLM-4.6
-
-# Anthropic
-codewiki config set \
-  --provider anthropic \
-  --api-key YOUR_API_KEY \
-  --base-url https://api.anthropic.com \
-  --main-model claude-sonnet-4 \
-  --cluster-model claude-sonnet-4 \
-  --fallback-model glm-4p5
-
-# Azure OpenAI
-codewiki config set \
-  --provider azure-openai \
-  --api-key YOUR_AZURE_KEY \
-  --base-url https://YOUR_RESOURCE.openai.azure.com \
-  --azure-deployment YOUR_DEPLOYMENT \
-  --main-model gpt-4o \
-  --cluster-model gpt-4o
-
-# AWS Bedrock
-codewiki config set \
-  --provider bedrock \
-  --aws-region us-east-1 \
-  --main-model anthropic.claude-sonnet-4-v2:0 \
-  --cluster-model anthropic.claude-sonnet-4-v2:0
-
-# Subscription mode (Claude Code) — uses your existing Claude OAuth login.
-# Install the Claude Code CLI and run `claude login` first.
-codewiki config set \
-  --provider claude-code \
-  --main-model claude-sonnet-4-6 \
-  --cluster-model claude-sonnet-4-6
-
-# Subscription mode (Codex) — uses your existing Codex CLI login.
-# Install the Codex CLI and run `codex login` first.
-codewiki config set \
-  --provider codex \
-  --main-model gpt-5.4 \
-  --cluster-model gpt-5.5
+# Or: no API key, run on your Claude Code subscription (`claude login` first)
+codewiki config set --provider claude-code \
+  --main-model claude-sonnet-4-6 --cluster-model claude-sonnet-4-6
 ```
 
-**About Atlas Cloud.** [Atlas Cloud](https://www.atlascloud.ai) is a full-modal AI inference platform that exposes LLM, image, and video models (300+) behind a single OpenAI-compatible API, so it works with CodeWiki out of the box. Browse model IDs at the [models endpoint](https://api.atlascloud.ai/v1/models) and pick a strong coding model for `--main-model` / `--cluster-model`; their [coding plan](https://www.atlascloud.ai/console/coding-plan) offers budget-friendly API access.
+Anthropic, Azure OpenAI, AWS Bedrock, Atlas Cloud, and Codex are also
+supported. See [Providers and models](./guides/providers.md).
 
-**Subscription mode** routes every LLM call through the local `claude` / `codex` CLI binary (via the [`caw`](https://github.com/zzjas/caw) library), so you can run CodeWiki on a Claude Pro/Max or Codex subscription instead of paying per-token API usage. Claude Code's built-in `Write`/`Edit`/`Bash` tools are disabled inside CodeWiki's agent loop so documentation writes still go through CodeWiki's Mermaid-validating editor.
-
-> **Note on model names.** In subscription mode the model string is forwarded directly to `claude --model` / `codex --model`, so use the bare CLI model name (e.g. `gpt-5.4`, `claude-sonnet-4-6`) — **not** the litellm-style `openai/…` or `anthropic/…` prefix used by `openai-compatible`. If you previously ran with `openai-compatible`, re-run `config set` for **both** `--main-model` and `--cluster-model` to clear any stale prefixes; `config set` only updates the keys you pass.
-
-### 3. Generate Documentation
+**3. Generate**
 
 ```bash
-# Navigate to your project
 cd /path/to/your/project
-
-# Generate documentation
-codewiki generate
-
-# Generate with HTML viewer for GitHub Pages
-codewiki generate --github-pages --create-branch
+codewiki generate                     # writes ./docs/
+codewiki generate --github-pages      # also writes an HTML viewer
+codewiki generate --update            # later: refresh after code changes
 ```
 
-**That's it!** Your documentation will be generated in `./docs/` with comprehensive repository-level analysis.
+![CLI usage example](https://github.com/FSoft-AI4Code/CodeWiki/releases/download/assets/cli-usage-example.gif)
 
-### Usage Example
+## What's new in 2.0
 
-![CLI Usage Example](https://github.com/FSoft-AI4Code/CodeWiki/releases/download/assets/cli-usage-example.gif)
+The documentation an agent can write is bounded by what the dependency graph
+contains. 2.0 makes that graph more complete, wider, and keeps it current.
+Full list in the [CHANGELOG](./CHANGELOG.md).
 
----
+- **More complete dependency graphs.** Free functions become documentation
+  units, so C code and function-centric C++, Java, and C# packages are no
+  longer nearly empty. Call resolution in C, C++, Java, and C# is scope-,
+  namespace-, include-, and import-aware. Library calls are filtered by an
+  external symbol table. Ruby and Scala analyzers were added.
+- **Artifact-aware generation.** Build files, CI workflows, Dockerfiles,
+  package manifests, packaging scripts, configuration, and schemas become
+  graph nodes with edges to the code they reference. They are clustered and
+  documented like code, with a guaranteed **Build, Deployment and
+  Configuration** module when clustering drops them.
+  [Guide](./guides/artifact-aware-generation.md)
+- **Component-level incremental updates.** `codewiki generate --update`
+  diffs the saved graph against the current code, repairs the module tree,
+  and sends one agent per affected module to patch its page and the pages
+  that describe it. Everything else is left untouched. On svelte, one
+  update after one commit cost $0.34 against $21.48 for a full build.
+  [Guide](./guides/incremental-updates.md)
+- **Subscription mode.** Run on a Claude Pro/Max or Codex subscription
+  through the `claude` and `codex` CLIs, with no API key.
+- **MCP server for IDE agents.** `codewiki mcp` exposes the analysis
+  toolchain to Cursor, Claude Desktop, Claude Code, or CodeBuddy. The IDE's
+  own model does the writing. [Guide](./guides/mcp-ide-mode.md)
+- Also: Atlas Cloud provider, prompt caching, `.gitignore` handling, Kotlin
+  and PHP analyzers, a CI workflow, a security policy.
 
-## What is CodeWiki?
+## Features
 
-CodeWiki is an open-source framework for **automated repository-level documentation** across ten programming languages. It generates holistic, architecture-aware documentation that captures not only individual functions but also their cross-file, cross-module, and system-level interactions.
+**Languages.** Python, Java, JavaScript, TypeScript, C, C++, C#, Kotlin,
+PHP, Ruby, Scala.
 
-### Key Innovations
+**Hierarchical decomposition.** The dependency graph is clustered into a
+module tree, recursively, so a 1.4M-line repository gets the same treatment
+as a 10k-line one. Depth and size thresholds are configurable.
 
-| Innovation | Description | Impact |
-|------------|-------------|--------|
-| **Hierarchical Decomposition** | Dynamic programming-inspired strategy that preserves architectural context | Handles codebases of arbitrary size (86K-1.4M LOC tested) |
-| **Recursive Agentic System** | Adaptive multi-agent processing with dynamic delegation capabilities | Maintains quality while scaling to repository-level scope |
-| **Multi-Modal Synthesis** | Generates textual documentation, architecture diagrams, data flows, and sequence diagrams | Comprehensive understanding from multiple perspectives |
+**Recursive agents.** One agent per leaf module reads the code through tools
+and writes the page. Parent pages are written from child pages. Diagrams are
+validated before they are saved.
 
-### Supported Languages
+**Artifacts are documented.** On by default. `--no-artifacts` gives the 1.x
+behaviour, `--with-prose` also reads README and `docs/`,
+`--artifact-exclude` skips generated configuration trees.
 
-**🐍 Python** • **☕ Java** • **🟨 JavaScript** • **🔷 TypeScript** • **⚙️ C** • **🔧 C++** • **🪟 C#** • **🎯 Kotlin** • **🐘 PHP** • **💎 Ruby** • **🔺 Scala**
+**Incremental updates.** `--update` refreshes only what changed.
+`--compare-to <commit>` sets the base commit for CI and squashed merges. If
+too much changed, it falls back to a full build and says so.
 
----
-
-## CLI Commands
-
-### Configuration Management
-
-```bash
-# Set up your API configuration
-codewiki config set \
-  --api-key <your-api-key> \
-  --base-url <provider-url> \
-  --main-model <model-name> \
-  --cluster-model <model-name> \
-  --fallback-model <model-name>
-
-# Configure max token settings
-codewiki config set --max-tokens 32768 --max-token-per-module 36369 --max-token-per-leaf-module 16000
-
-# Configure max depth for hierarchical decomposition
-codewiki config set --max-depth 3
-
-# Show current configuration
-codewiki config show
-
-# Validate your configuration
-codewiki config validate
-```
-
-### Documentation Generation
-
-```bash
-# Basic generation
-codewiki generate
-
-# Custom output directory
-codewiki generate --output ./documentation
-
-# Create git branch for documentation
-codewiki generate --create-branch
-
-# Generate HTML viewer for GitHub Pages
-codewiki generate --github-pages
-
-# Enable verbose logging
-codewiki generate --verbose
-
-# Full-featured generation
-codewiki generate --create-branch --github-pages --verbose
-
-# Incremental update (only regenerate changed modules since last run)
-codewiki generate --update
-
-# Incremental update using a specific commit hash to compare against (useful in CI/CD or squashed PRs)
-# This overrides the stored commit hash in metadata.json and implicitly enables --update
-codewiki generate --compare-to <commit-hash>
-```
-
-### Customization Options
-
-CodeWiki supports customization for language-specific projects and documentation styles:
+**Customization.**
 
 ```bash
-# C# project: only analyze .cs files, exclude test directories
 codewiki generate --include "*.cs" --exclude "Tests,Specs,*.test.cs"
-
-# Focus on specific modules with architecture-style docs
 codewiki generate --focus "src/core,src/api" --doc-type architecture
-
-# Add custom instructions for the AI agent
 codewiki generate --instructions "Focus on public APIs and include usage examples"
-
-# Analyze files ignored by Git (Git ignore filtering is enabled by default)
-codewiki generate --no-gitignore
+codewiki config agent --exclude "Tests,Specs"      # make it the default
 ```
 
-#### Pattern Behavior (Important!)
+`--include` replaces the default file set. `--exclude` merges with the built-in
+ignore list. Every flag is in the [CLI reference](./guides/cli-reference.md).
 
-- **`--include`**: When specified, **ONLY** these patterns are used (replaces defaults completely)
-  - Example: `--include "*.cs"` will analyze ONLY `.cs` files
-  - If omitted, all supported file types are analyzed
-  - Supports glob patterns: `*.py`, `src/**/*.ts`, `*.{js,jsx}`
-  
-- **`--exclude`**: When specified, patterns are **MERGED** with default ignore patterns
-  - Example: `--exclude "Tests,Specs"` will exclude these directories AND still exclude `.git`, `__pycache__`, `node_modules`, etc.
-  - Default patterns include: `.git`, `node_modules`, `__pycache__`, `*.pyc`, `bin/`, `dist/`, and many more
-  - Supports multiple formats:
-    - Exact names: `Tests`, `.env`, `config.local`
-    - Glob patterns: `*.test.js`, `*_test.py`, `*.min.*`
-    - Directory patterns: `build/`, `dist/`, `coverage/`
+**IDE-driven mode.** Add `{"command": "codewiki", "args": ["mcp"]}` to your
+IDE's MCP servers and ask the agent to document the repository. No LLM
+configuration in CodeWiki.
 
-- **`--use-gitignore/--no-gitignore`**: Git ignore rules are applied by default
-  - Root and nested `.gitignore` files are respected before call-graph analysis
-  - Tracked files remain included, matching Git behavior
-  - Built-in and explicit `--exclude` patterns still apply when Git includes a path
-  - Use `codewiki config set --no-gitignore` to persistently disable this behavior
-
-#### Setting Persistent Defaults
-
-Save your preferred settings as defaults:
-
-```bash
-# Set include patterns for C# projects
-codewiki config agent --include "*.cs"
-
-# Exclude test projects by default (merged with default excludes)
-codewiki config agent --exclude "Tests,Specs,*.test.cs"
-
-# Set focus modules
-codewiki config agent --focus "src/core,src/api"
-
-# Set default documentation type
-codewiki config agent --doc-type architecture
-
-# View current agent settings
-codewiki config agent
-
-# Clear all agent settings
-codewiki config agent --clear
-```
-
-| Option | Description | Behavior | Example |
-|--------|-------------|----------|---------|
-| `--include` | File patterns to include | **Replaces** defaults | `*.cs`, `*.py`, `src/**/*.ts` |
-| `--exclude` | Patterns to exclude | **Merges** with defaults | `Tests,Specs`, `*.test.js`, `build/` |
-| `--use-gitignore/--no-gitignore` | Apply Git ignore rules | Enabled by default | `--no-gitignore` |
-| `--focus` | Modules to document in detail | Standalone option | `src/core,src/api` |
-| `--doc-type` | Documentation style | Standalone option | `api`, `architecture`, `user-guide`, `developer` |
-| `--instructions` | Custom agent instructions | Standalone option | Free-form text |
-
-### Token Settings
-
-CodeWiki allows you to configure maximum token limits for LLM calls. This is useful for:
-- Adapting to different model context windows
-- Controlling costs by limiting response sizes
-- Optimizing for faster response times
-
-```bash
-# Set max tokens for LLM responses (default: 32768)
-codewiki config set --max-tokens 16384
-
-# Set max tokens for module clustering (default: 36369)
-codewiki config set --max-token-per-module 40000
-
-# Set max tokens for leaf modules (default: 16000)
-codewiki config set --max-token-per-leaf-module 20000
-
-# Set max depth for hierarchical decomposition (default: 2)
-codewiki config set --max-depth 3
-
-# Override at runtime for a single generation
-codewiki generate --max-tokens 16384 --max-token-per-module 40000 --max-depth 3
-```
-
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--max-tokens` | Maximum output tokens for LLM response | 32768 |
-| `--max-token-per-module` | Input tokens threshold for module clustering | 36369 |
-| `--max-token-per-leaf-module` | Input tokens threshold for leaf modules | 16000 |
-| `--max-depth` | Maximum depth for hierarchical decomposition | 2 |
-
-### Configuration Storage
-
-- **API keys**: Securely stored in system keychain (macOS Keychain, Windows Credential Manager, Linux Secret Service). Falls back to `~/.codewiki/credentials.json` in headless/container environments. Set `CODEWIKI_NO_KEYRING=1` to force file-based storage.
-- **Settings & Agent Instructions**: `~/.codewiki/config.json`
-
----
-
-## Documentation Output
-
-Generated documentation includes both **textual descriptions** and **visual artifacts** for comprehensive understanding.
-
-### Textual Documentation
-- Repository overview with architecture guide
-- Module-level documentation with API references
-- Usage examples and implementation patterns
-- Cross-module interaction analysis
-
-### Visual Artifacts
-- System architecture diagrams (Mermaid)
-- Data flow visualizations
-- Dependency graphs and module relationships
-- Sequence diagrams for complex interactions
-
-### Output Structure
+## Output
 
 ```
 ./docs/
-├── overview.md              # Repository overview (start here!)
-├── module1.md               # Module documentation
-├── module2.md               # Additional modules...
-├── module_tree.json         # Hierarchical module structure
-├── first_module_tree.json   # Initial clustering result
-├── metadata.json            # Generation metadata
-└── index.html               # Interactive viewer (with --github-pages)
+├── overview.md                  # start here
+├── <module>.md ...              # one page per module, leaves and parents
+├── module_tree.json             # the module hierarchy
+├── first_module_tree.json       # clustering result before super-grouping
+├── metadata.json                # model, version, commit, statistics
+├── update_record.json           # every decision of the last --update run
+├── temp/artifact_index.json     # artifact files by class
+├── temp/dependency_graphs/      # the saved graph (used by --update)
+└── index.html                   # viewer (with --github-pages)
 ```
 
-> **See it in action:** This repository's own docs are checked in under [`./docs/`](./docs/) — open [`./docs/index.html`](./docs/index.html) in a browser for the interactive viewer, or start from [`./docs/overview.md`](./docs/overview.md).
+This repository's own output is checked in under [`./docs/`](./docs/).
 
----
+## Benchmark results
 
-## Experimental Results
+Evaluated on [CodeWikiBench](https://github.com/FSoft-AI4Code/CodeWikiBench):
+seven repositories, 486 rubric requirements, the same LLM judge for every
+system. Scores are weighted rubric scores from 0 to 100. DeepWiki and
+CodeWiki 1.0 were re-run under the same setting as 2.0 (September 2026), so
+the numbers differ from the ones in the paper.
 
-CodeWiki has been evaluated on **CodeWikiBench**, the first benchmark specifically designed for repository-level documentation quality assessment.
+| Repository | Language | LoC | DeepWiki | CodeWiki 1.0 | CodeWiki 2.0 | 2.0 vs 1.0 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| OpenHands | Python | 229,909 | 74.12 | 83.31 | **83.53** | +0.22 |
+| svelte | JavaScript | 124,576 | 69.83 | 73.21 | **80.09** | +6.88 |
+| puppeteer | TypeScript | 136,302 | 65.57 | 84.16 | **85.04** | +0.88 |
+| ml-agents | C# | 86,106 | 75.74 | 80.92 | **89.35** | +8.43 |
+| logstash | Java | 117,485 | 56.31 | 59.42 | **77.85** | +18.43 |
+| Wazuh | C | 1,446,730 | 69.91 | 65.38 | **88.14** | +22.76 |
+| Electron | C++ | 184,234 | 43.92 | 42.12 | **71.59** | +29.47 |
+| **Average** | | | 65.06 | 69.79 | **82.23** | **+12.44** |
 
-### Performance by Language Category
+The gain is largest where the 1.0 graph missed the most structure (C, C++,
+Java, C#) and near zero where the analyzers did not change (Python,
+JavaScript, TypeScript). Artifacts lift the build and testing topics, which
+1.0 could not see at all.
 
-| Language Category | CodeWiki (Sonnet-4) | DeepWiki | Improvement |
-|-------------------|---------------------|----------|-------------|
-| High-Level (Python, JS, TS) | **79.14%** | 68.67% | **+10.47%** |
-| Managed (C#, Java) | **68.84%** | 64.80% | **+4.04%** |
-| Systems (C, C++) | 53.24% | 56.39% | -3.15% |
-| **Overall Average** | **68.79%** | **64.06%** | **+4.73%** |
+| Topic | Requirements | DeepWiki | CodeWiki 1.0 | CodeWiki 2.0 |
+| --- | ---: | ---: | ---: | ---: |
+| Architecture | 128 | 72.95 | 78.02 | **82.00** |
+| Functionality | 211 | 61.62 | 70.46 | **88.65** |
+| Operations | 63 | 67.71 | **78.24** | 78.10 |
+| Build and deployment | 27 | 62.84 | 28.16 | **71.90** |
+| Security | 29 | 48.73 | 64.91 | **83.20** |
+| Testing | 12 | 61.43 | 41.93 | **63.25** |
+| Performance | 16 | 43.33 | 49.06 | **70.90** |
 
-### Results on Representative Repositories
+<p align="center">
+  <img src="./img/benchmark-2.0.png" alt="Graph growth and score by stage" width="900"/>
+</p>
 
-| Repository | Language | LOC | CodeWiki-Sonnet-4 | DeepWiki | Improvement |
-|------------|----------|-----|-------------------|----------|-------------|
-| All-Hands-AI--OpenHands | Python | 229K | **82.45%** | 73.04% | **+9.41%** |
-| puppeteer--puppeteer | TypeScript | 136K | **83.00%** | 64.46% | **+18.54%** |
-| sveltejs--svelte | JavaScript | 125K | **71.96%** | 68.51% | **+3.45%** |
-| Unity-Technologies--ml-agents | C# | 86K | **79.78%** | 74.80% | **+4.98%** |
-| elastic--logstash | Java | 117K | **57.90%** | 54.80% | **+3.10%** |
+<p align="center"><em>
+(a) how much the 2.0 code graph grew over 1.0; (b) nodes and edges added by artifacts;
+(c) score by stage. "Conference version" is CodeWiki 1.0, "C1 + C2" is CodeWiki 2.0.
+</em></p>
 
-**View comprehensive results:** See [paper](https://arxiv.org/abs/2510.24428) for complete evaluation on 21 repositories spanning all supported languages.
-
----
-
-## How It Works
-
-### Architecture Overview
-
-CodeWiki employs a three-stage process for comprehensive documentation generation:
-
-1. **Hierarchical Decomposition**: Uses dynamic programming-inspired algorithms to partition repositories into coherent modules while preserving architectural context across multiple granularity levels.
-
-2. **Recursive Multi-Agent Processing**: Implements adaptive multi-agent processing with dynamic task delegation, allowing the system to handle complex modules at scale while maintaining quality.
-
-3. **Multi-Modal Synthesis**: Integrates textual descriptions with visual artifacts including architecture diagrams, data-flow representations, and sequence diagrams for comprehensive understanding.
-
-### Data Flow
-
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Codebase      │───▶│  Hierarchical    │───▶│  Multi-Agent    │
-│   Analysis      │    │  Decomposition   │    │  Processing     │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-                                │                        │
-                                ▼                        ▼
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Visual        │◀───│  Multi-Modal     │◀───│  Structured     │
-│   Artifacts     │    │  Synthesis       │    │  Content        │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-```
-
----
 
 ## Requirements
 
-- **Python 3.12+**
-- **Node.js** (for Mermaid diagram validation)
-- **LLM API access** (Anthropic Claude, OpenAI, Azure OpenAI, AWS Bedrock)
-- **Git** (for branch creation features)
+- Python 3.12+
+- Node.js and npm at install time (a dependency builds against them)
+- Git
+- One of: an LLM API key, a Claude Code or Codex subscription, or an
+  MCP-capable AI IDE
 
----
+## Guides
 
-## Additional Resources
-
-### Documentation & Guides
-- **[MCP Server](codewiki/mcp/)** - Model Context Protocol server for IDE integrations
-- **[Docker Deployment](docker/DOCKER_README.md)** - Containerized deployment instructions
-- **[Development Guide](DEVELOPMENT.md)** - Project structure, architecture, and contributing guidelines
-- **[CodeWikiBench](https://github.com/FSoft-AI4Code/CodeWikiBench)** - Repository-level documentation benchmark
-- **[Live Demo](https://fsoft-ai4code.github.io/codewiki-demo/)** - Interactive demo and examples
-
-### Academic Resources
-- **[Paper](https://arxiv.org/abs/2510.24428)** - Full research paper with detailed methodology and results
-- **[Citation](#citation)** - How to cite CodeWiki in your research
-
----
+| | |
+| --- | --- |
+| [CLI reference](./guides/cli-reference.md) | every command and flag |
+| [Providers and models](./guides/providers.md) | API keys, Atlas Cloud, Azure, Bedrock, subscription mode |
+| [Artifact-aware generation](./guides/artifact-aware-generation.md) | what gets documented beyond code, and how to tune it |
+| [Incremental updates](./guides/incremental-updates.md) | how `--update` works, thresholds, the update record |
+| [MCP / IDE-driven mode](./guides/mcp-ide-mode.md) | Cursor, Claude Desktop, Claude Code, CodeBuddy |
+| [Development guide](./guides/development.md) | layout, pipeline, adding a language, tests, releasing |
+| [Docker setup](./guides/docker.md) | the web application in a container |
+| [CodeWikiBench](https://github.com/FSoft-AI4Code/CodeWikiBench) | the benchmark |
+| [Live demo](https://fsoft-ai4code.github.io/codewiki-demo/) | generated documentation examples |
 
 ## Citation
 
+CodeWiki was introduced in *CodeWiki: Evaluating AI's Ability to Generate
+Holistic Documentation for Large-Scale Codebases*, published in
+[Findings of ACL 2026](https://aclanthology.org/2026.findings-acl.288/).
 If you use CodeWiki in your research, please cite:
 
 ```bibtex
-@misc{hoang2025codewikievaluatingaisability,
-      title={CodeWiki: Evaluating AI's Ability to Generate Holistic Documentation for Large-Scale Codebases},
-      author={Anh Nguyen Hoang and Minh Le-Anh and Bach Le and Nghi D. Q. Bui},
-      year={2025},
-      eprint={2510.24428},
-      archivePrefix={arXiv},
-      primaryClass={cs.SE},
-      url={https://arxiv.org/abs/2510.24428},
+@inproceedings{hoang-etal-2026-codewiki,
+    title = "{C}ode{W}iki: Evaluating {AI}{'}s Ability to Generate Holistic Documentation for Large-Scale Codebases",
+    author = "Hoang, Anh Nguyen and Le-Anh, Minh and Le, Bach and Bui, Nghi D. Q.",
+    booktitle = "Findings of the {A}ssociation for {C}omputational {L}inguistics: {ACL} 2026",
+    month = jul,
+    year = "2026",
+    address = "San Diego, California, United States",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2026.findings-acl.288/",
+    doi = "10.18653/v1/2026.findings-acl.288",
+    pages = "5812--5827",
 }
 ```
 
----
-
-## Star History
+## Star history
 
 <p align="center">
   <a href="https://star-history.dera.page/#FSoft-AI4Code/CodeWiki&type=Date">
@@ -461,8 +265,6 @@ If you use CodeWiki in your research, please cite:
   </a>
 </p>
 
----
-
 ## Sponsors
 
 CodeWiki is proudly sponsored by **FPT Software**.
@@ -473,8 +275,6 @@ CodeWiki is proudly sponsored by **FPT Software**.
   </a>
 </p>
 
----
-
 ## License
 
-This project is licensed under the MIT License.
+MIT. See [LICENSE](./LICENSE).
