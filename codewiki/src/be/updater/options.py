@@ -29,6 +29,11 @@ class UpdateOptions:
 
     # Step 3: change report
     k_hop: int = 1  # dependency hops followed for Up
+    # Step 3a: ownership closure. A changed component that no leaf tracks gets
+    # an effective owner by the placement rules of Step 2 (same file, same
+    # directory, neighbour majority, routing agent) and enters that leaf's Own.
+    # Activation only: the tree is not changed.
+    use_ownership_closure: bool = True
 
     # Step 4: fallback
     tau_full: float = 0.5  # active leaves / all leaves
@@ -57,6 +62,7 @@ class UpdateOptions:
             opts.agent_may_patch_leaf = False
             opts.agent_patches_related = False
             opts.use_stale_scan = False
+            opts.use_ownership_closure = False
         elif rung == "2":
             opts.agent_may_patch_leaf = False
         elif rung == "3b":

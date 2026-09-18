@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -22,16 +23,29 @@ from codewiki.src.be.updater.record import RECORD_FILENAME
 class FakeBackend:
     """Writes pages the way the real agents do (through the editor tool)."""
 
-    def __init__(self, own_verdict="patch"):
+    def __init__(self, own_verdict="patch", route_to=None):
         self.own_verdict = own_verdict
+        self.route_to = route_to  # leaf name the routing agent answers, None = untracked
         self.update_calls = []
         self.module_calls = []
         self.complete_calls = []
+        self.routing_prompts = []
         self.last_usage = None
 
     def complete(self, prompt, *, model=None):
         self.complete_calls.append(prompt[:80])
         self.last_usage = {"prompt_tokens": 10, "completion_tokens": 5}
+        if "<CHANGED_UNTRACKED>" in prompt or "<ORPHANS>" in prompt:
+            self.routing_prompts.append(prompt)
+            ids = re.findall(r'<ORPHAN id="([^"]+)"', prompt)
+            if self.route_to:
+                decisions = [
+                    {"component_id": c, "action": "place", "leaf": self.route_to, "reason": "fake"}
+                    for c in ids
+                ]
+            else:
+                decisions = [{"component_id": c, "action": "untracked"} for c in ids]
+            return "```json\n" + json.dumps({"decisions": decisions}) + "\n```"
         return "<OVERVIEW>regenerated overview</OVERVIEW>"
 
     async def run_module_agent(
@@ -228,3 +242,78 @@ def test_whole_repo_mode(tmp_path):
     assert [a["page"] for a in rec.active] == ["overview"]
     assert json.load(open(docs / "module_tree.json")) == {}
     assert backend.update_calls and backend.update_calls[0][0] == "overview"
+
+
+# ------------------------------------------------------------ ownership closure
+HELPER = "src/misc/util.py::helper"  # fresh dir, no tracked neighbour: rules 1-3 fail
+
+
+def _graphs_with_untracked_helper():
+    from updater_toy import node
+
+    old_g = graph_r1()
+    old_g[HELPER] = node(HELPER, "function", "def helper():\n    return 1\n")
+    new_g = {k: v.model_copy(deep=True) for k, v in old_g.items()}
+    new_g[HELPER] = node(HELPER, "function", "def helper():\n    return 2\n")
+    return old_g, new_g
+
+
+def _run_untracked(tmp_path, backend, opts):
+    docs, config, prev = _setup(tmp_path)
+    old_g, new_g = _graphs_with_untracked_helper()
+    save_graph(old_g, prev)
+    gen = _generator(config, backend)
+    upd = IncrementalUpdater(config, backend, gen, opts)
+    tracked = sorted(set(old_g) - {HELPER})
+    rec = asyncio.run(upd.run(prev, new_g, tracked, {"old_commit": "old", "new_commit": "new"}))
+    return docs, rec
+
+
+def test_ownership_closure_rule_4_activates_leaf(tmp_path):
+    backend = FakeBackend(route_to="api")
+    docs, rec = _run_untracked(tmp_path, backend, UpdateOptions())
+    assert rec.outcome == "incremental"
+    assert rec.diff["counts"]["body"] == 1
+    # one routing call, in ownership mode (no "create" offered)
+    assert len(backend.routing_prompts) == 1
+    assert "<CHANGED_UNTRACKED>" in backend.routing_prompts[0]
+    assert "create" not in backend.routing_prompts[0].split("For each component")[1]
+    assert rec.ownership == [
+        {
+            "component_id": HELPER,
+            "rule": "4:routing_agent",
+            "leaf_path": ["core", "api"],
+            "detail": "fake",
+            "deleted": False,
+        }
+    ]
+    routing_calls = [c for c in rec.calls if c["kind"] == "routing"]
+    assert len(routing_calls) == 1 and routing_calls[0]["target"] == "1 changed untracked"
+    # the leaf is active, its report shows the adopted id, the agent ran and patched
+    assert [a["leaf"] for a in rec.active] == ["core/api"]
+    assert rec.reports["core/api"]["own"] == [HELPER]
+    assert rec.reports["core/api"]["adopted"] == {HELPER: "4:routing_agent"}
+    assert backend.update_calls and backend.update_calls[0][0] == "api"
+    assert "<!-- patched for api -->" in (docs / "api.md").read_text()
+    # decision 2: the tree on disk is unchanged
+    assert json.load(open(docs / "module_tree.json")) == tree_r1()
+    assert rec.summary()["n_adopted"] == 1 and rec.summary()["n_adopted_by_agent"] == 1
+
+
+def test_ownership_closure_agent_leaves_untracked(tmp_path):
+    backend = FakeBackend(route_to=None)
+    docs, rec = _run_untracked(tmp_path, backend, UpdateOptions())
+    assert rec.outcome == "incremental"
+    assert len(backend.routing_prompts) == 1
+    assert rec.ownership == [] and rec.active == [] and backend.update_calls == []
+    assert (docs / "api.md").read_text().startswith("# api\n\nRoutes call")
+
+
+def test_ownership_closure_switched_off(tmp_path):
+    backend = FakeBackend(route_to="api")
+    docs, rec = _run_untracked(tmp_path, backend, UpdateOptions(use_ownership_closure=False))
+    assert backend.routing_prompts == [] and rec.ownership == [] and rec.active == []
+    (tmp_path / "r1").mkdir()
+    backend = FakeBackend(route_to="api")
+    docs, rec = _run_untracked(tmp_path / "r1", backend, UpdateOptions.from_rung(1))
+    assert backend.routing_prompts == [] and rec.ownership == [] and rec.active == []

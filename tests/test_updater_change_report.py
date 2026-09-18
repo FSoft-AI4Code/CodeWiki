@@ -162,20 +162,120 @@ def test_untracked_method_attaches_to_its_class_leaf(tmp_path):
     assert reports[("api",)].context == []
 
 
-def test_context_alone_does_not_activate(tmp_path):
-    """An untracked free function next to a leaf changed: the leaf gets it as
-    context but is not active for that reason alone."""
+def _with_untracked_helper(helper: str, deps_of_handle=(REFRESH,), helper_deps=()):
+    """Toy graphs where only an untracked free function ``helper`` changes (body only)."""
     from updater_toy import node
 
-    helper = "src/api/util.py::helper"
     old_g = graph_r1()
-    old_g[helper] = node(helper, "function", "def helper():\n    return 1\n")
-    old_g[HANDLE] = old_g[HANDLE].model_copy(update={"depends_on": {REFRESH, helper}})
+    old_g[helper] = node(helper, "function", "def helper():\n    return 1\n", deps=helper_deps)
+    old_g[HANDLE] = old_g[HANDLE].model_copy(update={"depends_on": set(deps_of_handle)})
     new_g = {k: v.model_copy(deep=True) for k, v in old_g.items()}
-    new_g[helper] = node(helper, "function", "def helper():\n    return 2\n")
-    opts = UpdateOptions()
+    new_g[helper] = node(helper, "function", "def helper():\n    return 2\n", deps=helper_deps)
+    return old_g, new_g
+
+
+def _reports_with_closure(old_g, new_g, opts, router=None):
+    from codewiki.src.be.updater.ownership import close_ownership
+
     d = diff_graphs(old_g, new_g, opts)
     r = repair_tree(tree_r1(), d, new_g, tracked_r2() - {OAUTH}, opts)
-    reports = build_reports(d, tree_r1(), r.tree, old_g, new_g, None, r, opts)
+    adopted = close_ownership(d, tree_r1(), r.tree, old_g, new_g, opts, router, r)
+    reports = build_reports(d, tree_r1(), r.tree, old_g, new_g, None, r, opts, adopted=adopted)
+    return adopted, reports
+
+
+def test_context_alone_does_not_activate(tmp_path):
+    """Without the closure an untracked free function next to a leaf is context
+    only. With it (default) rule 2, same directory with one leaf, adopts it into
+    core/api's Own and the leaf is active."""
+    helper = "src/api/util.py::helper"
+    old_g, new_g = _with_untracked_helper(helper, deps_of_handle=(REFRESH, helper))
+
+    off = UpdateOptions(use_ownership_closure=False)
+    adopted, reports = _reports_with_closure(old_g, new_g, off)
+    assert adopted == {}
     assert reports[("core", "api")].context == [helper]
-    assert active_set(reports) == []
+    assert reports[("core", "api")].own == [] and active_set(reports) == []
+
+    on = UpdateOptions()
+    adopted, reports = _reports_with_closure(old_g, new_g, on)
+    assert set(adopted) == {helper} and adopted[helper].rule == "2:same_dir"
+    assert adopted[helper].leaf_path == ("core", "api") and adopted[helper].deleted is False
+    rep = reports[("core", "api")]
+    assert rep.own == [helper] and rep.adopted == {helper: "2:same_dir"}
+    assert rep.context == []  # adopted ids are owned now, not context
+    assert active_set(reports) == [("core", "api")]
+    assert rep.to_dict()["adopted"] == {helper: "2:same_dir"}
+
+
+def test_closure_rule_1_same_file():
+    helper = "src/api/routes.py::helper"  # same file as HANDLE
+    old_g, new_g = _with_untracked_helper(helper)
+    adopted, reports = _reports_with_closure(old_g, new_g, UpdateOptions())
+    assert adopted[helper].rule == "1:same_file" and adopted[helper].leaf_path == ("core", "api")
+    assert reports[("core", "api")].own == [helper]
+
+
+def test_closure_rule_3_neighbour_majority():
+    helper = "src/misc/util.py::helper"  # fresh dir, only neighbour is HANDLE
+    old_g, new_g = _with_untracked_helper(helper, deps_of_handle=(REFRESH, helper))
+    adopted, reports = _reports_with_closure(old_g, new_g, UpdateOptions())
+    assert adopted[helper].rule == "3:neighbor_majority"
+    assert adopted[helper].leaf_path == ("core", "api")
+    assert active_set(reports) == [("core", "api")]
+
+
+def test_closure_unplaced_stays_context():
+    """Fresh dir, no tracked neighbour, no routing agent: nothing adopts it and
+    no leaf is active; the change is recorded nowhere but the diff."""
+    helper = "src/misc/util.py::helper"
+    old_g, new_g = _with_untracked_helper(helper)
+    adopted, reports = _reports_with_closure(old_g, new_g, UpdateOptions())
+    assert adopted == {} and active_set(reports) == []
+    assert all(r.context == [] for r in reports.values())
+
+
+def test_closure_rule_4_via_router():
+    """The routing callable is asked for what rules 1-3 cannot place, with
+    purpose=ownership; a placed decision adopts, create/untracked do not."""
+    from codewiki.src.be.updater.tree_repair import RULE_AGENT, RoutingDecision
+
+    helper = "src/misc/util.py::helper"
+    other = "src/misc/other.py::other"
+    old_g, new_g = _with_untracked_helper(helper)
+    from updater_toy import node
+
+    old_g[other] = node(other, "function", "def other():\n    return 1\n")
+    new_g[other] = node(other, "function", "def other():\n    return 2\n")
+    seen = {}
+
+    def router(orphans, context):
+        seen["orphans"] = list(orphans)
+        seen["purpose"] = context.get("purpose")
+        return [
+            RoutingDecision(helper, RULE_AGENT, ("core", "auth"), detail="auth page covers it"),
+            RoutingDecision(other, RULE_AGENT, ("brand", "new"), new_leaf=True),
+        ]
+
+    adopted, reports = _reports_with_closure(old_g, new_g, UpdateOptions(), router)
+    assert set(seen["orphans"]) == {helper, other} and seen["purpose"] == "ownership"
+    assert set(adopted) == {helper} and adopted[helper].rule == RULE_AGENT
+    assert reports[("core", "auth")].own == [helper]
+    assert reports[("core", "auth")].adopted == {helper: RULE_AGENT}
+    assert active_set(reports) == [("core", "auth")]
+    # rung 1 never asks
+    adopted, reports = _reports_with_closure(old_g, new_g, UpdateOptions.from_rung(1), router)
+    assert adopted == {} and active_set(reports) == []
+
+
+def test_closure_deleted_untracked_uses_old_graph():
+    from updater_toy import node
+
+    helper = "src/api/routes.py::helper"
+    old_g = graph_r1()
+    old_g[helper] = node(helper, "function", "def helper():\n    return 1\n")
+    new_g = graph_r1()
+    adopted, reports = _reports_with_closure(old_g, new_g, UpdateOptions())
+    assert adopted[helper].deleted is True and adopted[helper].rule == "1:same_file"
+    assert reports[("core", "api")].own == [helper]
+    assert adopted[helper].to_dict()["deleted"] is True

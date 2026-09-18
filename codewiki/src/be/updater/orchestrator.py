@@ -25,6 +25,7 @@ from codewiki.src.be.updater.graph_diff import GraphDiff, diff_graphs
 from codewiki.src.be.updater.graph_store import load_graph
 from codewiki.src.be.updater.leaf_agent import LeafAgentRunner
 from codewiki.src.be.updater.options import UpdateOptions
+from codewiki.src.be.updater.ownership import close_ownership
 from codewiki.src.be.updater.record import (
     OUTCOME_DETECTOR_FAILURE,
     OUTCOME_FULL_FALLBACK,
@@ -266,6 +267,14 @@ class IncrementalUpdater:
         rec.repair = repair.to_dict()
         self._deleted_nodes = list(repair.deleted_nodes)
 
+        # ---- Step 3a: effective owners for changed components no leaf tracks
+        adopted = {}
+        if not self.whole_repo:
+            adopted = close_ownership(
+                diff, old_tree, new_tree, old_graph, new_graph, self.opts, router, repair
+            )
+            rec.ownership = [a.to_dict() for a in adopted.values()]
+
         # ---- Step 3: reports
         reports = build_reports(
             diff,
@@ -277,6 +286,7 @@ class IncrementalUpdater:
             repair,
             self.opts,
             reclustered,
+            adopted,
         )
         active = active_set(reports)
         rec.reports = {"/".join(p): r.to_dict() for p, r in reports.items() if p in active}

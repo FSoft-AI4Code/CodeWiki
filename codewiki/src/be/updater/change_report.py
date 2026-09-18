@@ -26,6 +26,9 @@ class LeafReport:
     leaf_path: tuple[str, ...]
     mode: str = MODE_EDIT
     own: list[str] = field(default_factory=list)
+    # Own entries this leaf does not list: changed components no leaf tracks,
+    # given to this leaf as effective owner (Step 3a). id -> placement rule.
+    adopted: dict[str, str] = field(default_factory=dict)
     up: list[str] = field(default_factory=list)
     context: list[str] = field(default_factory=list)  # untracked changes next to this leaf
     refch: list[str] = field(default_factory=list)
@@ -88,11 +91,24 @@ def build_reports(
     repair: RepairResult,
     opts: UpdateOptions,
     reclustered: set[tuple[str, ...]] | None = None,
+    adopted: dict[str, Any] | None = None,
 ) -> dict[tuple[str, ...], LeafReport]:
-    """Build ``Report(l)`` for every unit of the new tree plus deleted leaves."""
+    """Build ``Report(l)`` for every unit of the new tree plus deleted leaves.
+
+    ``adopted`` (Step 3a, ``ownership.close_ownership``) maps a changed
+    component that no leaf tracks to its effective owner; it enters that
+    leaf's Own exactly like a tracked component."""
     reclustered = reclustered or set()
+    adopted = adopted or {}
     old_owner = T.owner_map(old_tree)
     new_owner = T.owner_map(new_tree)
+
+    def owner_of(cid: str) -> tuple[str, ...] | None:
+        o = T.resolve_owner(new_owner, cid) or T.resolve_owner(old_owner, cid)
+        if o is None and cid in adopted:
+            o = tuple(adopted[cid].leaf_path)
+        return o
+
     old_units = set(T.unit_paths(old_tree))
     new_units = T.unit_paths(new_tree)
     reports: dict[tuple[str, ...], LeafReport] = {p: LeafReport(leaf_path=p) for p in new_units}
@@ -109,9 +125,13 @@ def build_reports(
             o = T.resolve_owner(old_owner, rec.old_id)
             if o is not None:
                 owners.add(o)
+        if not owners and cid in adopted:
+            owners.add(tuple(adopted[cid].leaf_path))
         for p in owners:
             if p in reports and cid not in reports[p].own:
                 reports[p].own.append(cid)
+                if cid in adopted:
+                    reports[p].adopted[cid] = adopted[cid].rule
 
     # Up: interface / deleted / renamed components used by this leaf's code.
     contract_moved = set(diff.interface) | set(diff.deleted) | set(diff.renamed.values())
@@ -135,20 +155,18 @@ def build_reports(
                 p = T.resolve_owner(new_owner, user) or T.resolve_owner(old_owner, user)
                 if p is None or p not in reports:
                     continue
-                own_leaf = (
-                    T.resolve_owner(new_owner, cid)
-                    or T.resolve_owner(old_owner, cid)
-                    or T.resolve_owner(old_owner, old_ids_of_renames.get(cid, ""))
+                own_leaf = owner_of(cid) or T.resolve_owner(
+                    old_owner, old_ids_of_renames.get(cid, "")
                 )
                 if p == own_leaf:
                     continue
                 if cid not in reports[p].up:
                     reports[p].up.append(cid)
 
-    # Untracked changed components (no class to attach to): context for the
-    # leaves owning their neighbours.
+    # Untracked changed components that the closure could not place either:
+    # context for the leaves owning their neighbours.
     for cid in diff.changed_ids:
-        if T.resolve_owner(new_owner, cid) or T.resolve_owner(old_owner, cid):
+        if owner_of(cid) is not None:
             continue
         neighbours = _out_edges(cid, old_graph, new_graph)
         for other, node in new_graph.items():

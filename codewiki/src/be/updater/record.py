@@ -46,6 +46,8 @@ class UpdateRecord:
     repair: dict[str, Any] = field(default_factory=dict)
     reclustered: list[list[str]] = field(default_factory=list)
     reports: dict[str, Any] = field(default_factory=dict)
+    # Step 3a: effective owners given to changed components no leaf tracks
+    ownership: list[dict[str, Any]] = field(default_factory=list)
     active: list[dict[str, Any]] = field(default_factory=list)  # {leaf, mode, order}
     write_sets: dict[str, list[str]] = field(default_factory=dict)
     fallback: dict[str, Any] = field(default_factory=dict)
@@ -78,6 +80,10 @@ class UpdateRecord:
             "revision": self.revision,
             "diff_counts": self.diff.get("counts", {}),
             "n_active": len(self.active),
+            "n_adopted": len(self.ownership),
+            "n_adopted_by_agent": sum(
+                1 for a in self.ownership if str(a.get("rule", "")).startswith("4:")
+            ),
             "fallback": self.fallback,
             "n_calls": len(self.calls),
             "usage_total": usage_total,

@@ -32,7 +32,9 @@ bring the affected documentation pages up to date with the smallest correct edit
    the report does not touch.
 3. Per page role:
    - the LEAF PAGE ({leaf_name}.md): update sections, tables and diagrams that describe changed
-     components; add new components; remove deleted ones. If the change is so large that the
+     components; add new components; remove deleted ones. An OWN entry marked "not listed by
+     this module" is a nearby component the page never lists: fix only what its change makes
+     wrong in the page's description, do not add a section for it. If the change is so large that the
      page is better rebuilt from scratch, do NOT rebuild it yourself: return verdict "rewrite"
      for this page and leave it untouched (the normal module agent will regenerate it).
    - an ANCESTOR page: change only where it summarizes this leaf or lists its children.
@@ -138,6 +140,32 @@ Return exactly one fenced JSON block:
 ```
 """.strip()
 
+OWNERSHIP_ROUTING_USER_PROMPT = """
+The repository changed. The components below CHANGED, but no wiki module lists them, and the
+rules (same file, same directory, majority of graph neighbours) found no module for them. The
+wiki is not restructured for this; the question is only which module's page answers for each
+change, so that page can be checked and, if needed, corrected.
+
+<MODULE_TREE>
+{module_tree}
+</MODULE_TREE>
+
+<CHANGED_UNTRACKED>
+{orphans}
+</CHANGED_UNTRACKED>
+
+For each component choose exactly one action:
+- "place": the leaf module whose page most likely describes the behaviour this component
+  implements ("leaf": exact module name from the tree).
+- "untracked": no page describes it (tests, throwaway scripts, trivial helpers).
+
+Return exactly one fenced JSON block:
+```json
+{{"decisions": [{{"component_id": "...", "action": "place|untracked", "leaf": "...",
+                 "reason": "<one line>"}}]}}
+```
+""".strip()
+
 STALE_FIX_SYSTEM_PROMPT = """
 You fix stale references in ONE documentation page after a code change. Make the smallest edits
 that remove or correct the stale items; everything else on the page stays word for word.
@@ -185,7 +213,16 @@ def render_report(report: LeafReport, diff: GraphDiff) -> str:
     parts: list[str] = []
     if report.own:
         parts.append("## OWN — components of this leaf that changed")
-        parts += [render_record(diff, c) for c in report.own]
+        for c in report.own:
+            block = render_record(diff, c)
+            rule = report.adopted.get(c)
+            if rule:
+                block += (
+                    f"\n(not listed by this module; assigned to it by rule {rule} as the nearest "
+                    "documented module. The page may describe this behaviour without naming the "
+                    "component: check whether the description is still true. no-op is fine.)"
+                )
+            parts.append(block)
     if report.up:
         parts.append(
             "## UP — components outside this leaf that its code uses and whose contract moved"
@@ -310,6 +347,7 @@ def format_routing_prompt(
     graph: dict[str, Node],
     neighbours: dict[str, list[str]],
     max_code_chars: int = 6_000,
+    allow_create: bool = True,
 ) -> str:
     blocks = []
     for cid in orphans:
@@ -321,7 +359,8 @@ def format_routing_prompt(
             f"neighbour modules in the code graph: {nb if nb else 'none'}\n"
             f"```{_fence_language(node.relative_path)}\n{code}\n```\n</ORPHAN>"
         )
-    return ROUTING_USER_PROMPT.format(module_tree=tree_outline, orphans="\n".join(blocks))
+    template = ROUTING_USER_PROMPT if allow_create else OWNERSHIP_ROUTING_USER_PROMPT
+    return template.format(module_tree=tree_outline, orphans="\n".join(blocks))
 
 
 def format_stale_prompt(page: str, items: list[dict[str, Any]]) -> str:

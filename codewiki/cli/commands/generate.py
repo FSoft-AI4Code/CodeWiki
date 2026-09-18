@@ -374,6 +374,15 @@ def _invalidate_affected_modules(output_dir: Path, changed_files: list[str], log
     help="Cap on one component diff in a report (default 8000).",
 )
 @click.option(
+    "--no-ownership-closure",
+    is_flag=True,
+    default=False,
+    help=(
+        "Do not give changed components that no module tracks an effective owner by the "
+        "placement rules; such changes then reach no page (default: give one)."
+    ),
+)
+@click.option(
     "--compare-to",
     type=str,
     default=None,
@@ -412,6 +421,7 @@ def generate_command(
     tau_tree: float | None = None,
     k_hop: int | None = None,
     max_diff_tokens: int | None = None,
+    no_ownership_closure: bool = False,
 ):
     """
     Generate comprehensive documentation for a code repository.
@@ -738,6 +748,7 @@ def generate_command(
                     "tau_tree": tau_tree,
                     "k_hop": k_hop,
                     "max_diff_tokens": max_diff_tokens,
+                    "use_ownership_closure": False if no_ownership_closure else None,
                 },
             },
             verbose=verbose,
