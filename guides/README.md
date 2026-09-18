@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../img/vertical-logo.png" alt="CodeWiki" width="220">
+</p>
+
 # Guides
 
 Hand-written guides for CodeWiki 2.0. The `docs/` folder next to this one is

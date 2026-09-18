@@ -10,8 +10,12 @@
     <!-- Open Graph / Social Media -->
     <meta property="og:type" content="website">
     <meta property="og:title" content="CodeWiki - Automated Repository-Level Documentation">
-    <meta property="og:description" content="The first open-source framework for holistic documentation generation across 7 programming languages">
+    <meta property="og:description" content="Open-source, AI-generated repository documentation across 11 programming languages">
     <meta property="og:url" content="https://fsoft-ai4code.github.io/CodeWiki/">
+    <meta property="og:image" content="https://fsoft-ai4code.github.io/CodeWiki/img/black-background-logo.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://fsoft-ai4code.github.io/CodeWiki/img/black-background-logo.png">
+    <link rel="icon" type="image/png" href="./img/icon.png">
     
     <title>CodeWiki - Automated Repository-Level Documentation at Scale</title>
     
@@ -411,12 +415,422 @@
             color: var(--success-color);
         }
     </style>
+    <style>
+        :root {
+            --primary-color: #ff7a00;
+            --secondary-color: #e85d00;
+            --accent-color: #ff9a2e;
+            --dark-bg: #071526;
+            --light-bg: #f4f6f8;
+            --text-dark: #10233e;
+            --text-light: #5c6878;
+            --border-color: #dce2e9;
+            --success-color: #16875b;
+            --warning-color: #ff7a00;
+        }
+
+        html { scroll-behavior: smooth; overflow-x: hidden; }
+
+        body {
+            font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: #fbfcfd;
+            color: var(--text-dark);
+            overflow-x: hidden;
+        }
+
+        nav {
+            padding: 0.8rem 2rem;
+            background: #071526;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: none;
+            backdrop-filter: blur(18px);
+        }
+
+        .nav-container { max-width: 1280px; }
+
+        .nav-brand {
+            display: inline-flex;
+            align-items: center;
+            width: 176px;
+            height: 48px;
+        }
+
+        .nav-brand img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .nav-links { gap: 1.6rem; }
+
+        .nav-links a {
+            color: #dce5ef;
+            font-size: 0.9rem;
+            letter-spacing: 0.01em;
+        }
+
+        .nav-links a:hover { color: #ff9a2e; }
+
+        .hero {
+            position: relative;
+            isolation: isolate;
+            overflow: hidden;
+            min-height: 650px;
+            padding: 6.5rem 2rem 5.5rem;
+            text-align: left;
+            background:
+                radial-gradient(circle at 78% 48%, rgba(255, 122, 0, 0.18), transparent 24rem),
+                radial-gradient(circle at 8% 15%, rgba(35, 78, 132, 0.35), transparent 28rem),
+                #071526;
+        }
+
+        .hero::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            z-index: -1;
+            opacity: 0.35;
+            background-image:
+                linear-gradient(rgba(255,255,255,.055) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,.055) 1px, transparent 1px);
+            background-size: 64px 64px;
+            mask-image: linear-gradient(to bottom, black, transparent 92%);
+        }
+
+        .hero-inner {
+            width: min(1280px, 100%);
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: minmax(0, 1.2fr) minmax(320px, .8fr);
+            gap: 4rem;
+            align-items: center;
+        }
+
+        .hero-copy { max-width: 760px; }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6rem;
+            margin-bottom: 1.5rem;
+            color: #ffad55;
+            font-size: 0.76rem;
+            font-weight: 800;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+        }
+
+        .eyebrow::before {
+            content: "";
+            width: 24px;
+            height: 2px;
+            background: #ff7a00;
+        }
+
+        .hero h1 {
+            max-width: 760px;
+            margin: 0 0 1.35rem;
+            font-size: clamp(3rem, 6vw, 5.8rem);
+            line-height: 0.98;
+            letter-spacing: -0.055em;
+            text-wrap: balance;
+        }
+
+        .hero h1 span {
+            color: #ff8311;
+            text-shadow: 0 0 34px rgba(255, 122, 0, 0.22);
+        }
+
+        .hero p {
+            max-width: 660px;
+            margin: 0 0 2rem;
+            color: #bdc9d7;
+            font-size: 1.16rem;
+            line-height: 1.75;
+        }
+
+        .badges {
+            justify-content: flex-start;
+            gap: 0.55rem;
+            margin-bottom: 2rem;
+        }
+
+        .badge {
+            padding: 0.45rem 0.8rem;
+            color: #dfe7f0;
+            background: rgba(255,255,255,.06);
+            border: 1px solid rgba(255,255,255,.1);
+            border-radius: 999px;
+            font-size: 0.78rem;
+        }
+
+        .cta-buttons { justify-content: flex-start; }
+
+        .btn {
+            padding: 0.78rem 1.35rem;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            letter-spacing: 0.01em;
+        }
+
+        .btn-primary {
+            color: #fff;
+            background: linear-gradient(135deg, #ff8a12, #f16600);
+            box-shadow: 0 8px 26px rgba(255, 122, 0, .2);
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 12px 32px rgba(255, 122, 0, .32);
+        }
+
+        .btn-secondary {
+            color: #eef3f8;
+            border-color: rgba(255,255,255,.28);
+            background: rgba(255,255,255,.035);
+        }
+
+        .btn-secondary:hover {
+            color: white;
+            border-color: rgba(255,255,255,.55);
+            background: rgba(255,255,255,.09);
+        }
+
+        .hero-note {
+            margin-top: 1.5rem !important;
+            margin-bottom: 0 !important;
+            font-size: 0.9rem !important;
+            color: #8fa0b4 !important;
+        }
+
+        .hero-note a { color: #ffad55 !important; text-underline-offset: 3px; }
+
+        .hero-visual {
+            position: relative;
+            display: grid;
+            place-items: center;
+            aspect-ratio: 1;
+            max-width: 470px;
+            margin-left: auto;
+        }
+
+        .hero-visual::before,
+        .hero-visual::after {
+            content: "";
+            position: absolute;
+            border: 1px solid rgba(255, 151, 44, .28);
+            border-radius: 50%;
+        }
+
+        .hero-visual::before { inset: 7%; animation: orbit 24s linear infinite; }
+        .hero-visual::after { inset: 22%; border-style: dashed; animation: orbit 18s linear reverse infinite; }
+
+        .hero-mark {
+            position: relative;
+            z-index: 2;
+            width: 56%;
+            filter: drop-shadow(0 26px 42px rgba(0,0,0,.38));
+        }
+
+        .orbit-dot {
+            position: absolute;
+            z-index: 3;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ff8613;
+            box-shadow: 0 0 20px #ff7a00;
+        }
+
+        .orbit-dot.one { top: 7%; left: 50%; }
+        .orbit-dot.two { right: 12%; bottom: 24%; width: 7px; height: 7px; }
+        .orbit-dot.three { left: 18%; bottom: 18%; width: 6px; height: 6px; }
+
+        @keyframes orbit { to { transform: rotate(360deg); } }
+
+        .container {
+            max-width: 1180px;
+            padding: 6rem 2rem;
+        }
+
+        section { margin-bottom: 6rem; }
+
+        h2 {
+            display: block;
+            max-width: 820px;
+            padding: 0;
+            border: 0;
+            color: #0d2038;
+            font-size: clamp(2rem, 4vw, 3rem);
+            letter-spacing: -0.04em;
+            line-height: 1.1;
+        }
+
+        h2::after {
+            content: "";
+            display: block;
+            width: 44px;
+            height: 4px;
+            margin-top: 0.85rem;
+            border-radius: 99px;
+            background: #ff7a00;
+        }
+
+        h3 { color: #142842; }
+
+        .highlight {
+            color: #9b4300;
+            background: #fff0df;
+        }
+
+        .stats-grid { gap: 1rem; margin-top: 2.5rem; }
+
+        .stat-card {
+            position: relative;
+            overflow: hidden;
+            min-height: 170px;
+            padding: 2rem 1.6rem;
+            text-align: left;
+            background: #0b1e35;
+            border: 1px solid #173453;
+            border-radius: 16px;
+            box-shadow: 0 12px 35px rgba(10, 29, 52, .12);
+        }
+
+        .stat-card::after {
+            content: "";
+            position: absolute;
+            right: -34px;
+            bottom: -54px;
+            width: 130px;
+            height: 130px;
+            border: 24px solid rgba(255,122,0,.08);
+            border-radius: 50%;
+        }
+
+        .stat-number { color: #ff8a12; letter-spacing: -0.04em; }
+        .stat-label { color: #c3ceda; font-size: .9rem; line-height: 1.45; }
+
+        .architecture {
+            padding: clamp(1rem, 4vw, 3rem);
+            background: #f1f4f7;
+            border: 1px solid #dfe5eb;
+            border-radius: 20px;
+        }
+
+        .architecture img {
+            border: 1px solid #d8e0e7;
+            border-radius: 12px;
+            box-shadow: 0 24px 55px rgba(11, 30, 53, .12);
+        }
+
+        .features-grid { gap: 1rem; }
+
+        .feature-card {
+            padding: 1.7rem;
+            border: 1px solid #e0e6ec;
+            border-left: 1px solid #e0e6ec;
+            border-radius: 15px;
+            box-shadow: 0 8px 28px rgba(16, 35, 62, .06);
+        }
+
+        .feature-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(255,122,0,.45);
+            box-shadow: 0 18px 38px rgba(16, 35, 62, .11);
+        }
+
+        .feature-icon {
+            display: grid;
+            place-items: center;
+            width: 44px;
+            height: 44px;
+            margin-bottom: 1.1rem;
+            font-size: 1.35rem;
+            background: #fff1e4;
+            border: 1px solid #ffd2aa;
+            border-radius: 12px;
+        }
+
+        .language-tag {
+            border: 1px solid #dde4eb;
+            border-radius: 999px;
+            background: white;
+        }
+
+        table {
+            border: 1px solid #dfe5eb;
+            border-radius: 14px;
+            box-shadow: 0 10px 32px rgba(16, 35, 62, .07);
+        }
+
+        th { background: #102640; }
+        tr:hover { background: #fff8f1; }
+
+        pre {
+            background: #081728;
+            border: 1px solid #183550;
+            border-radius: 12px;
+            box-shadow: 0 16px 35px rgba(7, 21, 38, .13);
+        }
+
+        footer {
+            background: #071526;
+            border-top: 3px solid #ff7a00;
+        }
+
+        .footer-brand {
+            display: block;
+            width: 190px;
+            margin: 0 auto 1.5rem;
+        }
+
+        .footer-links a:hover { color: #ff9a2e; }
+
+        @media (max-width: 920px) {
+            nav { padding-inline: 1rem; }
+            .nav-container { flex-wrap: nowrap; }
+            .nav-links { display: none; }
+            .hero { min-height: auto; padding-top: 5rem; }
+            .hero-inner { grid-template-columns: 1fr; text-align: center; }
+            .hero-copy { width: 100%; min-width: 0; margin: 0 auto; }
+            .eyebrow, .badges, .cta-buttons { justify-content: center; }
+            .hero p { margin-left: auto; margin-right: auto; }
+            .hero-visual { width: min(390px, 90vw); margin: 0 auto; order: -1; }
+        }
+
+        @media (max-width: 640px) {
+            .hero { padding: 3.5rem 1.1rem 4rem; }
+            .hero-inner { gap: 2.5rem; }
+            .hero h1 {
+                max-width: 100%;
+                font-size: clamp(2.35rem, 12vw, 3.2rem);
+                text-wrap: wrap;
+            }
+            .hero p { font-size: 1rem; }
+            .hero-visual { width: min(280px, 80vw); }
+            .container { padding: 4rem 1rem; }
+            section { margin-bottom: 4.5rem; }
+            .features-grid { grid-template-columns: 1fr; }
+            .stats-grid { grid-template-columns: 1fr 1fr; gap: .7rem; }
+            .stat-card { min-height: 150px; padding: 1.35rem; }
+            .stat-number { font-size: 2rem; }
+            table { display: block; overflow-x: auto; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            html { scroll-behavior: auto; }
+            .hero-visual::before,
+            .hero-visual::after { animation: none; }
+        }
+    </style>
 </head>
 <body>
     <!-- Navigation -->
     <nav>
         <div class="nav-container">
-            <a href="#" class="nav-brand">📚 CodeWiki</a>
+            <a href="#" class="nav-brand" aria-label="CodeWiki home">
+                <img src="./img/black-background-logo.png" alt="CodeWiki">
+            </a>
             <ul class="nav-links">
                 <li><a href="#about">About</a></li>
                 <li><a href="#features">Features</a></li>
@@ -431,42 +845,42 @@
 
     <!-- Hero Section -->
     <div class="hero">
-        <h1>CodeWiki 2.0</h1>
-        <p>Repository-level documentation for large codebases, written by AI agents from the dependency graph</p>
-        
-        <div class="badges">
-            <span class="badge">🐍 Python 3.12+</span>
-            <span class="badge">🏷️ v2.0.0</span>
-            <span class="badge">📝 11 Languages Supported</span>
-            <span class="badge">🚀 Open Source</span>
-            <span class="badge">📊 Benchmarked</span>
+        <div class="hero-inner">
+            <div class="hero-copy">
+                <div class="eyebrow">Open source · CodeWiki 2.0</div>
+                <h1>Turn source code into a <span>living technical wiki.</span></h1>
+                <p>CodeWiki maps the dependencies across an entire repository, then coordinates AI agents to explain its architecture, modules, and data flows.</p>
+
+                <div class="badges">
+                    <span class="badge">Python 3.12+</span>
+                    <span class="badge">11 languages</span>
+                    <span class="badge">Incremental updates</span>
+                    <span class="badge">MCP ready</span>
+                </div>
+
+                <div class="cta-buttons">
+                    <a href="https://github.com/FSoft-AI4Code/CodeWiki" class="btn btn-primary" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+                    <a href="https://fsoft-ai4code.github.io/codewiki-demo/" class="btn btn-secondary" target="_blank" rel="noopener noreferrer">Explore live docs</a>
+                    <a href="https://aclanthology.org/2026.findings-acl.288/" class="btn btn-secondary" target="_blank" rel="noopener noreferrer">Read the paper</a>
+                </div>
+                <p class="hero-note">
+                    CodeWiki documents itself. <a href="./docs/index.html">Browse this repository’s generated wiki →</a>
+                </p>
+            </div>
+            <div class="hero-visual" aria-hidden="true">
+                <span class="orbit-dot one"></span>
+                <span class="orbit-dot two"></span>
+                <span class="orbit-dot three"></span>
+                <img class="hero-mark" src="./img/icon.png" alt="">
+            </div>
         </div>
-        
-        <div class="cta-buttons">
-            <a href="https://github.com/FSoft-AI4Code/CodeWiki" class="btn btn-primary" target="_blank">
-                View on GitHub
-            </a>
-            <a href="https://aclanthology.org/2026.findings-acl.288/" class="btn btn-secondary" target="_blank">
-                Read Paper
-            </a>
-            <a href="https://fsoft-ai4code.github.io/codewiki-demo/" class="btn btn-secondary" target="_blank">
-                Live Demo
-            </a>
-            <a href="./docs/index.html" class="btn btn-secondary">
-                Browse Repo Docs
-            </a>
-        </div>
-        <p style="margin-top: 1.5rem; font-size: 0.95rem; opacity: 0.9;">
-            👉 CodeWiki documents itself — explore the generated docs for this repository at
-            <a href="./docs/index.html" style="color: white; text-decoration: underline; font-weight: 600;">docs/index.html</a>.
-        </p>
     </div>
 
     <!-- Main Content -->
     <div class="container">
         <!-- About Section -->
         <section id="about">
-            <h2>📖 About</h2>
+            <h2>About</h2>
             <p style="font-size: 1.1rem; line-height: 1.8; margin-top: 1.5rem;">
                 Developers spend nearly <span class="highlight">58% of their time</span> understanding codebases, yet maintaining comprehensive documentation remains challenging. While recent Large Language Models (LLMs) show promise for function-level documentation, they fail at the repository level, where capturing architectural patterns and cross-module interactions is essential.
             </p>
@@ -496,7 +910,7 @@
 
         <!-- Architecture -->
         <section id="architecture">
-            <h2>🏗️ Framework Architecture</h2>
+            <h2>Framework Architecture</h2>
             <div class="architecture">
                 <img src="./img/framework-overview.png" alt="CodeWiki Framework Architecture" />
                 <p style="margin-top: 1.5rem; color: var(--text-light);">
@@ -508,7 +922,7 @@
 
         <!-- Key Features -->
         <section id="features">
-            <h2>✨ Key Innovations</h2>
+            <h2>Key Innovations</h2>
             <div class="features-grid">
                 <div class="feature-card">
                     <div class="feature-icon">🔄</div>
@@ -553,7 +967,7 @@
                 </div>
             </div>
 
-            <h3 style="margin-top: 3rem;">🌐 Multilingual Support</h3>
+            <h3 style="margin-top: 3rem;">Multilingual Support</h3>
             <div class="languages">
                 <span class="language-tag">🐍 Python</span>
                 <span class="language-tag">☕ Java</span>
@@ -571,7 +985,7 @@
 
         <!-- Results -->
         <section id="results">
-            <h2>📊 Benchmark Results</h2>
+            <h2>Benchmark Results</h2>
             <p style="font-size: 1.1rem; margin-bottom: 2rem;">
                 Evaluated on <strong>CodeWikiBench</strong>: seven repositories, 486 rubric requirements, the same LLM judge for every system. Scores are weighted rubric scores from 0 to 100. DeepWiki and CodeWiki 1.0 were re-run under the same setting as 2.0 (September 2026), so they differ from the numbers in the paper. README files and <code>docs/</code> were excluded from CodeWiki's inputs.
             </p>
@@ -743,7 +1157,7 @@
 
         <!-- Demo Video -->
         <section id="demo">
-            <h2>🎥 Demo Video</h2>
+            <h2>Demo Video</h2>
             <p style="font-size: 1.1rem; margin-bottom: 2rem;">
                 Watch CodeWiki in action as it generates comprehensive documentation for a real repository:
             </p>
@@ -765,7 +1179,7 @@
 
         <!-- Installation -->
         <section id="installation">
-            <h2>🚀 Installation & Quick Start</h2>
+            <h2>Installation &amp; Quick Start</h2>
             
             <h3>Prerequisites</h3>
             <ul style="margin: 1rem 0 2rem 2rem; line-height: 2;">
@@ -831,7 +1245,7 @@ codewiki generate --create-branch --github-pages --verbose</code></pre>
 
         <!-- Citation -->
         <section id="citation">
-            <h2>📚 Citation</h2>
+            <h2>Citation</h2>
             <p style="margin-bottom: 1.5rem;">If you use CodeWiki in your research, please cite our paper:</p>
             <pre><code>@inproceedings{hoang-etal-2026-codewiki,
     title = "{C}ode{W}iki: Evaluating {AI}{'}s Ability to Generate Holistic Documentation for Large-Scale Codebases",
@@ -849,7 +1263,7 @@ codewiki generate --create-branch --github-pages --verbose</code></pre>
 
         <!-- Resources -->
         <section id="resources">
-            <h2>🔗 Resources</h2>
+            <h2>Resources</h2>
             <div class="features-grid">
                 <div class="feature-card">
                     <div class="feature-icon">📄</div>
@@ -937,6 +1351,7 @@ codewiki generate --create-branch --github-pages --verbose</code></pre>
 
     <!-- Footer -->
     <footer>
+        <img class="footer-brand" src="./img/black-background-logo.png" alt="CodeWiki">
         <div class="footer-links">
             <a href="https://github.com/FSoft-AI4Code/CodeWiki" target="_blank">GitHub</a>
             <a href="https://aclanthology.org/2026.findings-acl.288/" target="_blank">Paper</a>
@@ -950,4 +1365,3 @@ codewiki generate --create-branch --github-pages --verbose</code></pre>
     </footer>
 </body>
 </html>
-

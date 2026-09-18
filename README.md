@@ -1,4 +1,9 @@
-<h1 align="center">CodeWiki</h1>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./img/black-background-logo.png">
+    <img src="./img/white-background-logo.png" alt="CodeWiki" width="560">
+  </picture>
+</p>
 
 <p align="center">
   <strong>Repository-level documentation for large codebases, written by AI agents from the dependency graph.</strong>

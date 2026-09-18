@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{TITLE}}</title>
+    <link rel="icon" type="image/png" href="codewiki-icon.png">
     <script>
         // Apply persisted theme before first paint to avoid a flash of the wrong theme
         (function() {
@@ -26,8 +27,8 @@
     <script src="https://cdn.jsdelivr.net/npm/marked-gfm-heading-id@3.1.3/lib/index.umd.js"></script>
     <style>
         :root {
-            --primary-color: #2563eb;
-            --active-nav-bg: #2563eb;
+            --primary-color: #d95f00;
+            --active-nav-bg: #0d2b50;
             --active-nav-text: #ffffff;
             --secondary-color: #f1f5f9;
             --text-color: #334155;
@@ -50,8 +51,8 @@
 
         html[data-theme="dark"] {
             color-scheme: dark;
-            --primary-color: #60a5fa;
-            --active-nav-bg: #1d4ed8;
+            --primary-color: #ff9a2e;
+            --active-nav-bg: #c45100;
             --active-nav-text: #ffffff;
             --secondary-color: #111827;
             --text-color: #cbd5e1;
@@ -144,6 +145,20 @@
             align-items: center;
             gap: 8px;
             min-width: 0;
+        }
+
+        .logo-mark {
+            width: 34px;
+            height: 34px;
+            flex: 0 0 34px;
+            object-fit: contain;
+        }
+
+        .logo-title {
+            overflow: hidden;
+            color: var(--heading-color);
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .theme-toggle {
@@ -901,7 +916,10 @@
     <div class="container">
         <nav class="sidebar" id="sidebar">
             <div class="sidebar-top">
-                <div class="logo">📚 {{TITLE}}</div>
+                <div class="logo">
+                    <img class="logo-mark" src="codewiki-icon.png" alt="CodeWiki">
+                    <span class="logo-title">{{TITLE}}</span>
+                </div>
                 <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle dark mode">🌙</button>
             </div>
             {{REPO_LINK}}

@@ -11,10 +11,11 @@ WEB_INTERFACE_TEMPLATE = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CodeWiki - GitHub Repository Documentation Generator</title>
+    <link rel="icon" type="image/png" href="https://fsoft-ai4code.github.io/CodeWiki/img/icon.png">
     <style>
         :root {
-            --primary-color: #2563eb;
-            --secondary-color: #f1f5f9;
+            --primary-color: #e06600;
+            --secondary-color: #f2f5f8;
             --text-color: #334155;
             --border-color: #e2e8f0;
             --success-color: #10b981;
@@ -32,7 +33,9 @@ WEB_INTERFACE_TEMPLATE = """
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             line-height: 1.6;
             color: var(--text-color);
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background:
+                radial-gradient(circle at 80% 15%, rgba(255, 122, 0, .18), transparent 26rem),
+                #071526;
             min-height: 100vh;
             padding: 20px;
         }
@@ -47,7 +50,7 @@ WEB_INTERFACE_TEMPLATE = """
         }
         
         .header {
-            background: var(--primary-color);
+            background: linear-gradient(135deg, #0b1e35, #12375e);
             color: white;
             padding: 2rem;
             text-align: center;
@@ -57,6 +60,12 @@ WEB_INTERFACE_TEMPLATE = """
             font-size: 2.5rem;
             margin-bottom: 0.5rem;
             font-weight: 700;
+        }
+
+        .header-logo {
+            width: min(360px, 78%);
+            height: auto;
+            margin-bottom: 0.75rem;
         }
         
         .header p {
@@ -108,7 +117,7 @@ WEB_INTERFACE_TEMPLATE = """
         }
         
         .btn:hover {
-            background: #1d4ed8;
+            background: #bc5000;
             transform: translateY(-1px);
         }
         
@@ -207,7 +216,7 @@ WEB_INTERFACE_TEMPLATE = """
 <body>
     <div class="container">
         <div class="header">
-            <h1>📚 CodeWiki</h1>
+            <img class="header-logo" src="https://fsoft-ai4code.github.io/CodeWiki/img/black-background-logo.png" alt="CodeWiki">
             <p>Generate comprehensive documentation for any GitHub repository</p>
         </div>
         
@@ -327,10 +336,11 @@ DOCS_VIEW_TEMPLATE = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ title }}</title>
+    <link rel="icon" type="image/png" href="https://fsoft-ai4code.github.io/CodeWiki/img/icon.png">
     <script src="https://cdn.jsdelivr.net/npm/mermaid@11.9.0/dist/mermaid.min.js"></script>
     <style>
         :root {
-            --primary-color: #2563eb;
+            --primary-color: #d95f00;
             --secondary-color: #f1f5f9;
             --text-color: #334155;
             --border-color: #e2e8f0;
@@ -378,6 +388,14 @@ DOCS_VIEW_TEMPLATE = """
             color: var(--primary-color);
             margin-bottom: 30px;
             text-decoration: none;
+        }
+
+        .logo img {
+            width: 32px;
+            height: 32px;
+            object-fit: contain;
+            vertical-align: middle;
+            margin-right: 8px;
         }
         
         .nav-section {
@@ -570,7 +588,7 @@ DOCS_VIEW_TEMPLATE = """
 <body>
     <div class="container">
         <nav class="sidebar">
-            <a href="/static-docs/{{ job_id }}/overview.md" class="logo">📚 {{ repo_name }}</a>
+            <a href="/static-docs/{{ job_id }}/overview.md" class="logo"><img src="https://fsoft-ai4code.github.io/CodeWiki/img/icon.png" alt="CodeWiki">{{ repo_name }}</a>
             
             {% if metadata and metadata.generation_info %}
             <div style="margin: 20px 0; padding: 15px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">

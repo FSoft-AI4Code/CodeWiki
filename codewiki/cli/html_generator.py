@@ -3,6 +3,7 @@ HTML generator for GitHub Pages documentation viewer.
 """
 
 import json
+import shutil
 from pathlib import Path
 from typing import Optional, Dict, Any
 
@@ -164,6 +165,12 @@ class HTMLGenerator:
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         safe_write(output_path, html_content)
+
+        # Keep the branded viewer self-contained when it is published elsewhere.
+        icon_path = self.template_dir / "codewiki-icon.png"
+        icon_output_path = output_path.parent / "codewiki-icon.png"
+        if icon_path.exists() and icon_path.resolve() != icon_output_path.resolve():
+            shutil.copyfile(icon_path, icon_output_path)
 
     def _build_info_content(self, metadata: Optional[Dict[str, Any]]) -> str:
         """
