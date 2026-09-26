@@ -39,6 +39,7 @@ def config_group():
 @click.option("--main-model", type=str, help="Primary model for documentation generation")
 @click.option("--cluster-model", type=str, help="Model for module clustering (recommend top-tier)")
 @click.option("--fallback-model", type=str, help="Fallback model for documentation generation")
+@click.option("--max-retries", type=int, help="Maximum number of retries for failed agent tool calls (default: 3)")
 @click.option("--max-tokens", type=int, help="Maximum tokens for LLM response (default: 32768)")
 @click.option(
     "--max-token-per-module",
@@ -93,6 +94,7 @@ def config_set(
     main_model: Optional[str],
     cluster_model: Optional[str],
     fallback_model: Optional[str],
+    max_retries: Optional[int],
     max_tokens: Optional[int],
     max_token_per_module: Optional[int],
     max_token_per_leaf_module: Optional[int],
@@ -106,12 +108,12 @@ def config_set(
 ):
     """
     Set configuration values for CodeWiki.
-    
+
     API keys are stored securely in your system keychain:
       • macOS: Keychain Access
-      • Windows: Credential Manager  
+      • Windows: Credential Manager
       • Linux: Secret Service (GNOME Keyring, KWallet)
-    
+
     Examples:
 
     \b
@@ -162,6 +164,7 @@ def config_set(
                 main_model,
                 cluster_model,
                 fallback_model,
+                max_retries,
                 max_tokens,
                 max_token_per_module,
                 max_token_per_leaf_module,
@@ -205,6 +208,11 @@ def config_set(
 
         if fallback_model:
             validated_data["fallback_model"] = validate_model_name(fallback_model)
+
+        if max_retries is not None:
+            if max_retries < 0:
+                raise ConfigurationError("max_retries must be a non-negative integer")
+            validated_data["max_retries"] = max_retries
 
         if max_tokens is not None:
             if max_tokens < 1:
@@ -254,6 +262,7 @@ def config_set(
             main_model=validated_data.get("main_model"),
             cluster_model=validated_data.get("cluster_model"),
             fallback_model=validated_data.get("fallback_model"),
+            max_retries=validated_data.get("max_retries"),
             max_tokens=validated_data.get("max_tokens"),
             max_token_per_module=validated_data.get("max_token_per_module"),
             max_token_per_leaf_module=validated_data.get("max_token_per_leaf_module"),
@@ -380,6 +389,7 @@ def config_show(output_json: bool):
                 "cluster_model": config.cluster_model if config else "",
                 "fallback_model": config.fallback_model if config else "glm-4p5",
                 "default_output": config.default_output if config else "docs",
+                "max_retries": config.max_retries if config else 3,
                 "max_tokens": config.max_tokens if config else 32768,
                 "max_token_per_module": config.max_token_per_module if config else 36369,
                 "max_token_per_leaf_module": config.max_token_per_leaf_module if config else 16000,
@@ -441,6 +451,7 @@ def config_show(output_json: bool):
             click.echo()
             click.secho("Token Settings", fg="cyan", bold=True)
             if config:
+                click.echo(f"  Max Retries:             {config.max_retries}")
                 click.echo(f"  Max Tokens:              {config.max_tokens}")
                 click.echo(f"  Max Token/Module:        {config.max_token_per_module}")
                 click.echo(f"  Max Token/Leaf Module:   {config.max_token_per_leaf_module}")

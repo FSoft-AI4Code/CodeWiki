@@ -534,6 +534,7 @@ async def _legacy_generate_docs(arguments: dict[str, Any]) -> list[TextContent]:
         fallback_model=config.fallback_model,
         provider=getattr(config, "provider", "openai-compatible"),
         aws_region=getattr(config, "aws_region", "us-east-1"),
+        max_retries=config.max_retries,
         max_tokens=config.max_tokens,
         agent_instructions=agent_instructions or None,
         use_gitignore=arguments.get("use_gitignore", True),

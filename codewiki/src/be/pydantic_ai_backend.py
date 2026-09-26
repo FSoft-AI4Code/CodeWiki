@@ -81,6 +81,7 @@ class PydanticAIBackend(LLMBackend):
             deps_type=CodeWikiDeps,
             tools=[read_code_components_tool, str_replace_editor_tool],
             system_prompt=system_prompt,
+            retries=self._config.max_retries,
         )
         started = time.time()
         result = await agent.run(user_prompt, deps=deps)
@@ -127,6 +128,7 @@ class PydanticAIBackend(LLMBackend):
                     generate_sub_module_documentation_tool,
                 ],
                 system_prompt=format_system_prompt(module_name, self._custom_instructions),
+                retries=config.max_retries,
             )
         else:
             agent = Agent(
@@ -135,6 +137,7 @@ class PydanticAIBackend(LLMBackend):
                 deps_type=CodeWikiDeps,
                 tools=[read_code_components_tool, str_replace_editor_tool],
                 system_prompt=format_leaf_system_prompt(module_name, self._custom_instructions),
+                retries=config.max_retries,
             )
 
         deps = CodeWikiDeps(

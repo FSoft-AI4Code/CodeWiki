@@ -85,6 +85,9 @@ class Config:
     aws_region: str = "us-east-1"
     api_version: str = "2024-12-01-preview"  # Azure OpenAI API version
     azure_deployment: str = ""  # Azure OpenAI deployment name
+    # Number of times an agent may retry a tool call whose arguments fail
+    # validation before giving up (default: 3)
+    max_retries: int = 3
     # Max token settings
     max_tokens: int = DEFAULT_MAX_TOKENS
     max_token_per_module: int = DEFAULT_MAX_TOKEN_PER_MODULE
@@ -211,6 +214,7 @@ class Config:
         aws_region: str = "us-east-1",
         api_version: str = "2024-12-01-preview",
         azure_deployment: str = "",
+        max_retries: int = 3,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         max_token_per_module: int = DEFAULT_MAX_TOKEN_PER_MODULE,
         max_token_per_leaf_module: int = DEFAULT_MAX_TOKEN_PER_LEAF_MODULE,
@@ -239,6 +243,7 @@ class Config:
             aws_region: AWS region for Bedrock provider
             api_version: Azure OpenAI API version
             azure_deployment: Azure OpenAI deployment name
+            max_retries: Maximum number of retries for failed agent tool calls (default: 3)
             max_tokens: Maximum tokens for LLM response
             max_token_per_module: Maximum tokens per module for clustering
             max_token_per_leaf_module: Maximum tokens per leaf module
@@ -276,6 +281,7 @@ class Config:
             aws_region=aws_region,
             api_version=api_version,
             azure_deployment=azure_deployment,
+            max_retries=max_retries,
             max_tokens=max_tokens,
             max_token_per_module=max_token_per_module,
             max_token_per_leaf_module=max_token_per_leaf_module,

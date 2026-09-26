@@ -91,6 +91,7 @@ async def generate_sub_module_documentation(
                     str_replace_editor_tool,
                     generate_sub_module_documentation_tool,
                 ],
+                retries=ctx.deps.config.max_retries,
             )
         else:
             sub_agent = Agent(
@@ -101,6 +102,7 @@ async def generate_sub_module_documentation(
                     module_name=sub_module_name, custom_instructions=ctx.deps.custom_instructions
                 ),
                 tools=[read_code_components_tool, str_replace_editor_tool],
+                retries=ctx.deps.config.max_retries,
             )
 
         deps.current_module_name = sub_module_name

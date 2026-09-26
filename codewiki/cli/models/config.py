@@ -126,6 +126,7 @@ class Configuration:
         aws_region: AWS region for Bedrock provider
         api_version: Azure OpenAI API version
         azure_deployment: Azure OpenAI deployment name
+        max_retries: Maximum number of retries for failed agent tool calls (default: 3)
         max_tokens: Maximum tokens for LLM response (default: 32768)
         max_token_per_module: Maximum tokens per module for clustering (default: 36369)
         max_token_per_leaf_module: Maximum tokens per leaf module (default: 16000)
@@ -144,6 +145,7 @@ class Configuration:
     aws_region: str = "us-east-1"
     api_version: str = "2024-12-01-preview"
     azure_deployment: str = ""
+    max_retries: int = 3
     max_tokens: int = 32768
     max_token_per_module: int = 36369
     max_token_per_leaf_module: int = 16000
@@ -183,6 +185,7 @@ class Configuration:
             "aws_region": self.aws_region,
             "api_version": self.api_version,
             "azure_deployment": self.azure_deployment,
+            "max_retries": self.max_retries,
             "max_tokens": self.max_tokens,
             "max_token_per_module": self.max_token_per_module,
             "max_token_per_leaf_module": self.max_token_per_leaf_module,
@@ -220,6 +223,7 @@ class Configuration:
             aws_region=data.get("aws_region", "us-east-1"),
             api_version=data.get("api_version", "2024-12-01-preview"),
             azure_deployment=data.get("azure_deployment", ""),
+            max_retries=data.get("max_retries", 3),
             max_tokens=data.get("max_tokens", 32768),
             max_token_per_module=data.get("max_token_per_module", 36369),
             max_token_per_leaf_module=data.get("max_token_per_leaf_module", 16000),
@@ -296,6 +300,7 @@ class Configuration:
             aws_region=self.aws_region,
             api_version=self.api_version,
             azure_deployment=self.azure_deployment,
+            max_retries=self.max_retries,
             max_tokens=self.max_tokens,
             max_token_per_module=self.max_token_per_module,
             max_token_per_leaf_module=self.max_token_per_leaf_module,

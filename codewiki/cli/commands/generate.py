@@ -273,6 +273,12 @@ def _invalidate_affected_modules(output_dir: Path, changed_files: list[str], log
     help="Show detailed progress and debug information",
 )
 @click.option(
+    "--max-retries",
+    type=int,
+    default=None,
+    help="Maximum retries for failed LLM requests (overrides config)",
+)
+@click.option(
     "--max-tokens",
     type=int,
     default=None,
@@ -394,6 +400,7 @@ def generate_command(
     instructions: str | None,
     use_gitignore: bool | None,
     verbose: bool,
+    max_retries: int | None,
     max_tokens: int | None,
     max_token_per_module: int | None,
     max_token_per_leaf_module: int | None,
@@ -707,6 +714,8 @@ def generate_command(
                 "provider": getattr(config, "provider", "openai-compatible"),
                 "aws_region": getattr(config, "aws_region", "us-east-1"),
                 "agent_instructions": agent_instructions_dict,
+                # Max retries setting (runtime override takes precedence)
+                "max_retries": max_retries if max_retries is not None else config.max_retries,
                 # Max token settings (runtime overrides take precedence)
                 "max_tokens": max_tokens if max_tokens is not None else config.max_tokens,
                 "max_token_per_module": max_token_per_module
