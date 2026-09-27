@@ -53,7 +53,7 @@ def _deps(tmp_path) -> CodeWikiDeps:
         module_tree={},
         max_depth=2,
         current_depth=1,
-        config=SimpleNamespace(max_token_per_leaf_module=4000),
+        config=SimpleNamespace(max_token_per_leaf_module=4000, max_retries=3),
         custom_instructions="",
     )
 
