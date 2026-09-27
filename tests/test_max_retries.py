@@ -1,7 +1,5 @@
 """Tests for max_retries PydanticAI agent configuration."""
 
-from unittest.mock import patch
-
 from codewiki.cli.models.config import Configuration
 from codewiki.src.config import Config
 
