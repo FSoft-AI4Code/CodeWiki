@@ -440,8 +440,11 @@ class CLIDocumentationGenerator:
             )
         working_dir = str(self.output_dir.absolute())
         if record.outcome in ("incremental", "no_change"):
+            # create_documentation_metadata rewrites metadata.json from scratch;
+            # keep the history of earlier updates so a chain of updates accumulates.
+            prior_history = self._read_update_history(working_dir)
             doc_generator.create_documentation_metadata(working_dir, components, len(leaf_nodes))
-            self._merge_update_summary(working_dir)
+            self._merge_update_summary(working_dir, prior_history)
             for file_path in os.listdir(working_dir):
                 if file_path.endswith((".md", ".json")):
                     self.job.files_generated.append(file_path)
@@ -478,7 +481,17 @@ class CLIDocumentationGenerator:
         if self.verbose:
             self.progress_tracker.update_stage(0.1, f"Previous docs preserved at {target}")
 
-    def _merge_update_summary(self, working_dir: str) -> None:
+    @staticmethod
+    def _read_update_history(working_dir: str) -> list:
+        path = os.path.join(working_dir, "metadata.json")
+        try:
+            with open(path, encoding="utf-8") as f:
+                history = (json.load(f) or {}).get("update_history")
+        except (OSError, json.JSONDecodeError):
+            return []
+        return history if isinstance(history, list) else []
+
+    def _merge_update_summary(self, working_dir: str, prior_history: list | None = None) -> None:
         record = getattr(self, "_last_update_record", None)
         if record is None:
             return
@@ -488,7 +501,7 @@ class CLIDocumentationGenerator:
         preserved = getattr(self, "_preserved_docs_dir", None)
         if preserved:
             summary["previous_docs"] = preserved
-        merge_into_metadata(working_dir, summary)
+        merge_into_metadata(working_dir, summary, prior_history=prior_history)
         try:
             record.save(working_dir)
         except OSError:
