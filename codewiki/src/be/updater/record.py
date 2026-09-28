@@ -96,8 +96,14 @@ class UpdateRecord:
         return path
 
 
-def merge_into_metadata(docs_dir: str, summary: dict[str, Any]) -> None:
-    """Append ``summary`` under ``last_update`` (and an ``update_history`` list)."""
+def merge_into_metadata(
+    docs_dir: str, summary: dict[str, Any], prior_history: list[dict[str, Any]] | None = None
+) -> None:
+    """Append ``summary`` under ``last_update`` (and an ``update_history`` list).
+
+    ``prior_history`` restores the history when the caller rewrote metadata.json
+    in between (the update path regenerates it before merging).
+    """
     path = os.path.join(docs_dir, "metadata.json")
     meta: dict[str, Any] = {}
     if os.path.exists(path):
@@ -110,6 +116,8 @@ def merge_into_metadata(docs_dir: str, summary: dict[str, Any]) -> None:
     history = meta.get("update_history")
     if not isinstance(history, list):
         history = []
+    if not history and prior_history:
+        history = list(prior_history)
     history.append(summary)
     meta["update_history"] = history
     with open(path, "w", encoding="utf-8") as f:
