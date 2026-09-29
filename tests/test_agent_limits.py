@@ -5,7 +5,7 @@ import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 
-from pydantic_ai.exceptions import ModelAPIError, UnexpectedModelBehavior
+from pydantic_ai.exceptions import UnexpectedModelBehavior
 
 import codewiki.src.be.agent_tools.generate_sub_module_documentations as sub_mod
 import codewiki.src.be.llm_services as llm_services
@@ -55,7 +55,7 @@ def test_fallback_covers_malformed_responses(monkeypatch):
     )
     llm_services.create_fallback_models(SimpleNamespace())
     # a 200 response with an unparseable body must also switch to the fallback model
-    assert set(captured["fallback_on"]) == {ModelAPIError, UnexpectedModelBehavior}
+    assert set(captured["fallback_on"]) == {llm_services.ModelAPIError, UnexpectedModelBehavior}
 
 
 def test_overview_system_prompt():

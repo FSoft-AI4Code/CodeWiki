@@ -13,7 +13,12 @@ from typing import Optional
 
 from openai.types import chat
 
-from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError, UnexpectedModelBehavior
+from pydantic_ai.exceptions import ModelHTTPError, UnexpectedModelBehavior
+
+try:  # pydantic-ai >= 1.x adds ModelAPIError as the parent of ModelHTTPError
+    from pydantic_ai.exceptions import ModelAPIError
+except ImportError:  # older releases (e.g. the pinned 1.0.6) only have ModelHTTPError
+    ModelAPIError = ModelHTTPError
 from pydantic_ai.models.openai import OpenAIChatModel, OpenAIChatModelSettings
 from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -254,9 +259,10 @@ def create_fallback_models(config: Config) -> FallbackModel:
     """Create fallback models chain from configuration."""
     main = create_main_model(config)
     fallback = create_fallback_model(config)
-    # The default fallback_on=(ModelAPIError,) misses UnexpectedModelBehavior, which
-    # pydantic-ai raises for a 200 response whose body does not parse (e.g. choices=None
-    # from an OpenAI-compatible gateway); without it such a response skips the fallback.
+    # The default fallback_on (ModelAPIError, or ModelHTTPError on older pydantic-ai)
+    # misses UnexpectedModelBehavior, which pydantic-ai raises for a 200 response whose
+    # body does not parse (e.g. choices=None from an OpenAI-compatible gateway); without
+    # it such a response skips the fallback model.
     return FallbackModel(main, fallback, fallback_on=(ModelAPIError, UnexpectedModelBehavior))
 
 
