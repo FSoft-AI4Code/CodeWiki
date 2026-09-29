@@ -297,6 +297,18 @@ def _invalidate_affected_modules(output_dir: Path, changed_files: list[str], log
     help="Maximum depth for hierarchical decomposition (overrides config)",
 )
 @click.option(
+    "--request-limit",
+    type=click.IntRange(min=1),
+    default=None,
+    help="Maximum model requests per agent run (overrides config)",
+)
+@click.option(
+    "--agent-retries",
+    type=click.IntRange(min=0),
+    default=None,
+    help="Retries for a failing agent tool call (overrides config)",
+)
+@click.option(
     "--prompt-caching/--no-prompt-caching",
     default=None,
     help="Add prompt-cache breakpoints to agentic LLM calls; auto-falls back to "
@@ -398,6 +410,8 @@ def generate_command(
     max_token_per_module: int | None,
     max_token_per_leaf_module: int | None,
     max_depth: int | None,
+    request_limit: int | None,
+    agent_retries: int | None,
     prompt_caching: bool | None,
     artifacts: bool = True,
     artifact_token_budget: int = 200_000,
@@ -717,6 +731,13 @@ def generate_command(
                 else config.max_token_per_leaf_module,
                 # Max depth setting (runtime override takes precedence)
                 "max_depth": max_depth if max_depth is not None else config.max_depth,
+                # Agent run limits (runtime override takes precedence)
+                "request_limit": request_limit
+                if request_limit is not None
+                else config.request_limit,
+                "agent_retries": agent_retries
+                if agent_retries is not None
+                else config.agent_retries,
                 # Gitignore setting (runtime override takes precedence)
                 "use_gitignore": use_gitignore
                 if use_gitignore is not None

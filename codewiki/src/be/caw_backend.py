@@ -246,6 +246,7 @@ class CawBackend(LLMBackend):
         prompt: str,
         *,
         model: str | None = None,
+        system_prompt: str | None = None,
     ) -> str:
         # Blocks the calling thread for the lifetime of the claude/codex
         # subprocess.  Callers running this from an async context (e.g. the
@@ -256,6 +257,7 @@ class CawBackend(LLMBackend):
             provider=self._caw_provider,
             model=effective_model,
             tools=ToolGroup.READER,
+            system_prompt=system_prompt,
         )
         traj = agent.completion(prompt)
         self.last_usage = usage_to_dict(getattr(traj, "total_usage", None))

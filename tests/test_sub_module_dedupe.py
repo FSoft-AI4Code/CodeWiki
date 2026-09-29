@@ -21,7 +21,7 @@ class FakeAgent:
     def __init__(self, *args, **kwargs):
         self.name = kwargs.get("name")
 
-    async def run(self, prompt, deps):
+    async def run(self, prompt, deps, **kwargs):
         FakeAgent.runs.append(deps.current_module_name)
         page = f"{deps.absolute_docs_path}/{deps.current_module_name}.md"
         with open(page, "w", encoding="utf-8") as f:
@@ -53,7 +53,7 @@ def _deps(tmp_path) -> CodeWikiDeps:
         module_tree={},
         max_depth=2,
         current_depth=1,
-        config=SimpleNamespace(max_token_per_leaf_module=4000),
+        config=SimpleNamespace(max_token_per_leaf_module=4000, agent_retries=3, request_limit=100),
         custom_instructions="",
     )
 

@@ -78,7 +78,7 @@ class FakeBackend:
         Path(working_dir, f"{module_name}.md").write_text(f"# {module_name}\n")
         return module_tree
 
-    def complete(self, prompt, model=None):
+    def complete(self, prompt, model=None, system_prompt=None):
         self.complete_calls += 1
         return "<OVERVIEW>overview</OVERVIEW>"
 
@@ -86,7 +86,9 @@ class FakeBackend:
 def _generator(docs_dir: Path) -> tuple[DocumentationGenerator, FakeBackend]:
     # Bypass __init__: it wires a real LLM backend and dependency analyzer.
     gen = object.__new__(DocumentationGenerator)
-    gen.config = SimpleNamespace(docs_dir=str(docs_dir), repo_path=str(docs_dir))
+    gen.config = SimpleNamespace(
+        docs_dir=str(docs_dir), repo_path=str(docs_dir), get_prompt_addition=lambda: ""
+    )
     gen.backend = FakeBackend(docs_dir)
     return gen, gen.backend
 

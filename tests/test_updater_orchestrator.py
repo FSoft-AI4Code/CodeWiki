@@ -29,7 +29,7 @@ class FakeBackend:
         self.complete_calls = []
         self.last_usage = None
 
-    def complete(self, prompt, *, model=None):
+    def complete(self, prompt, *, model=None, system_prompt=None):
         self.complete_calls.append(prompt[:80])
         self.last_usage = {"prompt_tokens": 10, "completion_tokens": 5}
         return "<OVERVIEW>regenerated overview</OVERVIEW>"

@@ -15,6 +15,7 @@ import traceback
 from typing import Any
 
 from pydantic_ai import Agent
+from pydantic_ai.usage import UsageLimits
 
 from codewiki.src.be.agent_tools.deps import CodeWikiDeps
 from codewiki.src.be.agent_tools.generate_sub_module_documentations import (
@@ -63,9 +64,10 @@ class PydanticAIBackend(LLMBackend):
         prompt: str,
         *,
         model: str | None = None,
+        system_prompt: str | None = None,
     ) -> str:
         pop_last_usage()
-        result = call_llm(prompt, self._config, model=model)
+        result = call_llm(prompt, self._config, model=model, system_prompt=system_prompt)
         self.last_usage = pop_last_usage()
         return result
 
@@ -81,9 +83,14 @@ class PydanticAIBackend(LLMBackend):
             deps_type=CodeWikiDeps,
             tools=[read_code_components_tool, str_replace_editor_tool],
             system_prompt=system_prompt,
+            retries=self._config.agent_retries,
         )
         started = time.time()
-        result = await agent.run(user_prompt, deps=deps)
+        result = await agent.run(
+            user_prompt,
+            deps=deps,
+            usage_limits=UsageLimits(request_limit=self._config.request_limit),
+        )
         seconds = time.time() - started
         usage = _run_usage(result)
         self.last_usage = usage
@@ -127,6 +134,7 @@ class PydanticAIBackend(LLMBackend):
                     generate_sub_module_documentation_tool,
                 ],
                 system_prompt=format_system_prompt(module_name, self._custom_instructions),
+                retries=config.agent_retries,
             )
         else:
             agent = Agent(
@@ -135,6 +143,7 @@ class PydanticAIBackend(LLMBackend):
                 deps_type=CodeWikiDeps,
                 tools=[read_code_components_tool, str_replace_editor_tool],
                 system_prompt=format_leaf_system_prompt(module_name, self._custom_instructions),
+                retries=config.agent_retries,
             )
 
         deps = CodeWikiDeps(
@@ -160,6 +169,7 @@ class PydanticAIBackend(LLMBackend):
                     module_tree=deps.module_tree,
                 ),
                 deps=deps,
+                usage_limits=UsageLimits(request_limit=config.request_limit),
             )
             self.last_usage = _run_usage(result)
             file_manager.save_json(deps.module_tree, module_tree_path)
