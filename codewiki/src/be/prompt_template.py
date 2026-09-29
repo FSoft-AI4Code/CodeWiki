@@ -645,3 +645,20 @@ def format_leaf_system_prompt(module_name: str, custom_instructions: str | None 
     return LEAF_SYSTEM_PROMPT.format(
         module_name=module_name, custom_instructions=custom_section
     ).strip()
+
+
+def format_overview_system_prompt(custom_instructions: str | None = None) -> str | None:
+    """
+    System message for the module / repository overview completions.
+
+    MODULE_OVERVIEW_PROMPT and REPO_OVERVIEW_PROMPT have no custom-instructions
+    slot, so without this the user's instructions (language, audience, style)
+    never reach overview pages. Returns None when there is nothing to add.
+    """
+    if not custom_instructions:
+        return None
+    return (
+        f"<CUSTOM_INSTRUCTIONS>\n{custom_instructions}\n</CUSTOM_INSTRUCTIONS>\n\n"
+        "Follow these instructions when writing the overview; they take precedence over "
+        "conflicting defaults in the request (language, audience, structure, style)."
+    )

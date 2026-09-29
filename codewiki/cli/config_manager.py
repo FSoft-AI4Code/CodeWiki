@@ -136,6 +136,8 @@ class ConfigManager:
         max_token_per_module: Optional[int] = None,
         max_token_per_leaf_module: Optional[int] = None,
         max_depth: Optional[int] = None,
+        request_limit: Optional[int] = None,
+        agent_retries: Optional[int] = None,
         provider: Optional[str] = None,
         aws_region: Optional[str] = None,
         api_version: Optional[str] = None,
@@ -157,6 +159,8 @@ class ConfigManager:
             max_token_per_module: Maximum tokens per module for clustering
             max_token_per_leaf_module: Maximum tokens per leaf module
             max_depth: Maximum depth for hierarchical decomposition
+            request_limit: Maximum model requests per agent run
+            agent_retries: Retries for a failing tool call
             provider: LLM provider type (openai-compatible, anthropic, bedrock, azure-openai)
             aws_region: AWS region for Bedrock provider
             api_version: Azure OpenAI API version
@@ -205,6 +209,10 @@ class ConfigManager:
             self._config.max_token_per_leaf_module = max_token_per_leaf_module
         if max_depth is not None:
             self._config.max_depth = max_depth
+        if request_limit is not None:
+            self._config.request_limit = request_limit
+        if agent_retries is not None:
+            self._config.agent_retries = agent_retries
         if provider is not None:
             self._config.provider = provider
         if aws_region is not None:

@@ -108,6 +108,7 @@ packages = [
     "codewiki.src.be.dependency_analyzer.analyzers",
     "codewiki.src.be.dependency_analyzer.models",
     "codewiki.src.be.dependency_analyzer.utils",
+    "codewiki.src.be.updater",
     "codewiki.src.fe",
     "codewiki.mcp",
     "codewiki.mcp.tools"

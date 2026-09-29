@@ -19,6 +19,11 @@ MAX_DEPTH = 2
 DEFAULT_MAX_TOKENS = 32_768
 DEFAULT_MAX_TOKEN_PER_MODULE = 36_369
 DEFAULT_MAX_TOKEN_PER_LEAF_MODULE = 4_000
+# pydantic-ai caps each agent run at 50 model requests by default; complex
+# modules that read many components and delegate sub-modules can need more.
+DEFAULT_REQUEST_LIMIT = 100
+# pydantic-ai retries a failing tool call (and output validation) once by default.
+DEFAULT_AGENT_RETRIES = 3
 # Super-group the flat top level into architectural subsystems only when it
 # has more than this many modules; 0 or negative disables the pass.
 DEFAULT_MIN_MODULES_FOR_SUPER_GROUPING = 3
@@ -91,6 +96,9 @@ class Config:
     max_token_per_leaf_module: int = DEFAULT_MAX_TOKEN_PER_LEAF_MODULE
     min_modules_for_super_grouping: int = DEFAULT_MIN_MODULES_FOR_SUPER_GROUPING
     max_leaf_nodes_per_cluster: int = DEFAULT_MAX_LEAF_NODES_PER_CLUSTER
+    # Agent run limits (model requests per run, retries per failing tool call)
+    request_limit: int = DEFAULT_REQUEST_LIMIT
+    agent_retries: int = DEFAULT_AGENT_RETRIES
     # Prompt caching for agentic/multi-turn calls (auto-disables per model if
     # the provider rejects cache_control markers)
     prompt_caching: bool = True
@@ -217,6 +225,8 @@ class Config:
         min_modules_for_super_grouping: int = DEFAULT_MIN_MODULES_FOR_SUPER_GROUPING,
         max_leaf_nodes_per_cluster: int = DEFAULT_MAX_LEAF_NODES_PER_CLUSTER,
         max_depth: int = MAX_DEPTH,
+        request_limit: int = DEFAULT_REQUEST_LIMIT,
+        agent_retries: int = DEFAULT_AGENT_RETRIES,
         agent_instructions: dict[str, Any] | None = None,
         use_gitignore: bool = True,
         prompt_caching: bool = True,
@@ -248,6 +258,8 @@ class Config:
             max_leaf_nodes_per_cluster: Partition clustering inputs into
                 structure-based batches of at most this many leaf nodes
             max_depth: Maximum depth for hierarchical decomposition
+            request_limit: Maximum model requests per agent run
+            agent_retries: Retries for a failing tool call or output validation
             agent_instructions: Custom agent instructions dict
             use_gitignore: Whether to apply Git ignore rules
             prompt_caching: Whether to add prompt-cache breakpoints to agentic calls
@@ -281,6 +293,8 @@ class Config:
             max_token_per_leaf_module=max_token_per_leaf_module,
             min_modules_for_super_grouping=min_modules_for_super_grouping,
             max_leaf_nodes_per_cluster=max_leaf_nodes_per_cluster,
+            request_limit=request_limit,
+            agent_retries=agent_retries,
             agent_instructions=agent_instructions,
             use_gitignore=use_gitignore,
             prompt_caching=prompt_caching,

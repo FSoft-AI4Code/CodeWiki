@@ -89,8 +89,9 @@ class LLMBackend(abc.ABC):
         prompt: str,
         *,
         model: str | None = None,
+        system_prompt: str | None = None,
     ) -> str:
-        """Single-shot text completion."""
+        """Single-shot text completion, with an optional system message."""
 
     @abc.abstractmethod
     async def run_module_agent(

@@ -145,6 +145,8 @@ class CLIDocumentationGenerator:
                 max_token_per_leaf_module=self.config.get("max_token_per_leaf_module", 16000),
                 max_leaf_nodes_per_cluster=self.config.get("max_leaf_nodes_per_cluster", 600),
                 max_depth=self.config.get("max_depth", 2),
+                request_limit=self.config.get("request_limit", 100),
+                agent_retries=self.config.get("agent_retries", 3),
                 agent_instructions=self.config.get("agent_instructions"),
                 use_gitignore=self.config.get("use_gitignore", True),
                 prompt_caching=self.config.get("prompt_caching", True),

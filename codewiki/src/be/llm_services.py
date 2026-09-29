@@ -13,7 +13,7 @@ from typing import Optional
 
 from openai.types import chat
 
-from pydantic_ai.exceptions import ModelHTTPError
+from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError, UnexpectedModelBehavior
 from pydantic_ai.models.openai import OpenAIChatModel, OpenAIChatModelSettings
 from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -254,7 +254,10 @@ def create_fallback_models(config: Config) -> FallbackModel:
     """Create fallback models chain from configuration."""
     main = create_main_model(config)
     fallback = create_fallback_model(config)
-    return FallbackModel(main, fallback)
+    # The default fallback_on=(ModelAPIError,) misses UnexpectedModelBehavior, which
+    # pydantic-ai raises for a 200 response whose body does not parse (e.g. choices=None
+    # from an OpenAI-compatible gateway); without it such a response skips the fallback.
+    return FallbackModel(main, fallback, fallback_on=(ModelAPIError, UnexpectedModelBehavior))
 
 
 def create_openai_client(config: Config) -> OpenAI:
@@ -308,7 +311,15 @@ def _extract_content(response, model: str) -> Optional[str]:
     return content
 
 
-def call_llm(prompt: str, config: Config, model: str = None) -> Optional[str]:
+def _messages(prompt: str, system_prompt: str | None) -> list[dict[str, str]]:
+    messages = [{"role": "system", "content": system_prompt}] if system_prompt else []
+    messages.append({"role": "user", "content": prompt})
+    return messages
+
+
+def call_llm(
+    prompt: str, config: Config, model: str = None, system_prompt: str | None = None
+) -> Optional[str]:
     """
     Call LLM with the given prompt.
 
@@ -322,6 +333,7 @@ def call_llm(prompt: str, config: Config, model: str = None) -> Optional[str]:
         prompt: The prompt to send
         config: Configuration containing LLM settings
         model: Model name (defaults to config.main_model)
+        system_prompt: Optional system message sent before the prompt
 
     Returns:
         LLM response text, or None when the provider returned no content
@@ -333,10 +345,10 @@ def call_llm(prompt: str, config: Config, model: str = None) -> Optional[str]:
     provider = getattr(config, "provider", "openai-compatible")
 
     if provider in ("bedrock", "anthropic"):
-        return _call_llm_via_litellm(prompt, config, model)
+        return _call_llm_via_litellm(prompt, config, model, system_prompt)
 
     if provider == "azure-openai":
-        return _call_llm_via_azure(prompt, config, model)
+        return _call_llm_via_azure(prompt, config, model, system_prompt)
 
     # Default: OpenAI-compatible
     client = create_openai_client(config)
@@ -349,7 +361,7 @@ def call_llm(prompt: str, config: Config, model: str = None) -> Optional[str]:
 
     base_kwargs = {
         "model": model,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": _messages(prompt, system_prompt),
     }
 
     try:
@@ -387,7 +399,9 @@ def _is_unsupported_token_param_error(err: BadRequestError, param: str) -> bool:
     return "unsupported parameter" in msg and param in msg
 
 
-def _call_llm_via_litellm(prompt: str, config: Config, model: str) -> Optional[str]:
+def _call_llm_via_litellm(
+    prompt: str, config: Config, model: str, system_prompt: str | None = None
+) -> Optional[str]:
     """
     Call LLM via litellm for Bedrock/Anthropic providers.
 
@@ -407,14 +421,16 @@ def _call_llm_via_litellm(prompt: str, config: Config, model: str) -> Optional[s
 
     response = litellm.completion(
         model=litellm_model,
-        messages=[{"role": "user", "content": prompt}],
+        messages=_messages(prompt, system_prompt),
         max_tokens=config.max_tokens,
         api_key=config.llm_api_key if config.provider != "bedrock" else None,
     )
     return _extract_content(response, litellm_model)
 
 
-def _call_llm_via_azure(prompt: str, config: Config, model: str) -> Optional[str]:
+def _call_llm_via_azure(
+    prompt: str, config: Config, model: str, system_prompt: str | None = None
+) -> Optional[str]:
     """
     Call LLM via Azure OpenAI.
 
@@ -436,7 +452,7 @@ def _call_llm_via_azure(prompt: str, config: Config, model: str) -> Optional[str
 
     response = client.chat.completions.create(
         model=deployment,
-        messages=[{"role": "user", "content": prompt}],
+        messages=_messages(prompt, system_prompt),
         max_tokens=config.max_tokens,
     )
     return _extract_content(response, deployment)

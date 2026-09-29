@@ -24,6 +24,7 @@ from codewiki.src.be.prompt_template import (
     MODULE_OVERVIEW_PROMPT,
     REPO_OVERVIEW_ARTIFACT_ADDENDUM,
     REPO_OVERVIEW_PROMPT,
+    format_overview_system_prompt,
 )
 from codewiki.src.config import (
     FIRST_MODULE_TREE_FILENAME,
@@ -354,7 +355,10 @@ class DocumentationGenerator:
         logger.debug(f"Overview prompt for {module_name}: {len(prompt)} chars")
 
         try:
-            parent_docs = self.backend.complete(prompt)
+            parent_docs = self.backend.complete(
+                prompt,
+                system_prompt=format_overview_system_prompt(self.config.get_prompt_addition()),
+            )
             if not parent_docs:
                 raise RuntimeError(
                     f"LLM returned empty content for {module_name} overview "

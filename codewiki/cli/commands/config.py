@@ -52,6 +52,12 @@ def config_group():
     "--max-depth", type=int, help="Maximum depth for hierarchical decomposition (default: 2)"
 )
 @click.option(
+    "--request-limit", type=int, help="Maximum model requests per agent run (default: 100)"
+)
+@click.option(
+    "--agent-retries", type=int, help="Retries for a failing agent tool call (default: 3)"
+)
+@click.option(
     "--provider",
     type=click.Choice(
         [
@@ -97,6 +103,8 @@ def config_set(
     max_token_per_module: Optional[int],
     max_token_per_leaf_module: Optional[int],
     max_depth: Optional[int],
+    request_limit: Optional[int] = None,
+    agent_retries: Optional[int] = None,
     provider: Optional[str] = None,
     aws_region: Optional[str] = None,
     api_version: Optional[str] = None,
@@ -166,6 +174,8 @@ def config_set(
                 max_token_per_module,
                 max_token_per_leaf_module,
                 max_depth,
+                request_limit is not None,
+                agent_retries is not None,
                 provider,
                 aws_region,
                 api_version,
@@ -226,6 +236,16 @@ def config_set(
                 raise ConfigurationError("max_depth must be a positive integer")
             validated_data["max_depth"] = max_depth
 
+        if request_limit is not None:
+            if request_limit < 1:
+                raise ConfigurationError("request_limit must be a positive integer")
+            validated_data["request_limit"] = request_limit
+
+        if agent_retries is not None:
+            if agent_retries < 0:
+                raise ConfigurationError("agent_retries must be zero or a positive integer")
+            validated_data["agent_retries"] = agent_retries
+
         if provider is not None:
             validated_data["provider"] = provider
 
@@ -258,6 +278,8 @@ def config_set(
             max_token_per_module=validated_data.get("max_token_per_module"),
             max_token_per_leaf_module=validated_data.get("max_token_per_leaf_module"),
             max_depth=validated_data.get("max_depth"),
+            request_limit=validated_data.get("request_limit"),
+            agent_retries=validated_data.get("agent_retries"),
             provider=validated_data.get("provider"),
             aws_region=validated_data.get("aws_region"),
             api_version=validated_data.get("api_version"),
@@ -310,6 +332,12 @@ def config_set(
 
         if max_depth:
             click.secho(f"✓ Max depth: {max_depth}", fg="green")
+
+        if request_limit:
+            click.secho(f"✓ Request limit: {request_limit}", fg="green")
+
+        if agent_retries is not None:
+            click.secho(f"✓ Agent retries: {agent_retries}", fg="green")
 
         if provider:
             click.secho(f"✓ Provider: {provider}", fg="green")
@@ -384,6 +412,8 @@ def config_show(output_json: bool):
                 "max_token_per_module": config.max_token_per_module if config else 36369,
                 "max_token_per_leaf_module": config.max_token_per_leaf_module if config else 16000,
                 "max_depth": config.max_depth if config else 2,
+                "request_limit": config.request_limit if config else 100,
+                "agent_retries": config.agent_retries if config else 3,
                 "use_gitignore": config.use_gitignore if config else True,
                 "prompt_caching": config.prompt_caching if config else True,
                 "agent_instructions": config.agent_instructions.to_dict()
@@ -450,6 +480,8 @@ def config_show(output_json: bool):
             click.secho("Decomposition Settings", fg="cyan", bold=True)
             if config:
                 click.echo(f"  Max Depth:               {config.max_depth}")
+                click.echo(f"  Request Limit:           {config.request_limit}")
+                click.echo(f"  Agent Retries:           {config.agent_retries}")
                 click.echo(f"  Use Gitignore:           {config.use_gitignore}")
 
             click.echo()
