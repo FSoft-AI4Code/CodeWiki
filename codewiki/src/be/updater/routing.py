@@ -53,6 +53,10 @@ class RoutingAgent:
         tree: dict[str, Any] = context["tree"]
         owner: dict[str, tuple[str, ...]] = context["owner"]
         graph: dict[str, Node] = context["graph"]
+        # "ownership" (Step 3a): the components changed but no leaf lists them;
+        # the agent names the page that answers for each one, or leaves it.
+        # No new leaves, since the tree is not changed for that purpose.
+        for_ownership = context.get("purpose") == "ownership"
         rev = T.reverse_edges(graph)
         neighbours = {}
         for cid in orphans:
@@ -63,7 +67,11 @@ class RoutingAgent:
             ROUTING_SYSTEM_PROMPT
             + "\n\n"
             + format_routing_prompt(
-                tree_outline_with_summaries(tree, self.docs_dir), orphans, graph, neighbours
+                tree_outline_with_summaries(tree, self.docs_dir),
+                orphans,
+                graph,
+                neighbours,
+                allow_create=not for_ownership,
             )
         )
         started = time.time()
@@ -77,7 +85,7 @@ class RoutingAgent:
         self.record.add_call(
             CallCost(
                 "routing",
-                f"{len(orphans)} orphans",
+                f"{len(orphans)} {'changed untracked' if for_ownership else 'orphans'}",
                 time.time() - started,
                 getattr(self.backend, "last_usage", None),
                 err,
@@ -103,6 +111,12 @@ class RoutingAgent:
                     )
                     continue
                 decisions.append(RoutingDecision(cid, RULE_AGENT, path, detail=reason))
+            elif action == "create" and d.get("new_leaf") and for_ownership:
+                decisions.append(
+                    RoutingDecision(
+                        cid, RULE_AGENT, None, detail="create not allowed for ownership; left"
+                    )
+                )
             elif action == "create" and d.get("new_leaf"):
                 parent_name = d.get("parent")
                 parent: tuple[str, ...] = ()

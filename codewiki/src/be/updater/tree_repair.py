@@ -84,7 +84,7 @@ def _dirname(rel: str) -> str:
     return os.path.dirname(rel.replace("\\", "/"))
 
 
-def _route_by_rules(
+def route_by_rules(
     cid: str,
     node: Node,
     owner: dict[str, tuple[str, ...]],
@@ -160,7 +160,7 @@ def repair_tree(
     to_route = sorted(c for c in diff.added if c in tracked_new and c in new_graph)
     orphans: list[str] = []
     for cid in to_route:
-        decision = _route_by_rules(cid, new_graph[cid], owner, new_graph, opts)
+        decision = route_by_rules(cid, new_graph[cid], owner, new_graph, opts)
         if decision is None:
             orphans.append(cid)
             continue

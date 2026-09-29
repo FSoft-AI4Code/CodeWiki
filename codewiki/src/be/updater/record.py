@@ -46,6 +46,8 @@ class UpdateRecord:
     repair: dict[str, Any] = field(default_factory=dict)
     reclustered: list[list[str]] = field(default_factory=list)
     reports: dict[str, Any] = field(default_factory=dict)
+    # Step 3a: effective owners given to changed components no leaf tracks
+    ownership: list[dict[str, Any]] = field(default_factory=list)
     active: list[dict[str, Any]] = field(default_factory=list)  # {leaf, mode, order}
     write_sets: dict[str, list[str]] = field(default_factory=dict)
     fallback: dict[str, Any] = field(default_factory=dict)
@@ -78,6 +80,10 @@ class UpdateRecord:
             "revision": self.revision,
             "diff_counts": self.diff.get("counts", {}),
             "n_active": len(self.active),
+            "n_adopted": len(self.ownership),
+            "n_adopted_by_agent": sum(
+                1 for a in self.ownership if str(a.get("rule", "")).startswith("4:")
+            ),
             "fallback": self.fallback,
             "n_calls": len(self.calls),
             "usage_total": usage_total,
@@ -96,8 +102,14 @@ class UpdateRecord:
         return path
 
 
-def merge_into_metadata(docs_dir: str, summary: dict[str, Any]) -> None:
-    """Append ``summary`` under ``last_update`` (and an ``update_history`` list)."""
+def merge_into_metadata(
+    docs_dir: str, summary: dict[str, Any], prior_history: list[dict[str, Any]] | None = None
+) -> None:
+    """Append ``summary`` under ``last_update`` (and an ``update_history`` list).
+
+    ``prior_history`` restores the history when the caller rewrote metadata.json
+    in between (the update path regenerates it before merging).
+    """
     path = os.path.join(docs_dir, "metadata.json")
     meta: dict[str, Any] = {}
     if os.path.exists(path):
@@ -110,6 +122,8 @@ def merge_into_metadata(docs_dir: str, summary: dict[str, Any]) -> None:
     history = meta.get("update_history")
     if not isinstance(history, list):
         history = []
+    if not history and prior_history:
+        history = list(prior_history)
     history.append(summary)
     meta["update_history"] = history
     with open(path, "w", encoding="utf-8") as f:
