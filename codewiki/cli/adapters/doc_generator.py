@@ -6,6 +6,7 @@ and provides CLI-specific functionality like progress reporting.
 """
 
 import asyncio
+import json
 import logging
 import os
 import sys
