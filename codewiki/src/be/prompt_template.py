@@ -352,6 +352,7 @@ EXTENSION_TO_LANGUAGE = {
     ".kts": "kotlin",
     ".scala": "scala",
     ".sc": "scala",
+    ".rs": "rust",
     ".php": "php",
     ".phtml": "php",
     ".inc": "php",

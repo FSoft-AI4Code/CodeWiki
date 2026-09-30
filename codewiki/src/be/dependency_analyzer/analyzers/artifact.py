@@ -278,6 +278,7 @@ _PACKAGING_PACKAGES_NAMES = {
 _BUILD_NAMES = {
     "Makefile",
     "GNUmakefile",
+    "build.rs",
     "makefile",
     "CMakeLists.txt",
     "Rakefile",

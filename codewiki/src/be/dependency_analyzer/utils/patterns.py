@@ -500,7 +500,16 @@ FUNCTION_DEFINITION_PATTERNS = {
     "javascript": ["function {name}", "const {name}", "export {name}"],
     "typescript": ["function {name}", "const {name}", "export {name}"],
     "go": ["func {name}"],
-    "rust": ["fn {name}", "pub fn {name}"],
+    "rust": [
+        "fn {name}",
+        "pub fn {name}",
+        "pub(crate) fn {name}",
+        "async fn {name}",
+        "pub async fn {name}",
+        "struct {name}",
+        "enum {name}",
+        "trait {name}",
+    ],
     "c": ["void {name}", "int {name}", "{name}("],
     "cpp": ["void {name}", "int {name}", "{name}("],
     "php": [

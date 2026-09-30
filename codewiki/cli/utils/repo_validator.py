@@ -33,6 +33,7 @@ SUPPORTED_EXTENSIONS = {
     ".rb",  # Ruby
     ".scala",  # Scala
     ".sc",  # Scala Scripts
+    ".rs",  # Rust
 }
 
 
@@ -64,7 +65,7 @@ def validate_repository(repo_path: Path) -> tuple[Path, list[tuple[str, int]]]:
         raise RepositoryError(
             f"No supported code files found in {repo_path}\n\n"
             "CodeWiki supports: Python, Java, JavaScript, TypeScript, C, C++, C#, Kotlin, PHP, "
-            "Ruby, Scala\n\n"
+            "Ruby, Scala, Rust\n\n"
             "Please navigate to a code repository or specify a custom directory:\n"
             "  cd /path/to/your/project\n"
             "  codewiki generate"
