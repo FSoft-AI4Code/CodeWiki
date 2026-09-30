@@ -5,6 +5,8 @@ from typing import Any
 
 from dotenv import load_dotenv
 
+from codewiki.src.language import format_language_directive, normalize_language
+
 load_dotenv()
 
 # Constants
@@ -156,12 +158,23 @@ class Config:
             return self.agent_instructions.get("custom_instructions")
         return None
 
+    @property
+    def language(self) -> str | None:
+        """Output language of the generated docs (None means English)."""
+        if self.agent_instructions:
+            return normalize_language(self.agent_instructions.get("language"))
+        return None
+
     def get_prompt_addition(self) -> str:
         """Generate prompt additions based on agent instructions."""
         if not self.agent_instructions:
             return ""
 
         additions = []
+
+        # First, so it is not outweighed by the English prompts around it
+        if self.language:
+            additions.append(format_language_directive(self.language))
 
         if self.doc_type:
             doc_type_instructions = {

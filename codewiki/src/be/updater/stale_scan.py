@@ -13,7 +13,7 @@ from codewiki.src.be.backend import LLMBackend
 from codewiki.src.be.dependency_analyzer.models.core import Node
 from codewiki.src.be.updater import pages as P
 from codewiki.src.be.updater.graph_diff import GraphDiff
-from codewiki.src.be.updater.prompts import STALE_FIX_SYSTEM_PROMPT, format_stale_prompt
+from codewiki.src.be.updater.prompts import format_stale_fix_system_prompt, format_stale_prompt
 from codewiki.src.be.updater.reference_index import unique_names_of
 from codewiki.src.be.updater.record import CallCost, PageVerdict, UpdateRecord
 from codewiki.src.be.updater.verdicts import parse_verdicts
@@ -135,7 +135,9 @@ class StaleScanner:
         usage = None
         try:
             reply = await self.backend.run_update_agent(
-                STALE_FIX_SYSTEM_PROMPT, format_stale_prompt(stem, items), deps
+                format_stale_fix_system_prompt(deps.custom_instructions),
+                format_stale_prompt(stem, items),
+                deps,
             )
             text, usage = reply.text, reply.usage
         except Exception as e:  # noqa: BLE001 — recorded; page stays as is

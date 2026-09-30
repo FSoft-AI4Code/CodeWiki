@@ -222,3 +222,38 @@ def find_missing_module_docs(
     if overview_required and not os.path.exists(os.path.join(working_dir, "overview.md")):
         missing.append("overview")
     return missing
+
+
+def _first_h1(path: str) -> Optional[str]:
+    in_fence = False
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if stripped.startswith(("```", "~~~")):
+                    in_fence = not in_fence
+                elif not in_fence and stripped.startswith("# "):
+                    return stripped[2:].strip().strip("#").strip() or None
+    except (OSError, UnicodeDecodeError):
+        return None
+    return None
+
+
+def extract_page_titles(working_dir: str, module_tree: Dict[str, Any]) -> Dict[str, str]:
+    """Map module names (and "overview") to the first `# ` heading of their page.
+
+    Used as viewer display titles for docs written in another language, so the
+    navigation can be translated while filenames stay equal to module names.
+    Pages that are missing or have no H1 are left out.
+    """
+    titles = {}
+    for name in ["overview", *sorted(collect_module_tree_names(module_tree))]:
+        path = (
+            os.path.join(working_dir, "overview.md")
+            if name == "overview"
+            else resolve_module_doc_path(working_dir, name)
+        )
+        title = _first_h1(path) if path and os.path.exists(path) else None
+        if title:
+            titles[name] = title
+    return titles

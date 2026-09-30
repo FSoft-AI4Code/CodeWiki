@@ -314,6 +314,17 @@ def format_update_system_prompt(leaf_name: str, custom_instructions: str | None)
     return UPDATE_LEAF_SYSTEM_PROMPT.format(leaf_name=leaf_name, custom_instructions=extra)
 
 
+def format_stale_fix_system_prompt(custom_instructions: str | None) -> str:
+    # Without the instructions (output language especially), fixes would be
+    # written in English into translated pages
+    if not custom_instructions:
+        return STALE_FIX_SYSTEM_PROMPT
+    return (
+        f"{STALE_FIX_SYSTEM_PROMPT}\n<CUSTOM_INSTRUCTIONS>\n{custom_instructions}\n"
+        "</CUSTOM_INSTRUCTIONS>"
+    )
+
+
 def format_update_user_prompt(
     *,
     leaf_name: str,

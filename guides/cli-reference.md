@@ -42,6 +42,7 @@ the repository first.
 | `--focus`, `-f PATHS` | none | Comma-separated modules or paths to document in more detail |
 | `--doc-type`, `-t TYPE` | none | One of `api`, `architecture`, `user-guide`, `developer` |
 | `--instructions TEXT` | none | Free-form instructions passed to the documentation agent |
+| `--language`, `-l LANG` | English | Language of the generated docs, as a code or name (`ja`, `Japanese`, `vi`, `zh`, ...). See [Output language](#output-language) |
 | `--use-gitignore` / `--no-gitignore` | enabled | Respect root and nested `.gitignore` files |
 
 Pattern rules:
@@ -55,6 +56,18 @@ Pattern rules:
 - Git ignore rules apply before the dependency analysis. Tracked files stay
   in, as in Git. Built-in and `--exclude` patterns still apply when Git
   includes a path.
+
+### Output language
+
+`--language ja` writes page text, headings, tables and Mermaid labels in
+Japanese. Code, identifiers and paths are left as they are. Filenames and
+module names are never translated: they are the keys that link pages, the
+module tree, the viewer and `--update` together. The GitHub Pages viewer
+shows each page's translated `# ` heading in the navigation instead.
+
+The language is stored in `metadata.json`. `--update` reuses it, and stops
+with an error if `--language` names a different one. To switch language,
+regenerate without `--update`.
 
 ### Artifact-aware generation (new in 2.0)
 
@@ -112,6 +125,7 @@ codewiki generate --no-artifacts                    # code only, 1.x behaviour
 codewiki generate --include "*.cs" --exclude "Tests,Specs,*.test.cs"
 codewiki generate --focus "src/core,src/api" --doc-type architecture
 codewiki generate --instructions "Focus on public APIs and include usage examples"
+codewiki generate --language ja                     # docs in Japanese
 codewiki generate --max-tokens 16384 --max-depth 3
 ```
 
@@ -156,6 +170,7 @@ codewiki config agent --exclude "Tests,Specs,*.test.cs"
 codewiki config agent --focus "src/core,src/api"
 codewiki config agent --doc-type architecture
 codewiki config agent --instructions "Document error handling in detail"
+codewiki config agent --language ja     # default output language ('' resets to English)
 codewiki config agent            # show current agent defaults
 codewiki config agent --clear    # remove all of them
 ```
