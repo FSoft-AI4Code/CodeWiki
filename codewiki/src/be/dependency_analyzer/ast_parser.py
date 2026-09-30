@@ -188,6 +188,7 @@ class DependencyParser:
             ".rb",
             ".scala",
             ".sc",
+            ".rs",
         ]
         for ext in extensions:
             if path.endswith(ext):

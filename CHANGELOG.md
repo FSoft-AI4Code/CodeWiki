@@ -4,6 +4,15 @@ All notable changes to CodeWiki. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Rust analyzer.** Structs, unions, enums, traits, free functions, and
+  impl/trait methods become components, with trait-impl, field-type,
+  struct-literal, and call edges. `#[cfg(test)]` modules are skipped, and
+  `build.rs` is classified as a build artifact.
+
 ## [2.0.0] - 2026-09-18
 
 The first release since 1.0.1. Everything that landed on `main` in between is
