@@ -24,6 +24,7 @@ from codewiki.cli.utils.errors import (
 )
 from codewiki.cli.utils.instructions import display_post_generation_instructions
 from codewiki.cli.utils.logging import create_logger
+from codewiki.src.language import resolve_update_language
 from codewiki.cli.utils.repo_validator import (
     check_writable_output,
     get_git_commit_hash,
@@ -37,6 +38,17 @@ def parse_patterns(patterns_str: str) -> list[str]:
     if not patterns_str:
         return []
     return [p.strip() for p in patterns_str.split(",") if p.strip()]
+
+
+def _read_stored_language(output_dir: Path) -> str | None:
+    """Language recorded in metadata.json by the previous generation (None = English)."""
+    import json
+
+    try:
+        metadata = json.loads((output_dir / "metadata.json").read_text(encoding="utf-8"))
+        return (metadata.get("generation_info") or {}).get("language")
+    except (OSError, json.JSONDecodeError, AttributeError):
+        return None
 
 
 def _detect_changed_files(
@@ -262,6 +274,15 @@ def _invalidate_affected_modules(output_dir: Path, changed_files: list[str], log
     help="Custom instructions for the documentation agent",
 )
 @click.option(
+    "--language",
+    "-l",
+    type=str,
+    default=None,
+    help="Language of the generated documentation, as a code or name (e.g. 'ja', 'Japanese', 'vi'). "
+    "Filenames and module names stay ASCII. Default: English, or the language stored in "
+    "metadata.json when used with --update",
+)
+@click.option(
     "--use-gitignore/--no-gitignore",
     default=None,
     help="Apply Git ignore rules during analysis (default: enabled)",
@@ -413,6 +434,7 @@ def generate_command(
     focus: str | None,
     doc_type: str | None,
     instructions: str | None,
+    language: str | None,
     use_gitignore: bool | None,
     verbose: bool,
     max_tokens: int | None,
@@ -553,6 +575,16 @@ def generate_command(
 
         # Incremental update: detect changed files and selectively regenerate
         changed_files = None
+        update_language = None
+        updating_existing_docs = update and (output_dir / "metadata.json").exists()
+        if updating_existing_docs:
+            # Keep updated pages in the language of the existing docs
+            try:
+                update_language = resolve_update_language(
+                    _read_stored_language(output_dir), language
+                )
+            except ValueError as e:
+                raise ConfigurationError(str(e)) from None
         if update and output_dir.exists():
             changed_files = _detect_changed_files(
                 repo_path, output_dir, logger, verbose, compare_to=compare_to
@@ -624,7 +656,7 @@ def generate_command(
 
         # Create runtime agent instructions from CLI options
         runtime_instructions = None
-        if any([include, exclude, focus, doc_type, instructions, artifact_exclude]):
+        if any([include, exclude, focus, doc_type, instructions, artifact_exclude, language]):
             runtime_instructions = AgentInstructions(
                 include_patterns=parse_patterns(include) if include else None,
                 exclude_patterns=parse_patterns(exclude) if exclude else None,
@@ -632,6 +664,7 @@ def generate_command(
                 doc_type=doc_type,
                 custom_instructions=instructions,
                 artifact_exclude=parse_patterns(artifact_exclude) if artifact_exclude else None,
+                language=language,
             )
 
             if verbose:
@@ -647,6 +680,8 @@ def generate_command(
                     logger.debug(f"Custom instructions: {instructions}")
                 if artifact_exclude:
                     logger.debug(f"Artifact exclude patterns: {parse_patterns(artifact_exclude)}")
+                if language:
+                    logger.debug(f"Output language: {language}")
 
         # Log max token settings if verbose
         if verbose:
@@ -682,39 +717,21 @@ def generate_command(
         agent_instructions_dict = None
         if runtime_instructions and not runtime_instructions.is_empty():
             # Merge with persistent settings
-            merged = AgentInstructions(
-                include_patterns=runtime_instructions.include_patterns
-                or (
-                    config.agent_instructions.include_patterns
-                    if config.agent_instructions
-                    else None
-                ),
-                exclude_patterns=runtime_instructions.exclude_patterns
-                or (
-                    config.agent_instructions.exclude_patterns
-                    if config.agent_instructions
-                    else None
-                ),
-                focus_modules=runtime_instructions.focus_modules
-                or (config.agent_instructions.focus_modules if config.agent_instructions else None),
-                doc_type=runtime_instructions.doc_type
-                or (config.agent_instructions.doc_type if config.agent_instructions else None),
-                custom_instructions=runtime_instructions.custom_instructions
-                or (
-                    config.agent_instructions.custom_instructions
-                    if config.agent_instructions
-                    else None
-                ),
-                artifact_exclude=runtime_instructions.artifact_exclude
-                or (
-                    config.agent_instructions.artifact_exclude
-                    if config.agent_instructions
-                    else None
-                ),
-            )
+            merged = runtime_instructions.merged_with(config.agent_instructions)
             agent_instructions_dict = merged.to_dict()
         elif config.agent_instructions and not config.agent_instructions.is_empty():
             agent_instructions_dict = config.agent_instructions.to_dict()
+
+        if updating_existing_docs:
+            # The stored language overrides the saved `config agent --language` default
+            agent_instructions_dict = dict(agent_instructions_dict or {})
+            agent_instructions_dict.pop("language", None)
+            if update_language:
+                agent_instructions_dict["language"] = update_language
+            if verbose:
+                logger.debug(
+                    f"Output language (from metadata.json): {update_language or 'English'}"
+                )
 
         # Create generator
         # Get commit_id early so it can be stored in metadata.json for --update support

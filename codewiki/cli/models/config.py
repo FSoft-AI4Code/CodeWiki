@@ -8,6 +8,7 @@ to the backend Config class when running documentation generation.
 
 from dataclasses import dataclass, field
 
+from codewiki.src.language import format_language_directive
 from codewiki.cli.utils.validation import (
     validate_model_name,
     validate_url,
@@ -31,6 +32,7 @@ class AgentInstructions:
         focus_modules: Modules to document in more detail
         doc_type: Type of documentation to generate
         custom_instructions: Additional instructions for the documentation agent
+        language: Output language of the generated docs (e.g. "ja", "Japanese")
     """
 
     include_patterns: list[str] | None = None  # e.g., ["*.cs"] for C# projects
@@ -41,6 +43,7 @@ class AgentInstructions:
     artifact_exclude: list[str] | None = (
         None  # e.g., ["docker/data/*"] skipped by artifact analysis
     )
+    language: str | None = None  # e.g., "ja", "Japanese"
 
     def to_dict(self) -> dict:
         """Convert to dictionary, excluding None values."""
@@ -57,6 +60,8 @@ class AgentInstructions:
             result["doc_type"] = self.doc_type
         if self.custom_instructions:
             result["custom_instructions"] = self.custom_instructions
+        if self.language:
+            result["language"] = self.language
         return result
 
     @classmethod
@@ -69,6 +74,7 @@ class AgentInstructions:
             doc_type=data.get("doc_type"),
             custom_instructions=data.get("custom_instructions"),
             artifact_exclude=data.get("artifact_exclude"),
+            language=data.get("language"),
         )
 
     def is_empty(self) -> bool:
@@ -81,12 +87,31 @@ class AgentInstructions:
                 self.focus_modules,
                 self.doc_type,
                 self.custom_instructions,
+                self.language,
             ]
+        )
+
+    def merged_with(self, fallback: "AgentInstructions | None") -> "AgentInstructions":
+        """Field-by-field merge: values set here win, the rest come from `fallback`."""
+        if fallback is None:
+            return self
+        return AgentInstructions(
+            include_patterns=self.include_patterns or fallback.include_patterns,
+            exclude_patterns=self.exclude_patterns or fallback.exclude_patterns,
+            focus_modules=self.focus_modules or fallback.focus_modules,
+            doc_type=self.doc_type or fallback.doc_type,
+            custom_instructions=self.custom_instructions or fallback.custom_instructions,
+            artifact_exclude=self.artifact_exclude or fallback.artifact_exclude,
+            language=self.language or fallback.language,
         )
 
     def get_prompt_addition(self) -> str:
         """Generate prompt additions based on instructions."""
         additions = []
+
+        directive = format_language_directive(self.language)
+        if directive:
+            additions.append(directive)
 
         if self.doc_type:
             doc_type_instructions = {
@@ -280,17 +305,7 @@ class Configuration:
         # Runtime instructions take precedence
         final_instructions = self.agent_instructions
         if runtime_instructions and not runtime_instructions.is_empty():
-            final_instructions = AgentInstructions(
-                include_patterns=runtime_instructions.include_patterns
-                or self.agent_instructions.include_patterns,
-                exclude_patterns=runtime_instructions.exclude_patterns
-                or self.agent_instructions.exclude_patterns,
-                focus_modules=runtime_instructions.focus_modules
-                or self.agent_instructions.focus_modules,
-                doc_type=runtime_instructions.doc_type or self.agent_instructions.doc_type,
-                custom_instructions=runtime_instructions.custom_instructions
-                or self.agent_instructions.custom_instructions,
-            )
+            final_instructions = runtime_instructions.merged_with(self.agent_instructions)
 
         return Config.from_cli(
             repo_path=repo_path,

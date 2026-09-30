@@ -9,6 +9,7 @@ from typing import Optional, Dict, Any
 
 from codewiki.cli.utils.errors import FileSystemError
 from codewiki.cli.utils.fs import safe_write, safe_read
+from codewiki.src.language import language_tag
 
 
 class HTMLGenerator:
@@ -145,10 +146,22 @@ class HTMLGenerator:
         module_tree_json = json.dumps(module_tree, indent=2)
         metadata_json = json.dumps(metadata, indent=2) if metadata else "null"
 
+        # Docs written in another language: show their translated page titles
+        # in the navigation (filenames stay equal to the module names)
+        language = ((metadata or {}).get("generation_info") or {}).get("language")
+        page_titles = {}
+        if language and docs_dir:
+            from codewiki.src.be.module_naming import extract_page_titles
+
+            page_titles = extract_page_titles(str(docs_dir), module_tree)
+        page_titles_json = json.dumps(page_titles, ensure_ascii=False).replace("</", "<\\/")
+
         # Replace placeholders
         html_content = template_content
         replacements = {
             "{{TITLE}}": self._escape_html(title),
+            "{{HTML_LANG}}": language_tag(language),
+            "{{PAGE_TITLES_JSON}}": page_titles_json,
             "{{REPO_LINK}}": repo_link,
             "{{SHOW_INFO}}": show_info,
             "{{INFO_CONTENT}}": info_content,

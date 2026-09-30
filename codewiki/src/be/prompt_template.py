@@ -301,7 +301,7 @@ REPO_OVERVIEW_ARTIFACT_ADDENDUM = """
 The repository also contains the following build, CI, container, packaging, manifest and configuration artifacts:
 {artifact_index}
 
-Include a short section titled "How it is built and run" that summarises how the project is built, tested, packaged and deployed, and links to the module documentation that covers these artifacts (for example a `Build, Deployment and Configuration` module) instead of repeating its content.
+Include a short section on how it is built and run that summarises how the project is built, tested, packaged and deployed, and links to the module documentation that covers these artifacts (for example a `Build, Deployment and Configuration` module) instead of repeating its content.
 """.strip()
 
 EXTENSION_TO_LANGUAGE = {

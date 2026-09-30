@@ -73,6 +73,8 @@ class DocumentationGenerator:
                 "generator_version": __version__,
                 "repo_path": self.config.repo_path,
                 "commit_id": self.commit_id,
+                # Read back by `--update` so updated pages keep this language
+                "language": getattr(self.config, "language", None),
             },
             "statistics": {
                 "total_components": len(components),

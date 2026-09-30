@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{HTML_LANG}}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -932,7 +932,7 @@
             <input type="search" class="nav-filter" id="nav-filter" placeholder="Filter pages…" aria-label="Filter pages" autocomplete="off">
 
             <div class="nav-section">
-                <div class="nav-item active" data-file="overview.md">
+                <div class="nav-item active" data-file="overview.md" id="nav-overview">
                     📄 Overview
                 </div>
             </div>
@@ -963,6 +963,11 @@
         const CONFIG = {{CONFIG_JSON}};
         const MODULE_TREE = {{MODULE_TREE_JSON}};
         const METADATA = {{METADATA_JSON}};
+        // Translated page titles (first heading of each page), keyed by module name
+        const PAGE_TITLES = {{PAGE_TITLES_JSON}};
+        if (PAGE_TITLES.overview) {
+            document.getElementById('nav-overview').textContent = '📄 ' + PAGE_TITLES.overview;
+        }
         const DOCS_BASE_PATH = '{{DOCS_BASE_PATH}}';
 
         // Router / rendering state
@@ -1156,6 +1161,9 @@
         }
 
         function formatNavTitle(key) {
+            if (Object.prototype.hasOwnProperty.call(PAGE_TITLES, key)) {
+                return PAGE_TITLES[key];
+            }
             return key
                 .replace(/_/g, ' ')
                 .split(' ')
@@ -1657,7 +1665,10 @@
 
         function pageTitleFor(filename) {
             const base = filename.replace(/\.md$/i, '');
-            return base === 'overview' ? 'Overview' : formatNavTitle(base);
+            if (base === 'overview') {
+                return PAGE_TITLES.overview || 'Overview';
+            }
+            return formatNavTitle(base);
         }
 
         function renderPagerLinks(filename) {

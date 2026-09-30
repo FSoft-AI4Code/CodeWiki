@@ -322,6 +322,11 @@ def _legacy_tools() -> list[Tool]:
                         "enum": ["api", "architecture", "user-guide", "developer"],
                         "description": "Type of documentation to generate",
                     },
+                    "language": {
+                        "type": "string",
+                        "description": "Language of the generated docs, as a code or name "
+                        "(e.g. 'ja', 'Japanese'; default: English)",
+                    },
                     "include_patterns": {
                         "type": "string",
                         "description": "Comma-separated file patterns to include",
@@ -511,6 +516,8 @@ async def _legacy_generate_docs(arguments: dict[str, Any]) -> list[TextContent]:
     agent_instructions = {}
     if arguments.get("doc_type"):
         agent_instructions["doc_type"] = arguments["doc_type"]
+    if arguments.get("language"):
+        agent_instructions["language"] = arguments["language"]
     if arguments.get("include_patterns"):
         agent_instructions["include_patterns"] = [
             p.strip() for p in arguments["include_patterns"].split(",")

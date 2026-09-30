@@ -143,8 +143,14 @@ too much changed, it falls back to a full build and says so.
 codewiki generate --include "*.cs" --exclude "Tests,Specs,*.test.cs"
 codewiki generate --focus "src/core,src/api" --doc-type architecture
 codewiki generate --instructions "Focus on public APIs and include usage examples"
+codewiki generate --language ja                    # write the docs in Japanese
 codewiki config agent --exclude "Tests,Specs"      # make it the default
 ```
+
+`--language` takes a code or a name (`ja`, `Japanese`, `vi`, `zh`, ...). Page
+text, headings and diagram labels follow it. Filenames and module names stay
+ASCII so links keep working, and the viewer shows the translated page titles.
+`--update` reuses the language the docs were generated in.
 
 `--include` replaces the default file set. `--exclude` merges with the built-in
 ignore list. Every flag is in the [CLI reference](./guides/cli-reference.md).

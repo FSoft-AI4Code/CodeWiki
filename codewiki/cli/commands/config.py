@@ -10,6 +10,7 @@ from typing import Optional, List
 
 from codewiki.cli.config_manager import ConfigManager
 from codewiki.cli.models.config import AgentInstructions
+from codewiki.src.language import normalize_language
 from codewiki.cli.utils.errors import ConfigurationError, handle_error, EXIT_CONFIG_ERROR
 from codewiki.cli.utils.validation import (
     validate_url,
@@ -779,6 +780,13 @@ def config_validate(quick: bool, verbose: bool):
     help="Custom instructions for the documentation agent",
 )
 @click.option(
+    "--language",
+    "-l",
+    type=str,
+    default=None,
+    help="Default language of the generated documentation (e.g. 'ja', 'Japanese'); '' resets to English",
+)
+@click.option(
     "--clear",
     is_flag=True,
     help="Clear all agent instructions",
@@ -789,6 +797,7 @@ def config_agent(
     focus: Optional[str],
     doc_type: Optional[str],
     instructions: Optional[str],
+    language: Optional[str],
     clear: bool,
 ):
     """
@@ -820,6 +829,10 @@ def config_agent(
     $ codewiki config agent --instructions "Focus on public APIs and include usage examples"
 
     \b
+    # Write the documentation in Japanese
+    $ codewiki config agent --language ja
+
+    \b
     # Clear all agent instructions
     $ codewiki config agent --clear
     """
@@ -845,7 +858,7 @@ def config_agent(
             return
 
         # Check if at least one option is provided
-        if not any([include, exclude, focus, doc_type, instructions]):
+        if not any([include, exclude, focus, doc_type, instructions]) and language is None:
             # Display current settings
             click.echo()
             click.secho("Agent Instructions", fg="blue", bold=True)
@@ -864,6 +877,8 @@ def config_agent(
                     click.echo(f"  Doc type:           {agent.doc_type}")
                 if agent.custom_instructions:
                     click.echo(f"  Custom instructions: {agent.custom_instructions}")
+                if agent.language:
+                    click.echo(f"  Language:           {agent.language}")
             else:
                 click.secho("  No agent instructions configured (using defaults)", fg="yellow")
 
@@ -885,6 +900,8 @@ def config_agent(
             current.doc_type = doc_type if doc_type else None
         if instructions is not None:
             current.custom_instructions = instructions if instructions else None
+        if language is not None:
+            current.language = normalize_language(language)
 
         config.agent_instructions = current
         manager.save()
@@ -901,6 +918,8 @@ def config_agent(
             click.secho(f"✓ Doc type: {doc_type}", fg="green")
         if instructions:
             click.secho("✓ Custom instructions set", fg="green")
+        if language is not None:
+            click.secho(f"✓ Language: {current.language or 'English (default)'}", fg="green")
 
         click.echo(
             "\n" + click.style("Agent instructions updated successfully.", fg="green", bold=True)
