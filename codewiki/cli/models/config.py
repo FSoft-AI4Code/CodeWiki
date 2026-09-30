@@ -40,9 +40,9 @@ class AgentInstructions:
     focus_modules: list[str] | None = None  # e.g., ["src/core", "src/api"]
     doc_type: str | None = None  # e.g., "api", "architecture", "user-guide"
     custom_instructions: str | None = None  # Free-form instructions
-    artifact_exclude: list[
-        str
-    ] | None = None  # e.g., ["docker/data/*"] skipped by artifact analysis
+    artifact_exclude: list[str] | None = (
+        None  # e.g., ["docker/data/*"] skipped by artifact analysis
+    )
     language: str | None = None  # e.g., "ja", "Japanese"
 
     def to_dict(self) -> dict:
