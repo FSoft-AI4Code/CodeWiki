@@ -233,6 +233,35 @@ def _parse_via_mermaid_py(diagram_content: str) -> str:
         return str(e)
 
 
+def _run_in_daemon_thread(fn, *args) -> "asyncio.Future":
+    """Run fn in a daemon thread and return an awaitable for its result.
+
+    Unlike asyncio.to_thread, a thread left hanging after wait_for times out
+    (mermaid-py's requests.get has no timeout) does not block interpreter exit.
+    """
+    import threading
+
+    loop = asyncio.get_running_loop()
+    fut = loop.create_future()
+
+    def _set(setter, value):
+        if not fut.done():
+            setter(value)
+
+    def _worker():
+        try:
+            setter, value = fut.set_result, fn(*args)
+        except BaseException as e:
+            setter, value = fut.set_exception, e
+        try:
+            loop.call_soon_threadsafe(_set, setter, value)
+        except RuntimeError:
+            pass  # loop already closed; nobody is waiting any more
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return fut
+
+
 async def validate_single_diagram(diagram_content: str, diagram_num: int, line_start: int) -> str:
     """
     Validate a single mermaid diagram.
@@ -258,7 +287,7 @@ async def validate_single_diagram(diagram_content: str, diagram_num: int, line_s
             return ""
         try:
             core_error = await asyncio.wait_for(
-                asyncio.to_thread(_parse_via_mermaid_py, diagram_content),
+                _run_in_daemon_thread(_parse_via_mermaid_py, diagram_content),
                 timeout=15.0,
             )
         except asyncio.TimeoutError:
