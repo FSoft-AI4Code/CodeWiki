@@ -16,6 +16,12 @@ DOCS_DIR = "docs"
 FIRST_MODULE_TREE_FILENAME = "first_module_tree.json"
 MODULE_TREE_FILENAME = "module_tree.json"
 OVERVIEW_FILENAME = "overview.md"
+# Docs layout: "hierarchical" mirrors the module tree in nested folders
+# (``auth.md`` + ``auth/login.md``); "flat" keeps every page in the docs root
+# (for small models that keep getting relative links wrong).
+LAYOUT_HIERARCHICAL = "hierarchical"
+LAYOUT_FLAT = "flat"
+DEFAULT_LAYOUT = LAYOUT_HIERARCHICAL
 MAX_DEPTH = 2
 # Default max token settings
 DEFAULT_MAX_TOKENS = 32_768
@@ -115,6 +121,8 @@ class Config:
     # Also read the root README and docs/ as a `prose` artifact class (off by
     # default: documentation without existing prose is the benchmark setting)
     with_prose: bool = False
+    # Docs layout (LAYOUT_HIERARCHICAL or LAYOUT_FLAT)
+    layout: str = DEFAULT_LAYOUT
 
     @property
     def artifact_exclude(self) -> list[str] | None:
@@ -216,6 +224,7 @@ class Config:
             cluster_model=CLUSTER_MODEL,
             fallback_model=FALLBACK_MODEL_1,
             use_gitignore=getattr(args, "use_gitignore", True),
+            layout=getattr(args, "layout", DEFAULT_LAYOUT),
         )
 
     @classmethod
@@ -246,6 +255,7 @@ class Config:
         artifacts_enabled: bool = True,
         artifact_token_budget: int = DEFAULT_ARTIFACT_TOKEN_BUDGET,
         with_prose: bool = False,
+        layout: str = DEFAULT_LAYOUT,
     ) -> "Config":
         """
         Create configuration for CLI context.
@@ -280,6 +290,7 @@ class Config:
                 the dependency graph and document them
             artifact_token_budget: Total token budget for artifact file contents
             with_prose: Also read README and docs/ as a `prose` artifact class
+            layout: Docs layout, "hierarchical" (nested folders) or "flat"
 
         Returns:
             Config instance
@@ -314,4 +325,5 @@ class Config:
             artifacts_enabled=artifacts_enabled,
             artifact_token_budget=artifact_token_budget,
             with_prose=with_prose,
+            layout=layout,
         )

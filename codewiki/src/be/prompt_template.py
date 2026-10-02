@@ -2,6 +2,8 @@ import logging
 from collections import defaultdict
 from typing import Any
 
+from codewiki.src.be.doc_layout import doc_relpaths, module_doc_file
+from codewiki.src.config import LAYOUT_FLAT
 from codewiki.src.utils import file_manager
 
 SYSTEM_PROMPT = """
@@ -19,14 +21,14 @@ Create documentation that helps developers and maintainers understand:
 <DOCUMENTATION_STRUCTURE>
 Generate documentation following this structure:
 
-1. **Main Documentation File** (`{module_name}.md`):
+1. **Main Documentation File** (`{doc_file}`):
    - Brief introduction and purpose
    - Architecture overview with diagrams
    - High-level functionality of each sub-module including references to its documentation file
    - Link to other module documentation instead of duplicating information
 
 2. **Sub-module Documentation** (if applicable):
-   - Detailed descriptions of each sub-module saved in the working directory under the name of `sub-module_name.md`
+   - Detailed descriptions of each sub-module saved {sub_module_location}
    - Core components and their responsibilities
 
 3. **Visual Documentation**:
@@ -37,10 +39,10 @@ Generate documentation following this structure:
 
 <WORKFLOW>
 1. Analyze the provided code components and module structure, explore the not given dependencies between the components if needed
-2. Create the main `{module_name}.md` file with overview and architecture in working directory
-3. Use `generate_sub_module_documentation` to generate detailed sub-modules documentation for COMPLEX modules which at least have more than 1 code file and are able to clearly split into sub-modules. Sub-module names must be unique across the whole wiki (all docs share one flat directory) — prefer names prefixed with the current module name, e.g. `{module_name}_search`
+2. Create the main `{doc_file}` file with overview and architecture in working directory
+3. Use `generate_sub_module_documentation` to generate detailed sub-modules documentation for COMPLEX modules which at least have more than 1 code file and are able to clearly split into sub-modules. Sub-module names must be unique across the whole wiki ({uniqueness_reason}) — prefer names prefixed with the current module name, e.g. `{module_name}_search`
 4. Include relevant Mermaid diagrams throughout the documentation
-5. After all sub-modules are documented, adjust `{module_name}.md` with ONLY ONE STEP to ensure all generated files including sub-modules documentation are properly cross-refered, using the final file names reported by `generate_sub_module_documentation`
+5. After all sub-modules are documented, adjust `{doc_file}` with ONLY ONE STEP to ensure all generated files including sub-modules documentation are properly cross-refered, using the final file names reported by `generate_sub_module_documentation`
 </WORKFLOW>
 
 <AVAILABLE_TOOLS>
@@ -73,7 +75,7 @@ Generate documentation following the following requirements:
 <WORKFLOW>
 1. Analyze provided code components and module structure
 2. Explore dependencies between components if needed
-3. Generate complete {module_name}.md documentation file
+3. Generate complete {doc_file} documentation file
 </WORKFLOW>
 
 <AVAILABLE_TOOLS>
@@ -89,7 +91,7 @@ Generate comprehensive documentation for the {module_name} module using the prov
 <MODULE_TREE>
 {module_tree}
 </MODULE_TREE>
-* NOTE: You can refer the other modules in the module tree based on the dependencies between their core components to make the documentation more structured and avoid repeating the same information. Know that all documentation files are saved in the same folder not structured as module tree. e.g. [alt text]([ref_module_name].md)
+* NOTE: You can refer the other modules in the module tree based on the dependencies between their core components to make the documentation more structured and avoid repeating the same information.
 
 <CORE_COMPONENT_CODES>
 {formatted_core_component_codes}
@@ -109,7 +111,7 @@ Provide `{repo_name}` repo structure:
 {repo_structure}
 </REPO_STRUCTURE>
 
-The core modules' documentation is NOT inlined above. Each top-level module carries a `docs_path` field with the absolute path to its documentation file — read those files with your file-reading tools before writing the overview (skip entries whose `docs_path` is null).
+The core modules' documentation is NOT inlined above. Each top-level module carries a `docs_path` field with the absolute path to its documentation file — read those files with your file-reading tools before writing the overview (skip entries whose `docs_path` is null). When referencing a child's documentation, link it with the relative path in its `link` field, e.g. [alt text](<link>).
 
 Please generate the overview of the `{repo_name}` repository in markdown format with the following structure:
 <OVERVIEW>
@@ -130,7 +132,7 @@ Provide repo structure of the `{module_name}` module (marked with `is_target_for
 {repo_structure}
 </REPO_STRUCTURE>
 
-The child modules' documentation is NOT inlined above. Each child of the target module carries a `docs_path` field with the absolute path to its documentation file — read those files with your file-reading tools before writing the overview (skip entries whose `docs_path` is null).
+The child modules' documentation is NOT inlined above. Each child of the target module carries a `docs_path` field with the absolute path to its documentation file — read those files with your file-reading tools before writing the overview (skip entries whose `docs_path` is null). When referencing a child's documentation, link it with the relative path in its `link` field, e.g. [alt text](<link>).
 
 Please generate the overview of the `{module_name}` module in markdown format with the following structure:
 <OVERVIEW>
@@ -287,6 +289,22 @@ CODE_TRUNCATED_NOTE = (
     "file-reading tools to read the full files]"
 )
 
+# How pages link to each other, appended to the user prompt (after the module
+# tree) by layout. Kept out of USER_PROMPT so the MCP prompt server, which
+# formats USER_PROMPT directly, keeps working.
+FLAT_LINKS_NOTE = (
+    "* NOTE: Know that all documentation files are saved in the same folder not structured "
+    "as module tree. e.g. [alt text]([ref_module_name].md)"
+)
+
+HIERARCHICAL_LINKS_NOTE = (
+    "* NOTE: Documentation files are organized in folders mirroring the module tree; each "
+    "module above is listed with its page path (relative to the docs working directory). "
+    "Your page is `{doc_file}`{children_hint}. Link to other pages with paths relative to "
+    "your page, e.g. from `a/b.md` to `c.md` write [alt text](../c.md) and to `a/b/d.md` "
+    "write [alt text](b/d.md)."
+)
+
 # Appended to the user prompt (after USER_PROMPT) when the dependency graph
 # contains artifact nodes. Kept out of USER_PROMPT itself so callers that
 # format the template directly (MCP prompt server) keep working.
@@ -360,26 +378,67 @@ EXTENSION_TO_LANGUAGE = {
 }
 
 
+def is_flat_layout(layout: str | None) -> bool:
+    return layout == LAYOUT_FLAT
+
+
+def _layout_fields(module_name: str, module_path: list[str] | None, layout: str | None) -> dict:
+    doc_file = module_doc_file(module_name, module_path, layout)
+    if is_flat_layout(layout):
+        return {
+            "doc_file": doc_file,
+            "sub_module_location": "in the working directory under the name of `sub-module_name.md`",
+            "uniqueness_reason": "all docs share one flat directory",
+        }
+    folder = doc_file[: -len(".md")] + "/" if module_path else ""
+    location = (
+        f"by `generate_sub_module_documentation` under `{folder}` as `sub-module_name.md`"
+        if folder
+        else "by `generate_sub_module_documentation` as `sub-module_name.md`"
+    )
+    return {
+        "doc_file": doc_file,
+        "sub_module_location": location,
+        "uniqueness_reason": "the module name is the page's filename",
+    }
+
+
+def format_links_note(module_name: str, module_path: list[str] | None, layout: str | None) -> str:
+    """How the agent documenting ``module_name`` names and links pages."""
+    if is_flat_layout(layout):
+        return FLAT_LINKS_NOTE
+    doc_file = module_doc_file(module_name, module_path, layout)
+    children_hint = (
+        f" and its sub-module pages go in `{doc_file[: -len('.md')]}/`" if module_path else ""
+    )
+    return HIERARCHICAL_LINKS_NOTE.format(doc_file=doc_file, children_hint=children_hint)
+
+
 def _format_module_tree_str(
     module_tree: dict[str, Any],
     current_module_name: str | None = None,
     include_components: bool = True,
+    doc_paths: dict[str, str] | None = None,
 ) -> str:
     """
     Render a module tree as an indented text outline.
 
     With include_components=False only module names and hierarchy are
     emitted, which keeps the outline small enough for huge trees that would
-    otherwise blow past MAX_USER_PROMPT_CHARS.
+    otherwise blow past MAX_USER_PROMPT_CHARS. ``doc_paths`` (module name ->
+    page path) adds each module's page path, for the hierarchical layout.
     """
     lines: list[str] = []
 
     def _walk(tree: dict[str, Any], indent: int = 0) -> None:
         for key, value in tree.items():
+            label = key
+            if doc_paths and key in doc_paths:
+                label += f" [page: {doc_paths[key]}]"
             if key == current_module_name:
-                lines.append(f"{'  ' * indent}{key} (current module)")
+                lines.append(f"{'  ' * indent}{label} (current module)")
             else:
-                lines.append(f"{'  ' * indent}{key}")
+                lines.append(f"{'  ' * indent}{label}")
 
             if include_components:
                 # Group components by file
@@ -447,6 +506,8 @@ def format_user_prompt(
     core_component_ids: list[str],
     components: dict[str, Any],
     module_tree: dict[str, any],
+    module_path: list[str] | None = None,
+    layout: str | None = LAYOUT_FLAT,
 ) -> str:
     """
     Format the user prompt with module name and organized core component codes.
@@ -455,13 +516,19 @@ def format_user_prompt(
         module_name: Name of the module to document
         core_component_ids: List of component IDs to include
         components: Dictionary mapping component IDs to CodeComponent objects
+        module_tree: Current module tree
+        module_path: Path of the module in the tree (``[]`` for the whole repo)
+        layout: Docs layout; the hierarchical layout lists each module's page path
 
     Returns:
         Formatted user prompt string
     """
     from codewiki.src.be.dependency_analyzer.analyzers.artifact import render_artifact_index
 
-    formatted_module_tree = _format_module_tree_str(module_tree, module_name)
+    doc_paths = None if is_flat_layout(layout) else doc_relpaths(module_tree, layout)
+    links_note = format_links_note(module_name, module_path, layout)
+
+    formatted_module_tree = _format_module_tree_str(module_tree, module_name, doc_paths=doc_paths)
 
     # Group core component IDs by their file path
     grouped_components: dict[str, list[str]] = {}
@@ -510,6 +577,7 @@ def format_user_prompt(
                 formatted_core_component_codes=codes,
                 module_tree=tree,
             )
+            + f"\n\n{links_note}"
             + artifact_section
         )
 
@@ -520,7 +588,9 @@ def format_user_prompt(
         formatted_module_tree = (
             MODULE_TREE_TRIMMED_NOTE
             + "\n\n"
-            + _format_module_tree_str(module_tree, module_name, include_components=False)
+            + _format_module_tree_str(
+                module_tree, module_name, include_components=False, doc_paths=doc_paths
+            )
         )
         prompt = _assemble(core_component_codes, formatted_module_tree)
         logger.warning(
@@ -610,13 +680,20 @@ def format_super_group_prompt(module_tree: dict[str, Any]) -> str:
     return SUPER_GROUP_PROMPT.format(formatted_modules="\n".join(lines))
 
 
-def format_system_prompt(module_name: str, custom_instructions: str | None = None) -> str:
+def format_system_prompt(
+    module_name: str,
+    custom_instructions: str | None = None,
+    module_path: list[str] | None = None,
+    layout: str | None = LAYOUT_FLAT,
+) -> str:
     """
     Format the system prompt with module name and optional custom instructions.
 
     Args:
         module_name: Name of the module to document
         custom_instructions: Optional custom instructions to append
+        module_path: Path of the module in the tree (``[]`` for the whole repo)
+        layout: Docs layout, which decides the page path the agent writes
 
     Returns:
         Formatted system prompt string
@@ -625,16 +702,27 @@ def format_system_prompt(module_name: str, custom_instructions: str | None = Non
     if custom_instructions:
         custom_section = f"\n\n<CUSTOM_INSTRUCTIONS>\n{custom_instructions}\n</CUSTOM_INSTRUCTIONS>"
 
-    return SYSTEM_PROMPT.format(module_name=module_name, custom_instructions=custom_section).strip()
+    return SYSTEM_PROMPT.format(
+        module_name=module_name,
+        custom_instructions=custom_section,
+        **_layout_fields(module_name, module_path, layout),
+    ).strip()
 
 
-def format_leaf_system_prompt(module_name: str, custom_instructions: str | None = None) -> str:
+def format_leaf_system_prompt(
+    module_name: str,
+    custom_instructions: str | None = None,
+    module_path: list[str] | None = None,
+    layout: str | None = LAYOUT_FLAT,
+) -> str:
     """
     Format the leaf system prompt with module name and optional custom instructions.
 
     Args:
         module_name: Name of the module to document
         custom_instructions: Optional custom instructions to append
+        module_path: Path of the module in the tree (``[]`` for the whole repo)
+        layout: Docs layout, which decides the page path the agent writes
 
     Returns:
         Formatted leaf system prompt string
@@ -644,7 +732,9 @@ def format_leaf_system_prompt(module_name: str, custom_instructions: str | None 
         custom_section = f"\n\n<CUSTOM_INSTRUCTIONS>\n{custom_instructions}\n</CUSTOM_INSTRUCTIONS>"
 
     return LEAF_SYSTEM_PROMPT.format(
-        module_name=module_name, custom_instructions=custom_section
+        module_name=module_name,
+        custom_instructions=custom_section,
+        doc_file=module_doc_file(module_name, module_path, layout),
     ).strip()
 
 

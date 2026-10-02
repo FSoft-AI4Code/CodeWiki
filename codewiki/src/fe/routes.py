@@ -19,6 +19,7 @@ from .cache_manager import CacheManager
 from .templates import WEB_INTERFACE_TEMPLATE
 from .template_utils import render_template
 from .config import WebAppConfig
+from codewiki.src.be.doc_layout import doc_path_map
 from codewiki.src.utils import file_manager
 
 
@@ -235,9 +236,14 @@ class WebRoutes:
             except Exception:
                 pass
 
-        # Serve the requested file
-        file_path = docs_path / filename
-        if not file_path.exists():
+        # Serve the requested file (pages may sit in nested folders; never
+        # outside the docs directory)
+        file_path = (docs_path / filename).resolve()
+        try:
+            file_path.relative_to(docs_path.resolve())
+        except ValueError:
+            raise HTTPException(status_code=403, detail="Access denied") from None
+        if not file_path.is_file():
             raise HTTPException(status_code=404, detail=f"File {filename} not found")
 
         try:
@@ -255,6 +261,7 @@ class WebRoutes:
                 "title": title,
                 "content": html_content,
                 "navigation": module_tree,
+                "doc_paths": doc_path_map(str(docs_path), module_tree),
                 "current_page": filename,
                 "job_id": job_id,
                 "metadata": metadata,

@@ -23,6 +23,7 @@ from markdown_it import MarkdownIt
 
 from .template_utils import render_template
 from .templates import DOCS_VIEW_TEMPLATE
+from codewiki.src.be.doc_layout import doc_path_map
 from codewiki.src.utils import file_manager
 
 app = FastAPI(
@@ -139,6 +140,7 @@ async def index():
             "title": title,
             "content": html_content,
             "navigation": MODULE_TREE,
+            "doc_paths": doc_path_map(str(DOCS_FOLDER), MODULE_TREE) if DOCS_FOLDER else None,
             "current_page": "overview.md",
         }
 
@@ -187,6 +189,7 @@ async def serve_doc(filename: str):
             "title": title,
             "content": html_content,
             "navigation": MODULE_TREE,
+            "doc_paths": doc_path_map(str(DOCS_FOLDER), MODULE_TREE) if DOCS_FOLDER else None,
             "current_page": filename,
         }
 

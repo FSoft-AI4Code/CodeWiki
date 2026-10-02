@@ -19,7 +19,9 @@ from codewiki.src.be.prompt_template import (
     format_system_prompt,
     format_leaf_system_prompt,
     format_cluster_prompt,
+    format_links_note,
 )
+from codewiki.src.config import DEFAULT_LAYOUT
 
 
 # Prompt catalog: maps prompt_type to (raw_template, usage_hint, variables_doc)
@@ -36,16 +38,18 @@ _PROMPT_CATALOG: Dict[str, Dict[str, str]] = {
         "description": "System prompt for documenting a complex (multi-file, parent) module. Includes sub-module delegation instructions.",
         "usage_hint": (
             "Use as the system prompt when generating docs for a parent module. "
-            "The agent should create {module_name}.md with architecture overview "
-            "and cross-references to sub-module docs."
+            "The agent should create the module's page at its doc_path (from "
+            "processing_order.json) with architecture overview and cross-references to "
+            "sub-module docs. Pass variables module_name and module_path."
         ),
     },
     "system_leaf": {
         "description": "System prompt for documenting a leaf (single-file or simple) module.",
         "usage_hint": (
             "Use as the system prompt when generating docs for a leaf module. "
-            "The agent should create {module_name}.md with detailed documentation "
-            "including Mermaid diagrams."
+            "The agent should create the module's page at its doc_path (from "
+            "processing_order.json) with detailed documentation including Mermaid diagrams. "
+            "Pass variables module_name and module_path."
         ),
     },
     "user": {
@@ -105,6 +109,14 @@ def handle_get_prompt(
     return json.dumps(result, indent=2, ensure_ascii=False)
 
 
+def _page_location(variables: Dict[str, Any], module_name: str) -> tuple[list[str], str]:
+    """``module_path`` and docs ``layout`` from the variables (top-level module by default)."""
+    module_path = variables.get("module_path") or [module_name]
+    if isinstance(module_path, str):
+        module_path = [p for p in module_path.split("/") if p]
+    return list(module_path), variables.get("layout") or DEFAULT_LAYOUT
+
+
 def _resolve_prompt(prompt_type: str, variables: Dict[str, Any]) -> str:
     """Resolve a prompt template with optional variable substitution."""
 
@@ -123,27 +135,34 @@ def _resolve_prompt(prompt_type: str, variables: Dict[str, Any]) -> str:
     elif prompt_type == "system_complex":
         module_name = variables.get("module_name", "MODULE_NAME")
         custom_instructions = variables.get("custom_instructions", None)
-        return format_system_prompt(module_name, custom_instructions)
+        module_path, layout = _page_location(variables, module_name)
+        return format_system_prompt(module_name, custom_instructions, module_path, layout)
 
     elif prompt_type == "system_leaf":
         module_name = variables.get("module_name", "MODULE_NAME")
         custom_instructions = variables.get("custom_instructions", None)
-        return format_leaf_system_prompt(module_name, custom_instructions)
+        module_path, layout = _page_location(variables, module_name)
+        return format_leaf_system_prompt(module_name, custom_instructions, module_path, layout)
 
     elif prompt_type == "user":
         module_name = variables.get("module_name", "MODULE_NAME")
         module_tree = variables.get("module_tree", {})
 
+        module_path, layout = _page_location(variables, module_name)
         # Return the template with placeholders filled as possible
-        return USER_PROMPT.format(
-            module_name=module_name,
-            module_tree=json.dumps(module_tree, indent=2)
-            if module_tree
-            else "<MODULE_TREE placeholder>",
-            formatted_core_component_codes=variables.get(
-                "formatted_core_component_codes",
-                "<CORE_COMPONENT_CODES placeholder — use read_code_components to get source code>",
-            ),
+        return (
+            USER_PROMPT.format(
+                module_name=module_name,
+                module_tree=json.dumps(module_tree, indent=2)
+                if module_tree
+                else "<MODULE_TREE placeholder>",
+                formatted_core_component_codes=variables.get(
+                    "formatted_core_component_codes",
+                    "<CORE_COMPONENT_CODES placeholder — use read_code_components to get source code>",
+                ),
+            )
+            + "\n\n"
+            + format_links_note(module_name, module_path, layout)
         )
 
     elif prompt_type == "overview_module":

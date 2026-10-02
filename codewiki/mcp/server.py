@@ -150,7 +150,11 @@ def _fine_grained_tools() -> list[Tool]:
                     },
                     "filename": {
                         "type": "string",
-                        "description": "Filename for the doc (e.g., 'auth_module.md')",
+                        "description": (
+                            "Path of the doc relative to the output dir: the module's "
+                            "doc_path from processing_order.json (e.g., 'auth.md' or "
+                            "'auth/login.md'; folders are created as needed)"
+                        ),
                     },
                     "content": {
                         "type": "string",
@@ -531,6 +535,8 @@ async def _legacy_generate_docs(arguments: dict[str, Any]) -> list[TextContent]:
 
     set_cli_context(True)
 
+    from codewiki.src.be.doc_layout import docs_layout, list_doc_files
+
     backend_config = BackendConfig.from_cli(
         repo_path=str(repo_path),
         output_dir=str(output_dir),
@@ -544,6 +550,7 @@ async def _legacy_generate_docs(arguments: dict[str, Any]) -> list[TextContent]:
         max_tokens=config.max_tokens,
         agent_instructions=agent_instructions or None,
         use_gitignore=arguments.get("use_gitignore", True),
+        layout=docs_layout(str(output_dir)),
     )
 
     from codewiki.cli.utils.repo_validator import get_git_commit_hash
@@ -554,9 +561,9 @@ async def _legacy_generate_docs(arguments: dict[str, Any]) -> list[TextContent]:
     )
     await doc_gen.run()
 
-    generated_files = []
+    generated_files = sorted(list_doc_files(str(output_dir)).values())
     for f in output_dir.iterdir():
-        if f.suffix in (".md", ".json", ".html"):
+        if f.suffix in (".json", ".html"):
             generated_files.append(f.name)
 
     result = {
@@ -654,10 +661,18 @@ def _write_generation_metadata(session: SessionState) -> None:
             except (json.JSONDecodeError, OSError):
                 pass
 
+        from codewiki.src.be.doc_layout import docs_layout, organize_docs
+
+        # Keep the layout of existing docs; new docs get the default. Move
+        # misplaced pages and fix links between pages before stamping it.
+        layout = docs_layout(str(output_dir))
+        organize_docs(str(output_dir), layout)
+
         existing["generation_info"] = {
             **existing.get("generation_info", {}),
             "commit_id": commit_id,
             "timestamp": datetime.now().isoformat(),
+            "layout": layout,
         }
         metadata_path.write_text(
             json.dumps(existing, indent=2, ensure_ascii=False),

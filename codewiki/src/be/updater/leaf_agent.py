@@ -8,6 +8,7 @@ import time
 from typing import Any
 
 from codewiki.src.be.agent_tools.deps import CodeWikiDeps
+from codewiki.src.be import doc_layout as L
 from codewiki.src.be.backend import LLMBackend
 from codewiki.src.be.dependency_analyzer.models.core import Node
 from codewiki.src.be.updater import pages as P
@@ -63,10 +64,16 @@ class LeafAgentRunner:
             allowed_write_paths=allowed,
         )
 
+    def _page_paths(self, roles: dict[str, list[str]]) -> dict[str, str]:
+        """Docs-relative path of every page in the write set and the tree."""
+        paths = L.doc_relpaths(self.tree, L.read_layout(self.docs_dir))
+        paths.update(L.list_doc_files(self.docs_dir))
+        for stem in roles:
+            paths[stem] = P.page_rel(self.docs_dir, stem)
+        return paths
+
     def _remove_page(self, stem: str, by_leaf: str, reason: str) -> None:
-        path = P.page_path(self.docs_dir, stem)
-        if os.path.exists(path):
-            os.remove(path)
+        if P.remove_page(self.docs_dir, stem):
             self.record.pages_removed.append(stem)
             self.record.add_verdict(PageVerdict(stem, "delete", reason, by_leaf, True))
 
@@ -74,10 +81,7 @@ class LeafAgentRunner:
         self, leaf_name: str, module_path: list[str], component_ids: list[str], why: str
     ) -> None:
         """Delete the page (if any) and let the normal module agent write it anew."""
-        path = P.page_path(self.docs_dir, leaf_name)
-        existed = os.path.exists(path)
-        if existed:
-            os.remove(path)
+        existed = P.remove_page(self.docs_dir, leaf_name)
         started = time.time()
         err = None
         try:
@@ -100,12 +104,11 @@ class LeafAgentRunner:
                 err,
             )
         )
+        written = P.page_exists(self.docs_dir, leaf_name)
         self.record.add_verdict(
-            PageVerdict(
-                leaf_name, "rewrite" if existed else "create", why, leaf_name, os.path.exists(path)
-            )
+            PageVerdict(leaf_name, "rewrite" if existed else "create", why, leaf_name, written)
         )
-        if os.path.exists(path):
+        if written:
             self.record.pages_written.append(leaf_name)
 
     async def _run_editing_agent(
@@ -134,6 +137,7 @@ class LeafAgentRunner:
             component_ids=component_ids,
             graph=self.graph,
             leaf_page_text=P.read_page(self.docs_dir, leaf_name) if leaf_name in roles else None,
+            page_paths=self._page_paths(roles),
         )
         before = P.page_hashes(self.docs_dir)
         started = time.time()

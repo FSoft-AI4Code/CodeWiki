@@ -44,6 +44,7 @@ the repository first.
 | `--instructions TEXT` | none | Free-form instructions passed to the documentation agent |
 | `--language`, `-l LANG` | English | Language of the generated docs, as a code or name (`ja`, `Japanese`, `vi`, `zh`, ...). See [Output language](#output-language) |
 | `--use-gitignore` / `--no-gitignore` | enabled | Respect root and nested `.gitignore` files |
+| `--flat` | off | Save every page in the output root instead of folders mirroring the module tree. See [Docs layout](#docs-layout) |
 
 Pattern rules:
 
@@ -67,6 +68,32 @@ shows each page's translated `# ` heading in the navigation instead.
 
 The language is stored in `metadata.json`. `--update` reuses it, and stops
 with an error if `--language` names a different one. To switch language,
+regenerate without `--update`.
+
+### Docs layout
+
+Pages mirror the module tree. A module's page sits next to the folder that
+holds its sub-modules, and `overview.md` stays at the root:
+
+```
+docs/overview.md
+docs/auth.md                 # links to auth/login.md, auth/session.md
+docs/auth/login.md
+docs/auth/session.md
+docs/auth/session/store.md
+docs/billing.md
+```
+
+Links between pages are relative to the linking page. After each run,
+CodeWiki moves any page an agent saved in the wrong folder and repairs links
+that point to the wrong path.
+
+`--flat` keeps every page in the output root as `<module>.md`, the layout
+of 2.0 and earlier. Use it with small models that keep getting relative links wrong.
+Module names are unique across the wiki in both layouts.
+
+The layout is stored in `metadata.json`, and `--update` keeps it. Docs with
+no stored layout were generated flat, and they stay flat. To switch layout,
 regenerate without `--update`.
 
 ### Artifact-aware generation (new in 2.0)
@@ -126,6 +153,7 @@ codewiki generate --include "*.cs" --exclude "Tests,Specs,*.test.cs"
 codewiki generate --focus "src/core,src/api" --doc-type architecture
 codewiki generate --instructions "Focus on public APIs and include usage examples"
 codewiki generate --language ja                     # docs in Japanese
+codewiki generate --flat                            # all pages in ./docs, no folders
 codewiki generate --max-tokens 16384 --max-depth 3
 ```
 

@@ -73,7 +73,7 @@ def language_tag(language: str | None) -> str:
 LANGUAGE_DIRECTIVE = """<OUTPUT_LANGUAGE>
 Write ALL documentation prose in {language}: page titles, headings, paragraphs, lists, table text, Mermaid node/edge labels and captions.
 Keep code, identifiers, file paths, CLI commands and API names exactly as they are.
-Filenames, module names and link targets are fixed identifiers: never translate or rename them. Save the page under exactly the `.md` filename named above, even when it differs from a package or directory name; keep sub-module names as given; link to other pages as `[text](<exact module name>.md)`. Only the visible link text may be translated.
+Filenames, module names and link targets are fixed identifiers: never translate or rename them. Save the page under exactly the `.md` path named above, even when it differs from a package or directory name; keep sub-module names as given; link to other pages by their exact `<module name>.md` file name (with its relative folder path when pages live in folders), e.g. `[text](<exact module name>.md)`. Only the visible link text may be translated.
 Start each page with a single `# ` heading that is the page title in {language}.
 </OUTPUT_LANGUAGE>"""
 

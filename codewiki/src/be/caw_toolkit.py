@@ -28,7 +28,8 @@ from caw import ToolKit, tool
 from mcp.server.fastmcp import Context
 
 from codewiki.src.be.agent_tools.deps import CodeWikiDeps
-from codewiki.src.be.module_naming import plan_sub_module_specs
+from codewiki.src.be.doc_layout import config_layout, module_doc_file
+from codewiki.src.be.module_naming import skipped_report, plan_sub_module_specs, sub_module_report
 
 if TYPE_CHECKING:
     from codewiki.src.be.caw_backend import CawBackend
@@ -257,7 +258,8 @@ class CawToolKit(
                 "(leaf module: single-file or below the token threshold, or max recursion "
                 "depth reached). DO NOT call this tool again for this module. "
                 "Instead, write the documentation directly with `str_replace_editor` "
-                f"(create command) as a single `{self._deps.current_module_name}.md` "
+                "(create command) as a single "
+                f"`{module_doc_file(self._deps.current_module_name, self._deps.path_to_current_module, config_layout(self._deps.config))}` "
                 "file covering the provided core components inline (architecture, "
                 "components, diagrams, etc.) — no sub-module fan-out."
             )
@@ -284,7 +286,7 @@ class CawToolKit(
         previous_module_name = deps.current_module_name
 
         # Resolve name collisions against the module tree and files already on
-        # disk before touching the tree (issue #76): docs live in one flat directory.
+        # disk before touching the tree (issue #76): names are unique across the wiki.
         # A request that is already documented (plain or parent-prefixed name) is
         # skipped rather than renamed x_2, x_3, ... (issue #113).
         plan = plan_sub_module_specs(
@@ -294,8 +296,12 @@ class CawToolKit(
             deps.absolute_docs_path,
         )
         name_map = plan.name_map
+        layout = config_layout(deps.config)
+        parent_path = list(deps.path_to_current_module)
         if not name_map:
-            return _skipped_report(plan.skipped, deps.current_module_name)
+            return skipped_report(
+                plan.skipped, module_doc_file(previous_module_name, parent_path, layout)
+            )
         final_specs = {
             name_map[requested_name]: core_ids
             for requested_name, core_ids in sub_module_specs.items()
@@ -341,35 +347,12 @@ class CawToolKit(
         finally:
             deps.current_module_name = previous_module_name
 
-        # Report what actually landed on disk so the parent agent links real filenames.
-        saved = []
-        missing = []
-        for requested_name, final_name in name_map.items():
-            entry = f"{final_name}.md"
-            if final_name != requested_name:
-                entry += f" (requested '{requested_name}', renamed to avoid a collision)"
-            if os.path.exists(os.path.join(deps.absolute_docs_path, f"{final_name}.md")):
-                saved.append(entry)
-            else:
-                missing.append(entry)
-
-        report = f"Saved documentations: {', '.join(saved) if saved else 'none'}."
-        if missing:
-            report += f" MISSING (generation did not produce these files): {', '.join(missing)}."
-            logger.warning(
-                "Sub-module documentation missing after generation: %s", ", ".join(missing)
-            )
-        if plan.skipped:
-            report += " " + _skipped_report(plan.skipped, deps.current_module_name)
-        return report
-
-
-def _skipped_report(skipped: dict[str, str], current_module_name: str) -> str:
-    """Tell the parent agent, unambiguously, not to retry skipped sub-modules."""
-    if not skipped:
-        return "No sub-modules were generated."
-    items = ", ".join(f"'{name}' ({reason})" for name, reason in skipped.items())
-    return (
-        f"Skipped sub-modules: {items}. Do NOT call generate_sub_module_documentation again "
-        f"for these; link the existing pages from `{current_module_name}.md` instead."
-    )
+        return sub_module_report(
+            name_map,
+            plan.skipped,
+            deps.absolute_docs_path,
+            deps.module_tree,
+            previous_module_name,
+            parent_path,
+            layout,
+        )

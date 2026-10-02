@@ -13,6 +13,18 @@ uses [Semantic Versioning](https://semver.org/).
   struct-literal, and call edges. `#[cfg(test)]` modules are skipped, and
   `build.rs` is classified as a build artifact.
 
+### Changed
+
+- **Docs mirror the module tree** ([#125](https://github.com/FSoft-AI4Code/CodeWiki/issues/125)).
+  A module's page now sits next to the folder that holds its sub-modules
+  (`auth.md`, `auth/login.md`) instead of every page sharing one flat folder.
+  Links between pages are relative. After each run, pages saved in the wrong
+  folder are moved and wrong links are repaired. `--flat` keeps the old
+  layout for small models. The layout is recorded in `metadata.json`, and
+  `--update` keeps it, so existing flat docs stay flat. The GitHub Pages
+  viewer, the web app and the MCP tools (`doc_path` in
+  `processing_order.json`) follow the layout.
+
 ## [2.0.0] - 2026-09-18
 
 The first release since 1.0.1. Everything that landed on `main` in between is

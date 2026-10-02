@@ -87,7 +87,10 @@ def _generator(docs_dir: Path) -> tuple[DocumentationGenerator, FakeBackend]:
     # Bypass __init__: it wires a real LLM backend and dependency analyzer.
     gen = object.__new__(DocumentationGenerator)
     gen.config = SimpleNamespace(
-        docs_dir=str(docs_dir), repo_path=str(docs_dir), get_prompt_addition=lambda: ""
+        docs_dir=str(docs_dir),
+        repo_path=str(docs_dir),
+        get_prompt_addition=lambda: "",
+        layout="flat",
     )
     gen.backend = FakeBackend(docs_dir)
     return gen, gen.backend

@@ -1,10 +1,9 @@
-import os
-
 from pydantic_ai import RunContext, Tool, Agent
 from pydantic_ai.usage import UsageLimits
 
 from codewiki.src.be.agent_tools.deps import CodeWikiDeps
-from codewiki.src.be.module_naming import plan_sub_module_specs
+from codewiki.src.be.doc_layout import config_layout, module_doc_file
+from codewiki.src.be.module_naming import skipped_report, plan_sub_module_specs, sub_module_report
 from codewiki.src.be.agent_tools.read_code_components import read_code_components_tool
 from codewiki.src.be.agent_tools.str_replace_editor import str_replace_editor_tool
 from codewiki.src.be.llm_services import create_fallback_models
@@ -43,7 +42,7 @@ async def generate_sub_module_documentation(
     fallback_models = create_fallback_models(deps.config)
 
     # Resolve name collisions against the module tree and files already on disk
-    # before touching the tree (issue #76): docs live in one flat directory.
+    # before touching the tree (issue #76): names are unique across the wiki.
     # A request that is already documented (plain or parent-prefixed name) is
     # skipped rather than renamed x_2, x_3, ... (issue #113).
     plan = plan_sub_module_specs(
@@ -53,8 +52,11 @@ async def generate_sub_module_documentation(
         deps.absolute_docs_path,
     )
     name_map = plan.name_map
+    layout = config_layout(deps.config)
+    parent_path = list(deps.path_to_current_module)
+    parent_doc = module_doc_file(previous_module_name, parent_path, layout)
     if not name_map:
-        return _skipped_report(plan.skipped, deps.current_module_name)
+        return skipped_report(plan.skipped, parent_doc)
     final_specs = {
         name_map[requested_name]: core_component_ids
         for requested_name, core_component_ids in sub_module_specs.items()
@@ -88,7 +90,12 @@ async def generate_sub_module_documentation(
                 model=fallback_models,
                 name=sub_module_name,
                 deps_type=CodeWikiDeps,
-                system_prompt=format_system_prompt(sub_module_name, ctx.deps.custom_instructions),
+                system_prompt=format_system_prompt(
+                    sub_module_name,
+                    ctx.deps.custom_instructions,
+                    parent_path + [sub_module_name],
+                    layout,
+                ),
                 retries=ctx.deps.config.agent_retries,
                 tools=[
                     read_code_components_tool,
@@ -102,7 +109,10 @@ async def generate_sub_module_documentation(
                 name=sub_module_name,
                 deps_type=CodeWikiDeps,
                 system_prompt=format_leaf_system_prompt(
-                    sub_module_name, ctx.deps.custom_instructions
+                    sub_module_name,
+                    ctx.deps.custom_instructions,
+                    parent_path + [sub_module_name],
+                    layout,
                 ),
                 retries=ctx.deps.config.agent_retries,
                 tools=[read_code_components_tool, str_replace_editor_tool],
@@ -120,6 +130,8 @@ async def generate_sub_module_documentation(
                 core_component_ids=core_component_ids,
                 components=ctx.deps.components,
                 module_tree=ctx.deps.module_tree,
+                module_path=list(deps.path_to_current_module),
+                layout=layout,
             ),
             deps=ctx.deps,
             usage_limits=UsageLimits(request_limit=ctx.deps.config.request_limit),
@@ -132,35 +144,14 @@ async def generate_sub_module_documentation(
     # restore the previous module name
     deps.current_module_name = previous_module_name
 
-    # Report what actually landed on disk so the parent agent links real filenames.
-    saved = []
-    missing = []
-    for requested_name, final_name in name_map.items():
-        entry = f"{final_name}.md"
-        if final_name != requested_name:
-            entry += f" (requested '{requested_name}', renamed to avoid a collision)"
-        if os.path.exists(os.path.join(deps.absolute_docs_path, f"{final_name}.md")):
-            saved.append(entry)
-        else:
-            missing.append(entry)
-
-    report = f"Saved documentations: {', '.join(saved) if saved else 'none'}."
-    if missing:
-        report += f" MISSING (generation did not produce these files): {', '.join(missing)}."
-        logger.warning("Sub-module documentation missing after generation: %s", ", ".join(missing))
-    if plan.skipped:
-        report += " " + _skipped_report(plan.skipped, deps.current_module_name)
-    return report
-
-
-def _skipped_report(skipped: dict[str, str], current_module_name: str) -> str:
-    """Tell the parent agent, unambiguously, not to retry skipped sub-modules."""
-    if not skipped:
-        return "No sub-modules were generated."
-    items = ", ".join(f"'{name}' ({reason})" for name, reason in skipped.items())
-    return (
-        f"Skipped sub-modules: {items}. Do NOT call generate_sub_module_documentation again "
-        f"for these; link the existing pages from `{current_module_name}.md` instead."
+    return sub_module_report(
+        name_map,
+        plan.skipped,
+        deps.absolute_docs_path,
+        deps.module_tree,
+        previous_module_name,
+        parent_path,
+        layout,
     )
 
 

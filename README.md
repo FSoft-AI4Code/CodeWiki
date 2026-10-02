@@ -164,7 +164,8 @@ configuration in CodeWiki.
 ```
 ./docs/
 ├── overview.md                  # start here
-├── <module>.md ...              # one page per module, leaves and parents
+├── <module>.md ...              # one page per top-level module
+├── <module>/<sub-module>.md ... # sub-module pages, in folders mirroring the module tree
 ├── module_tree.json             # the module hierarchy
 ├── first_module_tree.json       # clustering result before super-grouping
 ├── metadata.json                # model, version, commit, statistics
@@ -173,6 +174,11 @@ configuration in CodeWiki.
 ├── temp/dependency_graphs/      # the saved graph (used by --update)
 └── index.html                   # viewer (with --github-pages)
 ```
+
+Pages mirror the module tree: a module's page sits next to the folder holding
+its sub-modules (`auth.md`, `auth/login.md`). `--flat` puts every page in
+`./docs` instead, which helps small models that get relative links wrong.
+`--update` keeps the layout the docs were generated with.
 
 This repository's own output is checked in under [`./docs/`](./docs/).
 
