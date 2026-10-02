@@ -201,7 +201,10 @@ def detect_supported_languages(directory: Path) -> list[tuple[str, int]]:
 
     def should_exclude_file(file_path: Path) -> bool:
         """Check if file is in an excluded directory."""
-        parts = file_path.parts
+        try:
+            parts = file_path.relative_to(directory).parts
+        except ValueError:
+            parts = file_path.parts
         return any(excluded_dir in parts for excluded_dir in excluded_dirs)
 
     language_counts = {}
