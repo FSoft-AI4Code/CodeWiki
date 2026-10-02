@@ -31,7 +31,7 @@ bring the affected documentation pages up to date with the smallest correct edit
    sentence that is still true word for word. Do not reflow, restyle, or "improve" prose that
    the report does not touch.
 3. Per page role:
-   - the LEAF PAGE ({leaf_name}.md): update sections, tables and diagrams that describe changed
+   - the LEAF PAGE (`{leaf_name}.md`, at the path given in the WRITE SET): update sections, tables and diagrams that describe changed
      components; add new components; remove deleted ones. An OWN entry marked "not listed by
      this module" is a nearby component the page never lists: fix only what its change makes
      wrong in the page's description, do not add a section for it. If the change is so large that the
@@ -45,7 +45,9 @@ bring the affected documentation pages up to date with the smallest correct edit
 4. Use `read_code_components` to read the fresh code of any component id when the diff alone is
    not enough. Use `str_replace_editor` with `working_dir="docs"` and `command="view"` to read a
    page before editing it.
-5. Mermaid diagrams must stay valid. Links between pages are relative: `[text](page.md)`.
+5. Mermaid diagrams must stay valid. Links between pages are relative to the linking page,
+   using the page paths shown in the WRITE SET and the MODULE TREE: `[text](page.md)`,
+   `[text](../page.md)`, `[text](sub/page.md)`.
 </RULES>
 
 <OUTPUT>
@@ -81,7 +83,7 @@ Update the documentation for the module `{leaf_name}` (mode: {mode}).
 {leaf_components}
 </LEAF_COMPONENTS>
 
-<CURRENT_LEAF_PAGE path="{leaf_name}.md">
+<CURRENT_LEAF_PAGE path="{leaf_page_path}">
 {leaf_page}
 </CURRENT_LEAF_PAGE>
 
@@ -174,7 +176,7 @@ End your answer with a fenced JSON block: {"verdicts": {"<page>.md": {"verdict":
 """.strip()
 
 STALE_FIX_USER_PROMPT = """
-Page to fix: `{page}.md` (view it with str_replace_editor, working_dir="docs").
+Page to fix: `{page_path}` (view it with str_replace_editor, working_dir="docs").
 
 <STALE_ITEMS>
 {items}
@@ -255,11 +257,15 @@ def render_report(report: LeafReport, diff: GraphDiff) -> str:
     )
 
 
-def render_write_set(roles: dict[str, list[str]]) -> str:
-    """``roles``: page stem -> list of roles (leaf/ancestor/dependent/referrer)."""
+def render_write_set(roles: dict[str, list[str]], page_paths: dict[str, str] | None = None) -> str:
+    """``roles``: page stem -> list of roles (leaf/ancestor/dependent/referrer).
+
+    ``page_paths`` maps a stem to its docs-relative path (default ``<stem>.md``).
+    """
+    page_paths = page_paths or {}
     lines = []
     for page, rs in roles.items():
-        lines.append(f"- {page}.md  ({', '.join(rs)})")
+        lines.append(f"- {page_paths.get(page, f'{page}.md')}  ({', '.join(rs)})")
     return "\n".join(lines) if lines else "(empty)"
 
 
@@ -301,8 +307,12 @@ def render_leaf_components(
     return "\n".join(lines)
 
 
-def render_tree_outline(tree: dict[str, Any], current: str | None) -> str:
-    return _format_module_tree_str(tree, current, include_components=False)
+def render_tree_outline(
+    tree: dict[str, Any], current: str | None, page_paths: dict[str, str] | None = None
+) -> str:
+    return _format_module_tree_str(
+        tree, current, include_components=False, doc_paths=page_paths or None
+    )
 
 
 def format_update_system_prompt(leaf_name: str, custom_instructions: str | None) -> str:
@@ -336,16 +346,23 @@ def format_update_user_prompt(
     component_ids: list[str],
     graph: dict[str, Node],
     leaf_page_text: str | None,
+    page_paths: dict[str, str] | None = None,
 ) -> str:
+    """``page_paths``: page stem -> docs-relative path, for nested docs layouts."""
     changed = set(report.own)
+    page_paths = page_paths or {}
     return UPDATE_LEAF_USER_PROMPT.format(
         leaf_name=leaf_name,
         mode=mode,
         mode_note=MODE_NOTES.get(mode, MODE_NOTES["edit"]),
-        write_set=render_write_set(roles),
+        write_set=render_write_set(roles, page_paths),
         report=render_report(report, diff),
-        module_tree=render_tree_outline(tree, leaf_name),
+        # Paths only matter (and are only shown) when pages live in folders
+        module_tree=render_tree_outline(
+            tree, leaf_name, page_paths if any("/" in p for p in page_paths.values()) else None
+        ),
         leaf_components=render_leaf_components(component_ids, graph, changed),
+        leaf_page_path=page_paths.get(leaf_name, f"{leaf_name}.md"),
         leaf_page=(
             leaf_page_text if leaf_page_text is not None else "(page does not exist / was removed)"
         ),
@@ -374,7 +391,9 @@ def format_routing_prompt(
     return template.format(module_tree=tree_outline, orphans="\n".join(blocks))
 
 
-def format_stale_prompt(page: str, items: list[dict[str, Any]]) -> str:
+def format_stale_prompt(
+    page: str, items: list[dict[str, Any]], page_path: str | None = None
+) -> str:
     lines = []
     for it in items:
         kind = it.get("kind")
@@ -390,4 +409,4 @@ def format_stale_prompt(page: str, items: list[dict[str, Any]]) -> str:
             )
         else:
             lines.append(f"- {json.dumps(it)}")
-    return STALE_FIX_USER_PROMPT.format(page=page, items="\n".join(lines))
+    return STALE_FIX_USER_PROMPT.format(page_path=page_path or f"{page}.md", items="\n".join(lines))

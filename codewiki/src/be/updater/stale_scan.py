@@ -136,7 +136,7 @@ class StaleScanner:
         try:
             reply = await self.backend.run_update_agent(
                 format_stale_fix_system_prompt(deps.custom_instructions),
-                format_stale_prompt(stem, items),
+                format_stale_prompt(stem, items, P.page_rel(self.docs_dir, stem)),
                 deps,
             )
             text, usage = reply.text, reply.usage

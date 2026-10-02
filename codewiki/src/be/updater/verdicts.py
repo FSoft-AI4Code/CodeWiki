@@ -47,7 +47,7 @@ def parse_verdicts(text: str) -> tuple[dict[str, dict[str, str]], str]:
     verdicts: dict[str, dict[str, str]] = {}
     if isinstance(raw, dict):
         for page, v in raw.items():
-            stem = str(page)
+            stem = str(page).replace("\\", "/").rsplit("/", 1)[-1]
             if stem.endswith(".md"):
                 stem = stem[:-3]
             if isinstance(v, str):
@@ -60,7 +60,7 @@ def parse_verdicts(text: str) -> tuple[dict[str, dict[str, str]], str]:
     elif isinstance(raw, list):
         for v in raw:
             if isinstance(v, dict) and "page" in v:
-                stem = str(v["page"])
+                stem = str(v["page"]).replace("\\", "/").rsplit("/", 1)[-1]
                 stem = stem[:-3] if stem.endswith(".md") else stem
                 verdicts[stem] = {
                     "verdict": str(v.get("verdict", "")).strip().lower(),

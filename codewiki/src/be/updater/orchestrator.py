@@ -48,6 +48,7 @@ from codewiki.src.be.updater.tree_repair import (
     RoutingDecision,
     repair_tree,
 )
+from codewiki.src.be.doc_layout import organize_docs, read_layout
 from codewiki.src.config import MODULE_TREE_FILENAME, Config
 from codewiki.src.utils import file_manager
 
@@ -74,6 +75,13 @@ class IncrementalUpdater:
         self.doc_generator = doc_generator
         self.opts = opts
         self.docs_dir = os.path.abspath(config.docs_dir)
+        # Updated pages keep the layout the docs were generated in. The config
+        # is shared with the doc generator and backend (their agents write the
+        # pages), so align it rather than keeping a second source of truth.
+        self.layout = read_layout(self.docs_dir)
+        if getattr(config, "layout", None) != self.layout:
+            logger.info("Docs use the %s layout; updating them in place", self.layout)
+            config.layout = self.layout
         self.repo_name = os.path.basename(os.path.normpath(config.repo_path))
         self.whole_repo = False
         self._deleted_nodes: list[tuple[str, ...]] = []
@@ -167,12 +175,10 @@ class IncrementalUpdater:
             done.add(parent)
             for p in old_units:
                 stem = p[-1]
-                if P.page_exists(self.docs_dir, stem):
-                    os.remove(P.page_path(self.docs_dir, stem))
+                if P.remove_page(self.docs_dir, stem):
                     removed_pages.add(stem)
                     self.record.pages_removed.append(stem)
-            if P.page_exists(self.docs_dir, parent[-1]):
-                os.remove(P.page_path(self.docs_dir, parent[-1]))
+            if P.remove_page(self.docs_dir, parent[-1]):
                 removed_pages.add(parent[-1])
                 self.record.pages_removed.append(parent[-1])
             new_info = T.node_at(tree, parent) or {}
@@ -444,7 +450,9 @@ class IncrementalUpdater:
                 diff, old_graph, set(rec.pages_written), removed_all, replacements
             )
 
-        # ---- Step 6.3: rebuild the reference index
+        # ---- Step 6.3: move misplaced pages, fix links, rebuild the reference index
+        if not self.whole_repo:
+            organize_docs(self.docs_dir, self.layout)
         new_index = build_reference_index(
             self.docs_dir, new_graph, None if self.whole_repo else new_tree
         )

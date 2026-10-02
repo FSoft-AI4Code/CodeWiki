@@ -969,6 +969,35 @@
             document.getElementById('nav-overview').textContent = '📄 ' + PAGE_TITLES.overview;
         }
         const DOCS_BASE_PATH = '{{DOCS_BASE_PATH}}';
+        // Module name -> page path relative to the docs folder. Pages may sit in
+        // folders mirroring the module tree (auth.md, auth/login.md) or all in
+        // the docs root (--flat); a name missing here falls back to <name>.md.
+        const DOC_PATHS = {{DOC_PATHS_JSON}};
+
+        function docFileFor(key) {
+            return Object.prototype.hasOwnProperty.call(DOC_PATHS, key) ? DOC_PATHS[key] : key + '.md';
+        }
+
+        // Resolve a relative link found on page `fromFile` to a docs-relative path.
+        function resolveDocLink(fromFile, href) {
+            const parts = (fromFile || '').split('/').slice(0, -1).concat(href.split('/'));
+            const out = [];
+            for (const part of parts) {
+                if (part === '..') {
+                    out.pop();
+                } else if (part && part !== '.') {
+                    out.push(part);
+                }
+            }
+            const resolved = out.join('/');
+            const known = Object.values(DOC_PATHS);
+            if (known.length === 0 || known.indexOf(resolved) !== -1) {
+                return resolved;
+            }
+            // A link that misses its page: match the page by module name.
+            const stem = resolved.split('/').pop().replace(/\.md$/i, '');
+            return Object.prototype.hasOwnProperty.call(DOC_PATHS, stem) ? DOC_PATHS[stem] : resolved;
+        }
 
         // Router / rendering state
         let currentFile = null;
@@ -1126,7 +1155,7 @@
         }
 
         function buildNavItem(key, data, depth) {
-            const fileName = key + '.md';
+            const fileName = docFileFor(key);
             const hasChildren = data.children && Object.keys(data.children).length > 0;
             const hasComponents = data.components && data.components.length > 0;
 
@@ -1297,11 +1326,12 @@
                 // Relative markdown links, optionally with an anchor
                 // (e.g. "Other_Module.md#some-section")
                 if (/^https?:/i.test(href)) return;
-                const mdMatch = href.match(/([^\/]*\.md)(?:#(.*))?$/i);
+                if (/^[a-z][a-z0-9+.-]*:/i.test(href) || href.charAt(0) === '/') return;
+                const mdMatch = href.match(/^([^#?]*\.md)(?:#(.*))?$/i);
                 if (mdMatch) {
                     e.preventDefault();
                     e.stopPropagation();
-                    const filename = safeDecode(mdMatch[1]);
+                    const filename = resolveDocLink(currentFile || 'overview.md', safeDecode(mdMatch[1]));
                     const anchor = mdMatch[2] ? safeDecode(mdMatch[2]) : null;
                     navigateTo(filename, anchor);
                 }
@@ -1647,7 +1677,7 @@
                     const hasComponents = data.components && data.components.length > 0;
                     // Mirror buildNavItem: skip bare headers without a doc
                     if (depth > 0 || hasChildren || hasComponents) {
-                        order.push(key + '.md');
+                        order.push(docFileFor(key));
                     }
                     if (hasChildren) {
                         walk(data.children, depth + 1);
@@ -1664,7 +1694,7 @@
         const DOC_ORDER = flattenModuleTree();
 
         function pageTitleFor(filename) {
-            const base = filename.replace(/\.md$/i, '');
+            const base = filename.split('/').pop().replace(/\.md$/i, '');
             if (base === 'overview') {
                 return PAGE_TITLES.overview || 'Overview';
             }

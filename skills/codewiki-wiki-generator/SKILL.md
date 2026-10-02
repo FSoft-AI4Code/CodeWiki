@@ -95,11 +95,11 @@ Read `processing_order.json` to get the processing order. **Process leaf modules
 
 **For each leaf module** (is_leaf=true):
 
-1. Get system prompt: `get_prompt` → `{"prompt_type": "system_leaf", "variables": {"module_name": "<module name>"}}`
+1. Get system prompt: `get_prompt` → `{"prompt_type": "system_leaf", "variables": {"module_name": "<module name>", "module_path": <path from processing_order.json>}}`
 2. Read source code: `read_code_components` → all component IDs in this module, then read files under `sources/`
 3. For additional context, use your file reading tools directly to read relevant source files in the repository
-4. Write documentation including: module introduction and core functionality, architecture diagram (at least 1 Mermaid diagram), component responsibility descriptions, cross-references `[Module Name](module_name.md)`
-5. Save: `write_doc_file` → `{"session_id": "...", "filename": "<module name>.md", "content": "..."}`
+4. Write documentation including: module introduction and core functionality, architecture diagram (at least 1 Mermaid diagram), component responsibility descriptions, cross-references to other modules' pages (paths relative to this page, see below)
+5. Save: `write_doc_file` → `{"session_id": "...", "filename": "<doc_path from processing_order.json>", "content": "..."}`
 
 If Mermaid validation fails, fix the syntax and retry with `edit_doc_file` (`command: "str_replace"`).
 
@@ -108,7 +108,7 @@ If Mermaid validation fails, fix the syntax and retry with `edit_doc_file` (`com
 1. Read all child modules' generated `.md` files directly using your file reading tools
 2. Get overview prompt: `get_prompt` → `{"prompt_type": "overview_module", "variables": {"module_name": "<module name>"}}`
 3. Synthesize child module documentation into a parent module overview
-4. Save with `write_doc_file`
+4. Save with `write_doc_file` at the module's `doc_path`
 
 ### Phase 4: Generate Repository Overview
 
@@ -158,7 +158,8 @@ The granularity of incremental updates is **module-level** — if any component 
 
 - **Language**: Write in English by default (unless the user specifies another language)
 - **Mermaid diagrams**: At least 1 architecture diagram per module, prefer `graph TD` or `graph LR`
-- **Cross-references**: Use `[Module Name](module_name.md)` format when referencing other modules
+- **Page layout**: Pages mirror the module tree. A module's page sits next to the folder holding its children (`auth.md`, `auth/login.md`, `auth/login/tokens.md`); `overview.md` stays at the root. Each entry of `processing_order.json` gives its `doc_path`
+- **Cross-references**: Link with paths relative to the linking page, e.g. from `auth/login.md` to `billing.md` write `[Billing](../billing.md)`, and from `auth.md` to `auth/login.md` write `[Login](auth/login.md)`. Links are re-checked and repaired when the session closes
 - **Code examples**: Show signatures and brief usage for key functions/classes
 - **Length**: Leaf module docs 200-500 lines, parent module overviews 100-300 lines, repository overview 80-200 lines
 

@@ -3,6 +3,7 @@ Generate command for documentation generation.
 """
 
 import logging
+import os
 import sys
 import time
 import traceback
@@ -24,6 +25,8 @@ from codewiki.cli.utils.errors import (
 )
 from codewiki.cli.utils.instructions import display_post_generation_instructions
 from codewiki.cli.utils.logging import create_logger
+from codewiki.src.be.doc_layout import find_doc, list_doc_files, read_layout, remove_doc
+from codewiki.src.config import DEFAULT_LAYOUT, LAYOUT_FLAT
 from codewiki.src.language import resolve_update_language
 from codewiki.cli.utils.repo_validator import (
     check_writable_output,
@@ -204,13 +207,13 @@ def _invalidate_affected_modules(output_dir: Path, changed_files: list[str], log
     if modules_to_invalidate:
         modules_to_invalidate.add("overview")
 
-    # Delete affected module docs
+    # Delete affected module docs (wherever the docs layout put them)
     for mod_name in modules_to_invalidate:
-        doc_path = output_dir / f"{mod_name}.md"
-        if doc_path.exists():
-            doc_path.unlink()
+        doc_path = find_doc(str(output_dir), mod_name, module_tree)
+        if doc_path is not None:
+            remove_doc(str(output_dir), doc_path)
             if verbose:
-                logger.debug(f"Invalidated: {doc_path.name}")
+                logger.debug(f"Invalidated: {os.path.relpath(doc_path, output_dir)}")
 
     if verbose:
         logger.debug(f"Invalidated {len(modules_to_invalidate)} modules for regeneration.")
@@ -354,6 +357,13 @@ def _invalidate_affected_modules(output_dir: Path, changed_files: list[str], log
     help="Also read the root README and docs/ as a `prose` artifact class (off by default)",
 )
 @click.option(
+    "--flat",
+    is_flag=True,
+    help="Save every page in the output directory root instead of folders mirroring the "
+    "module tree (for small models that struggle with relative links). --update keeps the "
+    "layout the docs were generated with",
+)
+@click.option(
     "--artifact-exclude",
     type=str,
     default=None,
@@ -447,6 +457,7 @@ def generate_command(
     artifacts: bool = True,
     artifact_token_budget: int = 200_000,
     with_prose: bool = False,
+    flat: bool = False,
     artifact_exclude: str | None = None,
     update: bool = False,
     compare_to: str | None = None,
@@ -585,6 +596,16 @@ def generate_command(
                 )
             except ValueError as e:
                 raise ConfigurationError(str(e)) from None
+        layout = LAYOUT_FLAT if flat else DEFAULT_LAYOUT
+        if updating_existing_docs:
+            # Keep updated pages where the existing docs put them
+            stored_layout = read_layout(str(output_dir))
+            if flat and stored_layout != LAYOUT_FLAT:
+                logger.warning(
+                    f"These docs use the {stored_layout} layout; --flat is ignored by --update. "
+                    "Rerun without --update to regenerate them flat."
+                )
+            layout = stored_layout
         if update and output_dir.exists():
             changed_files = _detect_changed_files(
                 repo_path, output_dir, logger, verbose, compare_to=compare_to
@@ -616,7 +637,7 @@ def generate_command(
         if (
             not update
             and output_dir.exists()
-            and list(output_dir.glob("*.md"))
+            and list_doc_files(str(output_dir))
             and not click.confirm(
                 f"\n{output_dir} already contains documentation. Overwrite?", default=True
             )
@@ -777,6 +798,8 @@ def generate_command(
                 "artifacts_enabled": artifacts,
                 "artifact_token_budget": artifact_token_budget,
                 "with_prose": with_prose,
+                # Docs layout (runtime-only; --update keeps the stored one)
+                "layout": layout,
                 # Incremental updater (runtime-only)
                 "update": update,
                 "update_options": {

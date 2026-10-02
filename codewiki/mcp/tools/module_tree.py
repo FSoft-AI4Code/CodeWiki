@@ -13,7 +13,8 @@ import os
 from typing import Any, Dict, List, Tuple
 
 from codewiki.mcp.session import SessionStore
-from codewiki.src.config import FIRST_MODULE_TREE_FILENAME, MODULE_TREE_FILENAME
+from codewiki.src.be.doc_layout import docs_layout, module_doc_relpath
+from codewiki.src.config import DEFAULT_LAYOUT, FIRST_MODULE_TREE_FILENAME, MODULE_TREE_FILENAME
 
 logger = logging.getLogger(__name__)
 
@@ -30,12 +31,15 @@ def _cap(ids: List[str]) -> Tuple[List[str], bool]:
 
 
 def _get_processing_order(
-    module_tree: Dict[str, Any], parent_path: List[str] | None = None
+    module_tree: Dict[str, Any],
+    parent_path: List[str] | None = None,
+    layout: str = DEFAULT_LAYOUT,
 ) -> List[Dict[str, Any]]:
     """Compute leaf-first processing order from a module tree.
 
-    Returns a list of dicts with module path, name, leaf status, and
-    component/children info.
+    Returns a list of dicts with module path, name, leaf status,
+    component/children info and ``doc_path`` (the page to write, relative to
+    the output dir, for the docs ``layout``).
     """
     if parent_path is None:
         parent_path = []
@@ -54,6 +58,7 @@ def _get_processing_order(
                         "module": module_name,
                         "path": current_path,
                         "is_leaf": False,
+                        "doc_path": module_doc_relpath(current_path, layout),
                         "children": list(children.keys()),
                         "components": module_info.get("components", []),
                     }
@@ -64,6 +69,7 @@ def _get_processing_order(
                         "module": module_name,
                         "path": current_path,
                         "is_leaf": True,
+                        "doc_path": module_doc_relpath(current_path, layout),
                         "components": module_info.get("components", []),
                     }
                 )
@@ -189,7 +195,7 @@ def handle_save_module_tree(
         logger.info("save_module_tree for session %s: %s", session_id, note)
 
     # Compute processing order and write to workspace file
-    order = _get_processing_order(module_tree)
+    order = _get_processing_order(module_tree, layout=docs_layout(session.output_dir))
     order_file = None
     if session.workspace is not None:
         order_path = session.workspace.write_json("processing_order.json", order)
@@ -206,7 +212,9 @@ def handle_save_module_tree(
             "Read the processing_order.json file for the leaf-first generation order. "
             "Process leaf modules first (is_leaf=true), then parent modules. "
             "For each leaf module: get_prompt('system_leaf') + read_code_components + write_doc_file. "
-            "For each parent module: get_prompt('overview_module') + write_doc_file."
+            "For each parent module: get_prompt('overview_module') + write_doc_file. "
+            "Save each module's page at its doc_path (sub-folders are created automatically) "
+            "and link pages with paths relative to the linking page."
         ),
     }
     if warning:
@@ -237,7 +245,7 @@ def handle_get_processing_order(
         else:
             return json.dumps({"error": "Module tree not found. Call save_module_tree first."})
 
-    order = _get_processing_order(module_tree)
+    order = _get_processing_order(module_tree, layout=docs_layout(session.output_dir))
 
     # Write to workspace file
     order_file = None

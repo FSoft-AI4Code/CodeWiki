@@ -32,6 +32,7 @@ from codewiki.src.be.prompt_template import (
     format_user_prompt,
 )
 from codewiki.src.be.utils import is_complex_module
+from codewiki.src.be.doc_layout import config_layout, find_doc
 from codewiki.src.config import MODULE_TREE_FILENAME, OVERVIEW_FILENAME, Config
 from codewiki.src.utils import file_manager
 
@@ -118,7 +119,9 @@ class PydanticAIBackend(LLMBackend):
             if os.path.exists(overview_docs_path):
                 logger.info("✓ Overview docs already exists at %s", overview_docs_path)
                 return module_tree
-        docs_path = os.path.join(working_dir, f"{module_name}.md")
+        docs_path = find_doc(working_dir, module_name, module_tree) if module_path else None
+        if docs_path is None:
+            docs_path = os.path.join(working_dir, f"{module_name}.md")
         if os.path.exists(docs_path):
             logger.info("✓ Module docs already exists at %s", docs_path)
             return module_tree
@@ -133,7 +136,9 @@ class PydanticAIBackend(LLMBackend):
                     str_replace_editor_tool,
                     generate_sub_module_documentation_tool,
                 ],
-                system_prompt=format_system_prompt(module_name, self._custom_instructions),
+                system_prompt=format_system_prompt(
+                    module_name, self._custom_instructions, module_path, config_layout(config)
+                ),
                 retries=config.agent_retries,
             )
         else:
@@ -142,7 +147,9 @@ class PydanticAIBackend(LLMBackend):
                 name=module_name,
                 deps_type=CodeWikiDeps,
                 tools=[read_code_components_tool, str_replace_editor_tool],
-                system_prompt=format_leaf_system_prompt(module_name, self._custom_instructions),
+                system_prompt=format_leaf_system_prompt(
+                    module_name, self._custom_instructions, module_path, config_layout(config)
+                ),
                 retries=config.agent_retries,
             )
 
@@ -167,6 +174,8 @@ class PydanticAIBackend(LLMBackend):
                     core_component_ids=core_component_ids,
                     components=components,
                     module_tree=deps.module_tree,
+                    module_path=module_path,
+                    layout=config_layout(config),
                 ),
                 deps=deps,
                 usage_limits=UsageLimits(request_limit=config.request_limit),

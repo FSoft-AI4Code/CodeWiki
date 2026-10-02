@@ -1,10 +1,12 @@
 """Utilities for keeping LLM-chosen module names unique and file-safe.
 
-All module docs live in one flat directory as ``{module_name}.md``, and the
-module-tree key must stay equal to the filename stem (the HTML viewer and
-``--update`` invalidation rely on it). Names are chosen freely by the LLM at
-every hierarchy level, so collisions must be resolved before a name is
-inserted into the tree (issue #76).
+Every module doc is saved as ``{module_name}.md`` (in a folder mirroring the
+module tree, or in the docs root with ``--flat``; see ``doc_layout``), and the
+module-tree key must stay equal to the filename stem (the HTML viewer, link
+repair and ``--update`` invalidation rely on it). Names are kept unique across
+the whole tree in both layouts. Names are chosen freely by the LLM at every
+hierarchy level, so collisions must be resolved before a name is inserted
+into the tree (issue #76).
 """
 
 import os
@@ -13,12 +15,24 @@ from typing import Any, Dict, List, Optional, Set
 
 import logging
 
+from codewiki.src.be.doc_layout import (
+    OVERVIEW_STEM,
+    find_doc,
+    list_doc_files,
+    module_doc_file,
+    module_doc_relpath,
+    relative_link,
+)
+
 logger = logging.getLogger(__name__)
 
 # Filename stems used by CodeWiki itself; never assign them to a module.
 RESERVED_STEMS = {"overview", "module_tree", "first_module_tree", "metadata", "index"}
 
-_UNSAFE_FILENAME_CHARS = set('/\\:*?"<>|\0')
+# ``&`` is legal in filenames, but agents running shell tools escape it
+# (``A_\\&_B/``) and write pages into a stray folder; nested layouts make
+# that common, so module names never contain it.
+_UNSAFE_FILENAME_CHARS = set('/\\:*?"<>|\0&')
 
 
 def sanitize_module_name(name: str) -> str:
@@ -60,12 +74,7 @@ def resolve_unique_name(name: str, parent_name: Optional[str], taken: Set[str]) 
 
 
 def _existing_doc_stems(working_dir: str) -> Set[str]:
-    try:
-        return {
-            os.path.splitext(entry)[0] for entry in os.listdir(working_dir) if entry.endswith(".md")
-        }
-    except OSError:
-        return set()
+    return set(list_doc_files(working_dir))
 
 
 def normalize_sub_module_specs(
@@ -77,7 +86,7 @@ def normalize_sub_module_specs(
     """Map requested sub-module names to unique, file-safe final names.
 
     A name is taken if it already appears anywhere in the module tree, if a
-    ``.md`` with that stem exists in the flat docs dir, if it is reserved, or
+    page with that stem exists in the docs dir, if it is reserved, or
     if it was assigned earlier in this batch.
     """
     taken = collect_module_tree_names(module_tree)
@@ -158,6 +167,52 @@ def plan_sub_module_specs(
     return plan
 
 
+def sub_module_report(
+    name_map: dict[str, str],
+    skipped: dict[str, str],
+    docs_dir: str,
+    module_tree: dict,
+    parent_name: str,
+    parent_path: list[str],
+    layout: str,
+) -> str:
+    """Report what actually landed on disk so the parent agent links real files.
+
+    Each saved page is given as the link to use from the parent's page.
+    """
+    parent_doc = module_doc_file(parent_name, parent_path, layout)
+    saved = []
+    missing = []
+    for requested_name, final_name in name_map.items():
+        entry = relative_link(parent_doc, module_doc_relpath(parent_path + [final_name], layout))
+        if final_name != requested_name:
+            entry += f" (requested '{requested_name}', renamed to avoid a collision)"
+        if find_doc(docs_dir, final_name, module_tree) is not None:
+            saved.append(entry)
+        else:
+            missing.append(entry)
+
+    report = f"Saved documentations (link them from `{parent_doc}` as): "
+    report += f"{', '.join(saved) if saved else 'none'}."
+    if missing:
+        report += f" MISSING (generation did not produce these files): {', '.join(missing)}."
+        logger.warning("Sub-module documentation missing after generation: %s", ", ".join(missing))
+    if skipped:
+        report += " " + skipped_report(skipped, parent_doc)
+    return report
+
+
+def skipped_report(skipped: dict[str, str], parent_doc: str) -> str:
+    """Tell the parent agent, unambiguously, not to retry skipped sub-modules."""
+    if not skipped:
+        return "No sub-modules were generated."
+    items = ", ".join(f"'{name}' ({reason})" for name, reason in skipped.items())
+    return (
+        f"Skipped sub-modules: {items}. Do NOT call generate_sub_module_documentation again "
+        f"for these; link the existing pages from `{parent_doc}` instead."
+    )
+
+
 def dedupe_module_tree_names(module_tree: Dict[str, Any]) -> Dict[str, Any]:
     """Sanitize and uniquify all module names in a freshly clustered tree.
 
@@ -181,13 +236,18 @@ def dedupe_module_tree_names(module_tree: Dict[str, Any]) -> Dict[str, Any]:
     return dedupe_level(module_tree, None)
 
 
-def resolve_module_doc_path(working_dir: str, module_name: str) -> Optional[str]:
-    """Resolve the on-disk path for a module's .md doc.
+def resolve_module_doc_path(
+    working_dir: str, module_name: str, module_tree: Optional[Dict[str, Any]] = None
+) -> Optional[str]:
+    """Resolve the on-disk path for a module's .md doc, in either layout.
 
     Sub-agents sometimes save files under a sanitized variant of the module
     name (spaces → underscores, lowercased, etc.) rather than the exact key
     in the module tree. Try a small set of common variants before giving up.
     """
+    found = find_doc(working_dir, module_name, module_tree)
+    if found is not None:
+        return found
     candidates = []
     seen = set()
     base_variants = [
@@ -217,7 +277,7 @@ def find_missing_module_docs(
     """Return module names from the tree whose docs are missing on disk."""
     missing = []
     for name in sorted(collect_module_tree_names(module_tree)):
-        if resolve_module_doc_path(working_dir, name) is None:
+        if resolve_module_doc_path(working_dir, name, module_tree) is None:
             missing.append(name)
     if overview_required and not os.path.exists(os.path.join(working_dir, "overview.md")):
         missing.append("overview")
@@ -247,12 +307,8 @@ def extract_page_titles(working_dir: str, module_tree: Dict[str, Any]) -> Dict[s
     Pages that are missing or have no H1 are left out.
     """
     titles = {}
-    for name in ["overview", *sorted(collect_module_tree_names(module_tree))]:
-        path = (
-            os.path.join(working_dir, "overview.md")
-            if name == "overview"
-            else resolve_module_doc_path(working_dir, name)
-        )
+    for name in [OVERVIEW_STEM, *sorted(collect_module_tree_names(module_tree))]:
+        path = resolve_module_doc_path(working_dir, name, module_tree)
         title = _first_h1(path) if path and os.path.exists(path) else None
         if title:
             titles[name] = title

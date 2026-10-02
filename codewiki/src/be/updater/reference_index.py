@@ -12,6 +12,7 @@ import re
 from typing import Any
 
 from codewiki.src.be.dependency_analyzer.models.core import Node
+from codewiki.src.be.doc_layout import list_doc_files
 from codewiki.src.be.updater import tree as T
 
 INDEX_FILENAME = "reference_index.json"
@@ -25,17 +26,6 @@ _WORD_RE = re.compile(r"[A-Za-z_][\w]*")
 
 def index_path(docs_dir: str) -> str:
     return os.path.join(docs_dir, "temp", INDEX_FILENAME)
-
-
-def _page_stems(docs_dir: str) -> list[str]:
-    try:
-        return sorted(
-            os.path.splitext(f)[0]
-            for f in os.listdir(docs_dir)
-            if f.endswith(".md") and not f.startswith(".")
-        )
-    except OSError:
-        return []
 
 
 def extract_references(
@@ -70,14 +60,14 @@ def build_reference_index(
         name = node.name
         if name and len(name) >= 3:
             known_names.setdefault(name, set()).add(cid)
-    pages = _page_stems(docs_dir)
+    pages = list_doc_files(docs_dir, tree)
     known_pages = set(pages)
     if tree is not None:
         known_pages |= {p[-1] for p, _ in T.iter_nodes(tree)}
     index: dict[str, dict[str, list[str]]] = {}
-    for stem in pages:
+    for stem, rel in sorted(pages.items()):
         try:
-            with open(os.path.join(docs_dir, f"{stem}.md"), encoding="utf-8") as f:
+            with open(os.path.join(docs_dir, rel), encoding="utf-8") as f:
                 text = f.read()
         except OSError:
             continue

@@ -19,8 +19,17 @@ from codewiki.cli.utils.progress import ProgressTracker
 
 # Import backend modules
 from codewiki.src.be.documentation_generator import DocumentationGenerator
+from codewiki.src.be.doc_layout import list_doc_files
+from codewiki.src.config import DEFAULT_LAYOUT
 from codewiki.src.config import Config as BackendConfig
 from codewiki.src.config import set_cli_context
+
+
+def _generated_files(working_dir: str) -> list[str]:
+    """Docs-relative paths of the pages and the JSON files in the docs root."""
+    pages = sorted(list_doc_files(working_dir).values())
+    jsons = sorted(f for f in os.listdir(working_dir) if f.endswith(".json"))
+    return pages + jsons
 
 
 class CLIDocumentationGenerator:
@@ -154,6 +163,7 @@ class CLIDocumentationGenerator:
                 artifacts_enabled=self.config.get("artifacts_enabled", True),
                 artifact_token_budget=self.config.get("artifact_token_budget", 200_000),
                 with_prose=self.config.get("with_prose", False),
+                layout=self.config.get("layout", DEFAULT_LAYOUT),
             )
 
             # Run backend documentation generation
@@ -372,9 +382,7 @@ class CLIDocumentationGenerator:
             self._merge_update_summary(working_dir)
 
             # Collect generated files
-            for file_path in os.listdir(working_dir):
-                if file_path.endswith((".md", ".json")):
-                    self.job.files_generated.append(file_path)
+            self.job.files_generated.extend(_generated_files(working_dir))
 
         except Exception as e:  # noqa: BLE001 — surfaced to the user as an APIError
             raise APIError(f"Documentation generation failed: {e}")
@@ -448,9 +456,7 @@ class CLIDocumentationGenerator:
             prior_history = self._read_update_history(working_dir)
             doc_generator.create_documentation_metadata(working_dir, components, len(leaf_nodes))
             self._merge_update_summary(working_dir, prior_history)
-            for file_path in os.listdir(working_dir):
-                if file_path.endswith((".md", ".json")):
-                    self.job.files_generated.append(file_path)
+            self.job.files_generated.extend(_generated_files(working_dir))
             tree_path = os.path.join(working_dir, "module_tree.json")
             if os.path.exists(tree_path):
                 with open(tree_path, encoding="utf-8") as f:

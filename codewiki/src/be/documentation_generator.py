@@ -15,6 +15,13 @@ from codewiki.src.be.cluster_modules import (
 )
 from codewiki.src.be.dependency_analyzer import DependencyGraphBuilder
 from codewiki.src.be.dependency_analyzer.analyzers.artifact import render_artifact_index
+from codewiki.src.be.doc_layout import (
+    config_layout,
+    list_doc_files,
+    module_doc_relpath,
+    organize_docs,
+    relative_link,
+)
 from codewiki.src.be.module_naming import (
     dedupe_module_tree_names,
     find_missing_module_docs,
@@ -75,6 +82,8 @@ class DocumentationGenerator:
                 "commit_id": self.commit_id,
                 # Read back by `--update` so updated pages keep this language
                 "language": getattr(self.config, "language", None),
+                # Read back by `--update` and the viewers to locate pages
+                "layout": config_layout(self.config),
             },
             "statistics": {
                 "total_components": len(components),
@@ -84,10 +93,10 @@ class DocumentationGenerator:
             "files_generated": ["overview.md", "module_tree.json", "first_module_tree.json"],
         }
 
-        # Add generated markdown files to the metadata
+        # Add generated markdown files (docs-relative paths) to the metadata
         try:
-            for file_path in os.listdir(working_dir):
-                if file_path.endswith(".md") and file_path not in metadata["files_generated"]:
+            for file_path in sorted(list_doc_files(working_dir).values()):
+                if file_path not in metadata["files_generated"]:
                     metadata["files_generated"].append(file_path)
         except Exception as e:  # noqa: BLE001 — metadata listing is best-effort
             logger.warning(f"Could not list generated files: {e}")
@@ -154,14 +163,16 @@ class DocumentationGenerator:
         if "children" in module_info:
             module_info = module_info["children"]
 
+        layout = config_layout(self.config)
+        page_rel = module_doc_relpath(module_path, layout)
         for child_name, child_info in module_info.items():
-            child_docs_path = self._resolve_child_docs_path(working_dir, child_name)
+            child_rel = module_doc_relpath(module_path + [child_name], layout)
+            child_docs_path = self._resolve_child_docs_path(working_dir, child_name, module_tree)
             if child_docs_path is not None:
                 child_info["docs_path"] = child_docs_path
+                child_info["link"] = relative_link(page_rel, child_rel)
             else:
-                logger.warning(
-                    f"Module docs not found at {os.path.join(working_dir, f'{child_name}.md')}"
-                )
+                logger.warning(f"Module docs not found at {os.path.join(working_dir, child_rel)}")
                 child_info["docs_path"] = None
 
         return processed_module_tree
@@ -179,7 +190,9 @@ class DocumentationGenerator:
                 cls._strip_components(children)
 
     @staticmethod
-    def _resolve_child_docs_path(working_dir: str, child_name: str) -> str | None:
+    def _resolve_child_docs_path(
+        working_dir: str, child_name: str, module_tree: dict[str, Any] | None = None
+    ) -> str | None:
         """Resolve the on-disk path for a child module's .md doc.
 
         Sub-agents sometimes save files under a sanitized variant of the
@@ -188,7 +201,7 @@ class DocumentationGenerator:
         before giving up so the overview prompt still gets the children's
         content as context.
         """
-        return resolve_module_doc_path(working_dir, child_name)
+        return resolve_module_doc_path(working_dir, child_name, module_tree)
 
     def validate_generated_docs(self, working_dir: str) -> list[str]:
         """Check the final module tree against the docs on disk.
@@ -299,6 +312,9 @@ class DocumentationGenerator:
             if os.path.exists(repo_overview_path):
                 os.rename(repo_overview_path, os.path.join(working_dir, OVERVIEW_FILENAME))
 
+        # Move pages an agent saved in the wrong folder and fix links between pages
+        organize_docs(working_dir, config_layout(self.config))
+
         return working_dir
 
     async def generate_parent_module_docs(
@@ -328,9 +344,14 @@ class DocumentationGenerator:
         # path below resolves to overview.md, so a blanket "overview exists →
         # skip" check is not needed here and would mask missing parent docs
         # on resume)
+        existing_docs_path = (
+            resolve_module_doc_path(working_dir, module_name, module_tree) if module_path else None
+        )
+        if existing_docs_path is not None:
+            logger.info(f"✓ Parent docs already exists at {existing_docs_path}")
+            return module_tree
         parent_docs_path = os.path.join(
-            working_dir,
-            f"{module_name if len(module_path) >= 1 else OVERVIEW_FILENAME.replace('.md', '')}.md",
+            working_dir, module_doc_relpath(module_path, config_layout(self.config))
         )
         if os.path.exists(parent_docs_path):
             logger.info(f"✓ Parent docs already exists at {parent_docs_path}")
@@ -379,6 +400,7 @@ class DocumentationGenerator:
                     f"using raw response as markdown."
                 )
                 parent_content = parent_docs.strip()
+            os.makedirs(os.path.dirname(parent_docs_path), exist_ok=True)
             file_manager.save_text(parent_content, parent_docs_path)
 
             logger.debug(f"Successfully generated parent documentation for: {module_name}")

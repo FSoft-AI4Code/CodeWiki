@@ -39,6 +39,7 @@ from codewiki.src.be.prompt_template import (
     format_user_prompt,
 )
 from codewiki.src.be.utils import count_tokens, is_complex_module, set_main_loop
+from codewiki.src.be.doc_layout import config_layout, find_doc
 from codewiki.src.config import MODULE_TREE_FILENAME, OVERVIEW_FILENAME, Config
 from codewiki.src.utils import file_manager
 
@@ -377,7 +378,9 @@ class CawBackend(LLMBackend):
             if os.path.exists(overview_docs_path):
                 logger.info("✓ Overview docs already exists at %s", overview_docs_path)
                 return module_tree
-        docs_path = os.path.join(working_dir, f"{module_name}.md")
+        docs_path = find_doc(working_dir, module_name, module_tree) if module_path else None
+        if docs_path is None:
+            docs_path = os.path.join(working_dir, f"{module_name}.md")
         if os.path.exists(docs_path):
             logger.info("✓ Module docs already exists at %s", docs_path)
             return module_tree
@@ -404,9 +407,13 @@ class CawBackend(LLMBackend):
         )
 
         if can_delegate:
-            system_prompt = format_system_prompt(module_name, custom_instructions)
+            system_prompt = format_system_prompt(
+                module_name, custom_instructions, list(module_path), config_layout(config)
+            )
         else:
-            system_prompt = format_leaf_system_prompt(module_name, custom_instructions)
+            system_prompt = format_leaf_system_prompt(
+                module_name, custom_instructions, list(module_path), config_layout(config)
+            )
 
         deps = CodeWikiDeps(
             absolute_docs_path=working_dir,
@@ -437,6 +444,8 @@ class CawBackend(LLMBackend):
             core_component_ids=core_component_ids,
             components=components,
             module_tree=deps.module_tree,
+            module_path=list(module_path),
+            layout=config_layout(config),
         )
 
         # caw forks claude / codex via subprocess.Popen without a cwd, so the

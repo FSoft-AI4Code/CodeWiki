@@ -156,12 +156,21 @@ class HTMLGenerator:
             page_titles = extract_page_titles(str(docs_dir), module_tree)
         page_titles_json = json.dumps(page_titles, ensure_ascii=False).replace("</", "<\\/")
 
+        # Where each page lives (nested folders or the docs root)
+        doc_paths = {}
+        if docs_dir:
+            from codewiki.src.be.doc_layout import doc_path_map
+
+            doc_paths = doc_path_map(str(docs_dir), module_tree)
+        doc_paths_json = json.dumps(doc_paths, ensure_ascii=False).replace("</", "<\\/")
+
         # Replace placeholders
         html_content = template_content
         replacements = {
             "{{TITLE}}": self._escape_html(title),
             "{{HTML_LANG}}": language_tag(language),
             "{{PAGE_TITLES_JSON}}": page_titles_json,
+            "{{DOC_PATHS_JSON}}": doc_paths_json,
             "{{REPO_LINK}}": repo_link,
             "{{SHOW_INFO}}": show_info,
             "{{INFO_CONTENT}}": info_content,

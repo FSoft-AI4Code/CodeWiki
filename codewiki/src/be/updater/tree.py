@@ -248,7 +248,7 @@ def copy_tree(tree: dict[str, Any]) -> dict[str, Any]:
 
 
 def page_stem(path: Path) -> str:
-    """Module page file stem (docs are flat: ``<name>.md``)."""
+    """Module page file stem (``<name>.md``, in either docs layout)."""
     return path[-1]
 
 

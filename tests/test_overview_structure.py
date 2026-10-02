@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+from types import SimpleNamespace
 
 from codewiki.src.be.documentation_generator import DocumentationGenerator
 
@@ -19,9 +20,12 @@ CODEX_INPUT_CAP = 1_048_576
 
 
 def _generator() -> DocumentationGenerator:
-    # build_overview_structure touches neither config nor backend; skip the
-    # heavyweight __init__ (graph builder, backend resolution).
-    return DocumentationGenerator.__new__(DocumentationGenerator)
+    # build_overview_structure only reads the docs layout from config and never
+    # touches the backend; skip the heavyweight __init__ (graph builder,
+    # backend resolution).
+    gen = DocumentationGenerator.__new__(DocumentationGenerator)
+    gen.config = SimpleNamespace(layout="flat")
+    return gen
 
 
 def _make_tree(n_modules: int, n_components: int) -> dict:

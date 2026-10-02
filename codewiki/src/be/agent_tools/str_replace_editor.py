@@ -516,6 +516,10 @@ class EditTool:
         return True
 
     def create_file(self, path: Path, file_text: str):
+        # Nested doc pages (hierarchical layout) live in folders that may not
+        # exist yet; create them, but only inside the docs directory.
+        if not path.parent.exists() and self._inside_docs(path):
+            path.parent.mkdir(parents=True, exist_ok=True)
         if not path.parent.exists():
             self.logs.append(
                 f"The parent directory {self._get_display_path(path.parent)} does not exist. Please create it first."
@@ -524,6 +528,15 @@ class EditTool:
         self.write_file(path, file_text)
         self._file_history[path].append(file_text)
         self.logs.append(f"File created successfully at: {self._get_display_path(path)}")
+
+    def _inside_docs(self, path: Path) -> bool:
+        if self.absolute_docs_path is None:
+            return False
+        try:
+            path.resolve().relative_to(self.absolute_docs_path.resolve())
+        except ValueError:
+            return False
+        return True
 
     def view(self, path: Path, view_range: list[int] | None = None):
         """Implement the view command"""

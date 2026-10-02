@@ -617,8 +617,9 @@ DOCS_VIEW_TEMPLATE = """
                 {% set indent_class = 'nav-subsection' if depth > 0 else '' %}
                 {% set indent_style = 'margin-left: ' + (depth * 15)|string + 'px;' if depth > 0 else '' %}
                 <div class="{{ indent_class }}" {% if indent_style %}style="{{ indent_style }}"{% endif %}>
+                    {% set page = doc_paths[key] if doc_paths and key in doc_paths else key + '.md' %}
                     {% if data.components %}
-                        <a href="/static-docs/{{ job_id }}/{{ key }}.md" class="nav-item {% if current_page == key + '.md' %}active{% endif %}">
+                        <a href="/static-docs/{{ job_id }}/{{ page }}" class="nav-item {% if current_page == page %}active{% endif %}">
                             {{ key.replace('_', ' ').title() }}
                         </a>
                     {% else %}
