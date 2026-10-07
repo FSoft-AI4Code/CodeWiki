@@ -27,6 +27,8 @@
   <a href="https://aclanthology.org/2026.findings-acl.288/"><strong>Paper</strong></a>
 </p>
 
+https://github.com/user-attachments/assets/951d5d3c-fd6e-4734-8b16-445d880f95d3
+
 <p align="center">
   📚 <strong>CodeWiki documents itself.</strong> Browse the documentation it generated for this repository at
   <a href="https://fsoft-ai4code.github.io/CodeWiki/docs/index.html">CodeWiki docs</a>.
@@ -82,8 +84,6 @@ codewiki generate                     # writes ./docs/
 codewiki generate --github-pages      # also writes an HTML viewer
 codewiki generate --update            # later: refresh after code changes
 ```
-
-![CLI usage example](https://github.com/FSoft-AI4Code/CodeWiki/releases/download/assets/cli-usage-example.gif)
 
 ## What's new in 2.0
 

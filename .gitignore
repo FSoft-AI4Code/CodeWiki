@@ -59,6 +59,7 @@ data/
 src/output/
 repo_data/
 docs/.cache/
+videos/
 
 # Environment variables
 .env*
