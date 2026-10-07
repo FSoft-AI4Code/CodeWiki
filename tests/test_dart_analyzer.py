@@ -285,3 +285,26 @@ def test_relationships_are_deduplicated(tmp_path: Path) -> None:
     _, relationships = _analyze(tmp_path, source, "lib/dup.dart")
     keys = [(r.caller, r.callee, r.call_line) for r in relationships]
     assert len(keys) == len(set(keys))
+
+
+def test_extension_bare_calls(tmp_path: Path) -> None:
+    source = "class Api {}\nextension X on Api {\n  void g() { get(); helperFn(); }\n}\n"
+    edges = _edges(_analyze(tmp_path, source, "lib/ext.dart")[1])
+    assert ("X.g", "Api.get", False) in edges
+    assert ("X.g", "helperFn", False) in edges
+    assert ("X.g", "get", False) in edges
+
+
+def test_extension_on_core_type_emits_nothing(tmp_path: Path) -> None:
+    source = "extension on String {\n  String s() => trim();\n}\n"
+    edges = _edges(_analyze(tmp_path, source, "lib/core_ext.dart")[1])
+    assert not {e for e in edges if e[0] == "extension_on_String.s"}
+
+
+def test_this_field_method_call(tmp_path: Path) -> None:
+    source = (
+        "class Api { void get() {} }\n"
+        "class A {\n  final Api api;\n  A(this.api);\n  void f() { this.api.get(); }\n}\n"
+    )
+    edges = _edges(_analyze(tmp_path, source, "lib/thisf.dart")[1])
+    assert ("A.f", "Api.get", True) in edges

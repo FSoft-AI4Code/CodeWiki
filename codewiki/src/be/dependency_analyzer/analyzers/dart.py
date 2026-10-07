@@ -273,6 +273,7 @@ class TreeSitterDartAnalyzer:
         self._type_ref_nodes: dict[str, list] = {}
         self._class_extends: dict[str, str | None] = {}
         self._type_params: set[str] = set()
+        self._extension_on: dict[str, str] = {}
         self._top_level_vars: list[tuple[str, object]] = []
         self._analyze()
 
@@ -394,6 +395,7 @@ class TreeSitterDartAnalyzer:
         on_type = node.child_by_field_name("class")
         on_name = _text(_first_child(on_type, "type_identifier") or on_type) if on_type else ""
         name = _text(node.child_by_field_name("name")) or f"extension_on_{on_name or 'unknown'}"
+        self._extension_on[name] = on_name
         self._register_type(
             node, name, "class", "extension", lines, [on_name] if on_name else [], [on_type]
         )
@@ -600,6 +602,8 @@ class TreeSitterDartAnalyzer:
                 type_node = _first_child(node, "type_identifier")
                 if type_node is not None:
                     self._add_instantiation(target.caller, _text(type_node), node, lift_to)
+            elif node.type == "ERROR":
+                self._handle_error_call(target, node)
             elif node.type == "relational_expression":
                 self._handle_generic_invocation(target, node, lift_to)
             children = node.children
@@ -645,6 +649,17 @@ class TreeSitterDartAnalyzer:
                 local = self.top_level_nodes.get(f"{owner}.{tokens[0][1]}")
                 if local is not None:
                     self._add_resolved(caller, local.id, line)
+            elif (
+                head.type == "this"
+                and owner
+                and len(tokens) == 3
+                and tokens[0][0] == "member"
+                and tokens[1][0] == "member"
+                and tokens[2][0] == "call"
+            ):
+                receiver = self._field_types.get(owner, {}).get(tokens[0][1] or "")
+                if receiver and tokens[1][1]:
+                    self._add_member_call_on_type(caller, receiver, tokens[1][1], line)
             return
 
         if _is_type_name(name):
@@ -683,6 +698,18 @@ class TreeSitterDartAnalyzer:
         if receiver:
             self._add_member_call_on_type(
                 target.caller, receiver, _text(ident), head.start_point[0] + 1
+            )
+
+    def _handle_error_call(self, target, node):
+        """Calls to contextual keywords (``get()``, ``set()``) parse as an
+        ERROR holding a function_signature; recover them as bare calls."""
+        signature = _first_child(node, "function_signature")
+        if signature is None or signature.start_byte != node.start_byte:
+            return
+        name = signature.child_by_field_name("name")
+        if name is not None and _first_child(signature, "formal_parameter_list") is not None:
+            self._add_function_call(
+                target.caller, target.owner, _text(name), node.start_point[0] + 1
             )
 
     def _handle_generic_invocation(self, target, node, lift_to):
@@ -741,12 +768,13 @@ class TreeSitterDartAnalyzer:
         if local is not None and local.component_type == "function":
             self._add_resolved(caller, local.id, line)
             return
-        owner_node = self.top_level_nodes.get(owner) if owner else None
-        if owner_node is not None and owner_node.node_type == "extension":
-            # A bare call inside an extension targets the extended type.
-            on_type = (owner_node.base_classes or [None])[0]
-            if on_type:
-                self._add_member_call_on_type(caller, on_type, name, line)
+        on_type = self._extension_on.get(owner or "")
+        if on_type is not None:
+            # A bare call inside an extension may target the extended type
+            # or a free function; a core extended type means neither is ours.
+            if on_type and on_type not in DART_CORE_TYPES and on_type not in self._type_params:
+                self._add_raw(caller, f"{on_type}.{name}", line)
+                self._add_raw(caller, name, line)
             return
         self._add_raw(caller, name, line)
 
