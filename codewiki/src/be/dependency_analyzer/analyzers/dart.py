@@ -29,6 +29,7 @@ Known limitations:
 
 import logging
 import os
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -58,6 +59,130 @@ _CLASS_LEVEL_SIGNATURES = frozenset(
         "operator_signature",
     }
 )
+
+# Dart core and ubiquitous Flutter framework types never emitted as edges.
+DART_CORE_TYPES = frozenset(
+    {
+        "int",
+        "double",
+        "num",
+        "bool",
+        "String",
+        "Object",
+        "dynamic",
+        "void",
+        "Never",
+        "Null",
+        "Function",
+        "Type",
+        "Symbol",
+        "Record",
+        "Enum",
+        "Comparable",
+        "BigInt",
+        "List",
+        "Map",
+        "Set",
+        "Iterable",
+        "Iterator",
+        "MapEntry",
+        "Future",
+        "FutureOr",
+        "Stream",
+        "StreamController",
+        "StreamSubscription",
+        "Completer",
+        "Timer",
+        "Zone",
+        "Duration",
+        "DateTime",
+        "Uri",
+        "RegExp",
+        "StringBuffer",
+        "StackTrace",
+        "Sink",
+        "Uint8List",
+        "Exception",
+        "Error",
+        "StateError",
+        "ArgumentError",
+        "RangeError",
+        "FormatException",
+        "UnimplementedError",
+        "UnsupportedError",
+        "Widget",
+        "BuildContext",
+        "Key",
+        "ValueKey",
+        "GlobalKey",
+        "UniqueKey",
+        "ObjectKey",
+        "State",
+        "StatelessWidget",
+        "StatefulWidget",
+        "WidgetRef",
+        "Ref",
+    }
+)
+# Bare calls to SDK/framework functions that never point at a repo component.
+DART_NOISE_CALLS = frozenset(
+    {
+        "print",
+        "debugPrint",
+        "identical",
+        "setState",
+        "jsonEncode",
+        "jsonDecode",
+        "unawaited",
+        "max",
+        "min",
+        "runApp",
+        "assert",
+        "scheduleMicrotask",
+    }
+)
+_GENERIC_CALL_RE = re.compile(r"\A\s*([A-Za-z_$][\w$]*)\s*<([^()]*)>\s*\(", re.S)
+_IDENT_RE = re.compile(r"[A-Za-z_$][\w$]*")
+
+
+def _is_type_name(name: str) -> bool:
+    stripped = name.lstrip("_$")
+    return bool(stripped) and stripped[0].isupper()
+
+
+def _selector_tokens(selectors) -> list[tuple[str, str | None, object]]:
+    """Flatten a selector chain into ("member", name, node) / ("call", None,
+    argument_part) / ("other", None, node) tokens."""
+    tokens: list[tuple[str, str | None, object]] = []
+    for selector in selectors:
+        for child in selector.named_children:
+            if child.type in (
+                "unconditional_assignable_selector",
+                "conditional_assignable_selector",
+            ):
+                ident = _first_child(child, "identifier")
+                tokens.append(("member", _text(ident) if ident is not None else None, child))
+            elif child.type == "argument_part":
+                tokens.append(("call", None, child))
+            else:
+                tokens.append(("other", None, child))
+    return tokens
+
+
+def _local_declared_types(*roots) -> dict[str, str]:
+    """name -> declared type for parameters and typed locals under ``roots``."""
+    types: dict[str, str] = {}
+    for root in roots:
+        if root is None:
+            continue
+        for node in [root, *_descendants(root)]:
+            if node.type not in ("formal_parameter", "initialized_variable_definition"):
+                continue
+            declared = _first_child(node, "type_identifier")
+            ident = node.child_by_field_name("name")
+            if declared is not None and ident is not None:
+                types[_text(ident)] = _text(declared)
+    return types
 
 
 @lru_cache(maxsize=1)
@@ -183,6 +308,7 @@ class TreeSitterDartAnalyzer:
                 for t in n.named_children[:1]
             }
             self._extract_declarations(root, lines)
+            self._extract_relationships()
         except Exception as e:  # noqa: BLE001 — a broken file must not abort the sweep
             logger.error(f"Error parsing Dart file {self.file_path}: {e}")
 
@@ -434,6 +560,219 @@ class TreeSitterDartAnalyzer:
         self.nodes.append(node)
         self.top_level_nodes[logical_name] = node
         return node
+
+    # ------------------------------------------------------------------
+    # Pass 2: relationships
+    # ------------------------------------------------------------------
+
+    def _extract_relationships(self):
+        for name, type_nodes in self._type_ref_nodes.items():
+            caller = self._component_id(name)
+            for type_node in type_nodes:
+                line = type_node.start_point[0] + 1
+                for ref in [type_node, *_descendants(type_node)]:
+                    if ref.type == "type_identifier":
+                        self._add_type_edge(caller, _text(ref), line)
+        for owner, declaration in self._field_decls:
+            caller = self._component_id(owner)
+            line = declaration.start_point[0] + 1
+            for child in declaration.named_children:
+                if child.type == "type_identifier":
+                    self._add_type_edge(caller, _text(child), line)
+                elif child.type == "type_arguments":
+                    for ref in _descendants(child):
+                        if ref.type == "type_identifier":
+                            self._add_type_edge(caller, _text(ref), line)
+        for target in self._scan_targets:
+            self._scan(target, self._lift_target(target))
+
+    def _lift_target(self, target) -> str | None:
+        """Class id that composition edges from this target are also lifted
+        to (Flutter build methods). Extended in the Flutter task."""
+        return None
+
+    def _scan(self, target, lift_to: str | None = None):
+        local_types = _local_declared_types(target.signature, target.node)
+        stack = [target.node]
+        while stack:
+            node = stack.pop()
+            if node.type in ("const_object_expression", "new_expression"):
+                type_node = _first_child(node, "type_identifier")
+                if type_node is not None:
+                    self._add_instantiation(target.caller, _text(type_node), node, lift_to)
+            elif node.type == "relational_expression":
+                self._handle_generic_invocation(target, node, lift_to)
+            children = node.children
+            i = 0
+            while i < len(children):
+                child = children[i]
+                if child.type in ("identifier", "this", "super"):
+                    j = i + 1
+                    selectors = []
+                    while j < len(children) and children[j].type == "selector":
+                        selectors.append(children[j])
+                        j += 1
+                    cascades = []
+                    while j < len(children) and children[j].type == "cascade_section":
+                        cascades.append(children[j])
+                        j += 1
+                    if selectors:
+                        self._process_chain(target, child, selectors, local_types, lift_to)
+                    elif cascades and child.type == "identifier":
+                        for cascade in cascades:
+                            self._process_cascade(target, child, cascade, local_types)
+                    i = j if j > i + 1 else i + 1
+                    continue
+                i += 1
+            stack.extend(reversed(node.named_children))
+
+    def _process_chain(self, target, head, selectors, local_types, lift_to):
+        tokens = _selector_tokens(selectors)
+        if not tokens:
+            return
+        caller, owner = target.caller, target.owner
+        line = head.start_point[0] + 1
+        name = _text(head)
+        if head.type == "identifier" and name in self.import_prefixes and tokens[0][0] == "member":
+            name, tokens = tokens[0][1] or "", tokens[1:]
+            if not tokens or not name:
+                return
+        kind = tokens[0][0]
+        called_member = kind == "member" and len(tokens) > 1 and tokens[1][0] == "call"
+
+        if head.type in ("this", "super"):
+            if head.type == "this" and called_member and owner:
+                local = self.top_level_nodes.get(f"{owner}.{tokens[0][1]}")
+                if local is not None:
+                    self._add_resolved(caller, local.id, line)
+            return
+
+        if _is_type_name(name):
+            if kind == "call":
+                self._add_instantiation(caller, name, head, lift_to)
+            elif kind == "member":
+                local = self.top_level_nodes.get(f"{name}.{tokens[0][1]}")
+                if called_member and local is not None:
+                    self._add_resolved(caller, local.id, line)
+                elif called_member:
+                    # Named constructor or static method: depends on the type.
+                    self._add_instantiation(caller, name, head, lift_to)
+                else:
+                    # Enum value, static field, constructor tear-off.
+                    self._add_type_edge(caller, name, line)
+            return
+
+        if kind == "call":
+            self._add_function_call(caller, owner, name, line)
+            return
+        if called_member:
+            member = tokens[0][1] or ""
+            if self._handle_ref_call(caller, member, tokens[1][2], line):
+                return
+            receiver = local_types.get(name) or self._field_types.get(owner or "", {}).get(name)
+            if receiver:
+                self._add_member_call_on_type(caller, receiver, member, line)
+
+    def _process_cascade(self, target, head, cascade, local_types):
+        selector = _first_child(cascade, "cascade_selector")
+        ident = _first_child(selector, "identifier") if selector is not None else None
+        if ident is None or _first_child(cascade, "argument_part") is None:
+            return
+        name = _text(head)
+        receiver = local_types.get(name) or self._field_types.get(target.owner or "", {}).get(name)
+        if receiver:
+            self._add_member_call_on_type(
+                target.caller, receiver, _text(ident), head.start_point[0] + 1
+            )
+
+    def _handle_generic_invocation(self, target, node, lift_to):
+        named = node.named_children
+        if (
+            len(named) < 2
+            or named[0].type != "relational_expression"
+            or named[-1].type != "parenthesized_expression"
+        ):
+            return
+        match = _GENERIC_CALL_RE.match(_text(node))
+        if not match:
+            return
+        name, type_args = match.group(1), match.group(2)
+        line = node.start_point[0] + 1
+        if _is_type_name(name):
+            self._add_instantiation(target.caller, name, node, lift_to)
+        else:
+            self._add_function_call(target.caller, target.owner, name, line)
+        for arg in _IDENT_RE.findall(type_args):
+            if _is_type_name(arg):
+                self._add_type_edge(target.caller, arg, line)
+
+    def _handle_ref_call(self, caller: str, member: str, call_node, line: int) -> bool:
+        """Riverpod hook; implemented in the Flutter task."""
+        return False
+
+    # ------------------------------------------------------------------
+    # Edge emission
+    # ------------------------------------------------------------------
+
+    def _add_instantiation(self, caller: str, type_name: str, node, lift_to: str | None):
+        line = node.start_point[0] + 1
+        self._add_type_edge(caller, type_name, line)
+        if lift_to:
+            self._add_type_edge(lift_to, type_name, line)
+
+    def _add_type_edge(self, caller: str, type_name: str, line: int):
+        if not type_name or type_name in DART_CORE_TYPES or type_name in self._type_params:
+            return
+        local = self.top_level_nodes.get(type_name)
+        if local is not None and local.component_type != "method":
+            self._add_resolved(caller, local.id, line)
+        else:
+            self._add_raw(caller, type_name, line)
+
+    def _add_function_call(self, caller: str, owner: str | None, name: str, line: int):
+        if not name or name in DART_NOISE_CALLS:
+            return
+        if owner:
+            local = self.top_level_nodes.get(f"{owner}.{name}")
+            if local is not None:
+                self._add_resolved(caller, local.id, line)
+                return
+        local = self.top_level_nodes.get(name)
+        if local is not None and local.component_type == "function":
+            self._add_resolved(caller, local.id, line)
+            return
+        owner_node = self.top_level_nodes.get(owner) if owner else None
+        if owner_node is not None and owner_node.node_type == "extension":
+            # A bare call inside an extension targets the extended type.
+            on_type = (owner_node.base_classes or [None])[0]
+            if on_type:
+                self._add_member_call_on_type(caller, on_type, name, line)
+            return
+        self._add_raw(caller, name, line)
+
+    def _add_member_call_on_type(self, caller: str, type_name: str, member: str, line: int):
+        if not member or type_name in DART_CORE_TYPES or type_name in self._type_params:
+            return
+        local = self.top_level_nodes.get(f"{type_name}.{member}")
+        if local is not None:
+            self._add_resolved(caller, local.id, line)
+        else:
+            self._add_raw(caller, f"{type_name}.{member}", line)
+
+    def _add_resolved(self, caller: str, callee_id: str, line: int):
+        self._add_relationship(caller, callee_id, line, True)
+
+    def _add_raw(self, caller: str, callee: str, line: int):
+        self._add_relationship(caller, callee, line, False)
+
+    def _add_relationship(self, caller: str, callee: str, line: int | None, resolved: bool):
+        key = (caller, callee, line)
+        if caller == callee or key in self.seen_relationships:
+            return
+        self.seen_relationships.add(key)
+        self.call_relationships.append(
+            CallRelationship(caller=caller, callee=callee, call_line=line, is_resolved=resolved)
+        )
 
 
 def analyze_dart_file(

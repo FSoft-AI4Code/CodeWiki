@@ -179,3 +179,109 @@ def test_generated_dart_files_are_ignored(tmp_path: Path) -> None:
 def test_dart_is_a_detected_language(tmp_path: Path) -> None:
     (tmp_path / "main.dart").write_text("void main() {}\n", encoding="utf-8")
     assert ("Dart", 1) in detect_supported_languages(tmp_path)
+
+
+def _edges(relationships):
+    return {
+        (r.caller.split("::")[-1], r.callee.split("::")[-1], r.is_resolved) for r in relationships
+    }
+
+
+def test_inheritance_and_field_type_edges(tmp_path: Path) -> None:
+    edges = _edges(_analyze(tmp_path)[1])
+    assert ("CarRepo", "Repo", True) in edges
+    assert ("CarRepo", "Loggable", True) in edges
+    assert ("CarRepo", "Disposable", True) in edges
+    assert ("CarRepo", "Car", False) in edges  # type argument of the superclass
+    assert ("CarRepo", "ApiClient", False) in edges  # field type
+    # Core types and type parameters never become edges.
+    callees = {callee for _, callee, _ in edges}
+    assert not callees & {"Future", "String", "Object", "int", "T"}
+
+
+def test_call_and_instantiation_edges(tmp_path: Path) -> None:
+    edges = _edges(_analyze(tmp_path)[1])
+    assert ("CarRepo.fetch", "ApiClient.get", False) in edges  # typed field receiver
+    assert ("CarRepo.fetch", "log", False) in edges  # inherited, resolved cross-file later
+    assert ("CarRepo.fetch", "Car", False) in edges  # Car.fromJson -> type edge
+    assert ("CarRepo", "CarRepo", True) not in edges  # no self edges
+    assert ("CarRepo", "ApiClient", False) in edges  # factory body -> class-level
+    assert ("Status.isIdle", "Status", True) in edges  # enum value access
+    callees = {callee for _, callee, _ in edges}
+    assert "print" not in callees
+    assert "toUpperCase" not in callees
+
+
+CALLS = """\
+import 'package:demo/models.dart' as m;
+
+class Engine {
+  void start() {}
+  void restart() {
+    stop();
+    this.start();
+    start();
+  }
+  void stop() {}
+}
+
+Engine build() => Engine();
+
+class Garage {
+  final Engine engine;
+  Garage(this.engine);
+
+  void open(Engine spare, {required Door door}) {
+    engine.start();
+    spare.restart();
+    door.unlock();
+    final Window w = Window();
+    w.close();
+    final inferred = Engine();
+    inferred.stop();
+    engine..start()..stop();
+    final box = Box<Item>(1);
+    final made = new Crate<int>();
+    const label = Label('x');
+    final car = m.Car(1);
+    final named = Window.tinted();
+    build();
+    unknown.call();
+  }
+}
+"""
+
+
+def test_call_resolution_rules(tmp_path: Path) -> None:
+    edges = _edges(_analyze(tmp_path, CALLS, "lib/garage.dart")[1])
+    expected_present = {
+        ("Engine.restart", "Engine.stop", True),
+        ("Engine.restart", "Engine.start", True),  # this.start() and bare start()
+        ("Garage.open", "Engine.start", True),  # typed field
+        ("Garage.open", "Engine.restart", True),  # typed parameter
+        ("Garage.open", "Door.unlock", False),  # typed named parameter, unknown type
+        ("Garage.open", "Window", False),  # instantiation
+        ("Garage.open", "Window.close", False),  # typed local
+        ("Garage.open", "Engine", True),
+        ("Garage.open", "Engine.stop", True),  # cascade on typed field
+        ("Garage.open", "Box", False),  # generic invocation misparse
+        ("Garage.open", "Item", False),  # its type argument
+        ("Garage.open", "Crate", False),  # new expression
+        ("Garage.open", "Label", False),  # const object expression
+        ("Garage.open", "Car", False),  # import prefix stripped
+        ("Garage.open", "build", True),  # same-file top-level function
+        ("build", "Engine", True),
+        ("Garage", "Engine", True),  # field type
+    }
+    assert expected_present <= edges
+    callees = {callee for _, callee, _ in edges}
+    assert "m" not in callees and "m.Car" not in callees
+    assert "unknown.call" not in callees and "call" not in callees
+    assert "inferred.stop" not in callees  # untyped local: unknown receiver
+
+
+def test_relationships_are_deduplicated(tmp_path: Path) -> None:
+    source = "class A {}\nclass B {\n  void f() { A(); A(); }\n}\n"
+    _, relationships = _analyze(tmp_path, source, "lib/dup.dart")
+    keys = [(r.caller, r.callee, r.call_line) for r in relationships]
+    assert len(keys) == len(set(keys))
