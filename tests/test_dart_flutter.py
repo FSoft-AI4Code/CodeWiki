@@ -91,6 +91,13 @@ def test_classifiers() -> None:
     assert classify_top_level_initializer(" StateProvider.autoDispose((ref) => 0)") == "provider"
     assert classify_top_level_initializer(" GoRouter(routes: [])") == "router"
     assert classify_top_level_initializer(" 'hi'") is None
+    assert classify_top_level_initializer(" AuthProvider()") is None
+    assert (
+        classify_top_level_initializer(" NotifierProvider.autoDispose<A, int>(A.new)") == "provider"
+    )
+    assert (
+        classify_top_level_initializer(" AutoDisposeFutureProvider<int>((ref) => 1)") == "provider"
+    )
     assert provider_alias_candidates("cartProvider") == ["cart", "Cart", "CartNotifier"]
     assert provider_alias_candidates("Provider") == []
     assert provider_alias_candidates("cart") == []
@@ -145,7 +152,9 @@ def test_riverpod_codegen_alias_resolves(tmp_path: Path) -> None:
         "@riverpod\nclass Counter extends _$Counter {\n  @override\n  int build() => 0;\n}\n"
         "@riverpod\nclass CartNotifier extends _$CartNotifier {\n  int build() => 0;\n}\n"
         "@Riverpod(keepAlive: true)\nFuture<int> total(Ref ref) async => 1;\n"
-        "Future<int> notAProvider() async => 1;\n",
+        "Future<int> notAProvider() async => 1;\n"
+        "class Cart extends ChangeNotifier {}\n"
+        "class AppDatabase extends _$AppDatabase {}\n",
         encoding="utf-8",
     )
     (lib / "state.g.dart").write_text("part of 'state.dart';\n", encoding="utf-8")
@@ -158,12 +167,13 @@ def test_riverpod_codegen_alias_resolves(tmp_path: Path) -> None:
         "    ref.watch(cartProvider);\n"  # Riverpod 3 naming
         "    ref.read(cartNotifierProvider);\n"  # Riverpod 2 naming
         "    ref.watch(notAProviderProvider);\n"
+        "    ref.watch(appDatabaseProvider);\n"
         "    return const Placeholder();\n  }\n}\n",
         encoding="utf-8",
     )
     components = DependencyParser(str(tmp_path)).parse_repository()
-    assert components["lib/state.dart::Counter"].node_type == "notifier"
-    assert components["lib/state.dart::total"].node_type == "provider"
+    assert components["lib/state.dart::Counter"].node_type == "riverpod notifier"
+    assert components["lib/state.dart::total"].node_type == "riverpod provider"
     deps = components["lib/view.dart::View.build"].depends_on
     assert {
         "lib/state.dart::Counter",
@@ -172,3 +182,6 @@ def test_riverpod_codegen_alias_resolves(tmp_path: Path) -> None:
     } <= deps
     # Only @riverpod-annotated declarations are alias targets.
     assert "lib/state.dart::notAProvider" not in deps
+    assert "lib/state.dart::AppDatabase" not in deps  # `extends _$X` alone is not @riverpod
+    assert "lib/state.dart::Cart" not in deps  # ChangeNotifier is not @riverpod
+    assert components["lib/state.dart::AppDatabase"].node_type == "notifier"

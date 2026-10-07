@@ -56,6 +56,24 @@ _INITIALIZER_CTOR_RE = re.compile(
     r"\A\s*(?:const\s+|new\s+)?([A-Z]\w*)(?:\.\w+)*\s*(?:<[^()]*>)?\s*\(", re.S
 )
 _PROVIDER_SUFFIX = "Provider"
+RIVERPOD_NOTIFIER_TYPE = "riverpod notifier"  # @riverpod class
+RIVERPOD_PROVIDER_TYPE = "riverpod provider"  # @riverpod function
+_RIVERPOD_KINDS = (
+    "",
+    "Future",
+    "Stream",
+    "State",
+    "StateNotifier",
+    "ChangeNotifier",
+    "Notifier",
+    "AsyncNotifier",
+    "StreamNotifier",
+)
+PROVIDER_CONSTRUCTORS = frozenset(
+    f"{prefix}{kind}Provider"
+    for prefix in ("", "AutoDispose", "Family", "AutoDisposeFamily")
+    for kind in _RIVERPOD_KINDS
+)
 
 
 def classify_class(extends: str | None, local_widgets: set[str]) -> str | None:
@@ -75,7 +93,7 @@ def classify_top_level_initializer(text: str) -> str | None:
     if not match:
         return None
     constructor = match.group(1)
-    if constructor.endswith(_PROVIDER_SUFFIX):
+    if constructor in PROVIDER_CONSTRUCTORS:
         return "provider"
     if constructor == "GoRouter":
         return "router"

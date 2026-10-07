@@ -40,6 +40,8 @@ from codewiki.src.be.dependency_analyzer.analyzers.dart_flutter import (
     COMPOSITION_METHOD_RE,
     REF_METHODS,
     RIVERPOD_ANNOTATIONS,
+    RIVERPOD_NOTIFIER_TYPE,
+    RIVERPOD_PROVIDER_TYPE,
     classify_class,
     classify_top_level_initializer,
 )
@@ -599,7 +601,9 @@ class TreeSitterDartAnalyzer:
             if child.type == "class_definition":
                 annotations = [c for c in child.named_children if c.type == "annotation"]
                 if _has_riverpod_annotation(annotations):
-                    self._set_node_type(_text(child.child_by_field_name("name")), "notifier")
+                    self._set_node_type(
+                        _text(child.child_by_field_name("name")), RIVERPOD_NOTIFIER_TYPE
+                    )
             elif child.type in _TOP_LEVEL_SIGNATURES:
                 annotations = []
                 sibling = child.prev_named_sibling
@@ -612,7 +616,9 @@ class TreeSitterDartAnalyzer:
                         annotations.append(sibling)
                     sibling = sibling.prev_named_sibling
                 if _has_riverpod_annotation(annotations):
-                    self._set_node_type(_text(child.child_by_field_name("name")), "provider")
+                    self._set_node_type(
+                        _text(child.child_by_field_name("name")), RIVERPOD_PROVIDER_TYPE
+                    )
 
         # Top-level provider / router variables become components.
         for name, declaration in self._top_level_vars:

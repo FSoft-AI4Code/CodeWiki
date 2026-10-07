@@ -647,6 +647,8 @@ class CallGraphAnalyzer:
                 return candidates[0]
 
         from codewiki.src.be.dependency_analyzer.analyzers.dart_flutter import (
+            RIVERPOD_NOTIFIER_TYPE,
+            RIVERPOD_PROVIDER_TYPE,
             provider_alias_candidates,
         )
 
@@ -656,7 +658,8 @@ class CallGraphAnalyzer:
             candidates = [
                 func_id
                 for func_id in self._dart_scope_candidates(alias, lang_indexes, scope)
-                if self.functions[func_id].node_type in ("provider", "notifier")
+                if self.functions[func_id].node_type
+                in (RIVERPOD_PROVIDER_TYPE, RIVERPOD_NOTIFIER_TYPE)
                 and self.functions[func_id].name == alias
             ]
             if len(candidates) == 1:
