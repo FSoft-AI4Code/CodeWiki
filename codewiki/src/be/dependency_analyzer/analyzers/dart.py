@@ -153,6 +153,16 @@ DART_NOISE_CALLS = frozenset(
 _GENERIC_CALL_RE = re.compile(r"\A\s*([A-Za-z_$][\w$]*)\s*<([^()]*)>\s*\(", re.S)
 _IDENT_RE = re.compile(r"[A-Za-z_$][\w$]*")
 
+# The bundled tree-sitter Dart grammar predates Dart 3.8 null-aware collection
+# elements (`[?a]`, `{'k': ?v}`, `{?x}`) and mis-parses everything after them.
+# A `?` directly after `[`, `{`, `,` or `:` (never a ternary/nullable/`?.`) is
+# blanked with a space before parsing, so byte/line/column positions are kept.
+_NULL_AWARE_ELEMENT_RE = re.compile(r"([\[{,:]\s*)\?(?=[A-Za-z_$(])")
+
+
+def _blank_null_aware_elements(source: str) -> str:
+    return _NULL_AWARE_ELEMENT_RE.sub(lambda m: m.group(1) + " ", source)
+
 
 def _is_type_name(name: str) -> bool:
     stripped = name.lstrip("_$")
@@ -308,7 +318,7 @@ class TreeSitterDartAnalyzer:
 
     def _analyze(self):
         try:
-            tree = _dart_parser().parse(bytes(self.content, "utf8"))
+            tree = _dart_parser().parse(bytes(_blank_null_aware_elements(self.content), "utf8"))
             root = tree.root_node
             lines = self.content.splitlines()
             self.directives = parse_directives(root)

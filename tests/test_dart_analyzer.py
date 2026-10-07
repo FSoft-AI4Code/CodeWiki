@@ -386,3 +386,53 @@ def test_inherited_mixin_call_resolves_cross_file(tmp_path: Path) -> None:
     components = DependencyParser(str(tmp_path)).parse_repository()
     assert "lib/log.dart::Loggable.log" in components["lib/svc.dart::Svc.run"].depends_on
     assert "lib/log.dart::Loggable" in components["lib/svc.dart::Svc"].depends_on
+
+
+def test_blank_null_aware_elements_only_touches_element_question_marks() -> None:
+    from codewiki.src.be.dependency_analyzer.analyzers.dart import _blank_null_aware_elements
+
+    changed = {
+        "['a', ?b]": "['a',  b]",
+        "{'pin': ?pin}": "{'pin':  pin}",
+        "{?x, ?f(y)}": "{ x,  f(y)}",
+    }
+    for src, expected in changed.items():
+        assert _blank_null_aware_elements(src) == expected
+    unchanged = [
+        "a ? b : c",
+        "a ?b : c",
+        "String? s",
+        "List<int?> xs",
+        "x?.y",
+        "a ?? b",
+        "a ??= b",
+        "x?[0]",
+        "{'a': c ? d : e}",
+        "{'a': c ?d : e}",
+    ]
+    for src in unchanged:
+        assert _blank_null_aware_elements(src) == src
+    for src in [*changed, *unchanged]:
+        assert len(_blank_null_aware_elements(src)) == len(src)
+
+
+def test_null_aware_elements_do_not_break_later_declarations(tmp_path: Path) -> None:
+    source = (
+        "class Repo {\n"
+        "  Future<void> save(String? body, bool? done, String? section) async {\n"
+        "    helper();\n"
+        "    final payload = <String, Object?>{\n"
+        "      'body': ?body,\n"
+        "      'done': ?done,\n"
+        "      if (section != null) 'section': section.trim().isEmpty ? null : section,\n"
+        "      'list': [?body],\n"
+        "    };\n"
+        "    if (payload.isEmpty) return;\n"
+        "  }\n"
+        "}\n"
+        "class After {\n  void run() {}\n}\n"
+    )
+    nodes, rels = _analyze(tmp_path, source)
+    names = {n.name for n in nodes}
+    assert {"Repo", "Repo.save", "After", "After.run"} <= names
+    assert any(r.caller.endswith("Repo.save") and r.callee == "helper" for r in rels)
