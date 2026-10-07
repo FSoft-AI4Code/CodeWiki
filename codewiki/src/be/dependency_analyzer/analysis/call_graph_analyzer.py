@@ -62,6 +62,7 @@ class CallGraphAnalyzer:
     def __init__(self):
         """Initialize the call graph analyzer."""
         self.functions: dict[str, Node] = {}
+        self._dart_directives: dict[str, list] = {}
         self.call_relationships: list[CallRelationship] = []
         self._python_project_modules: set = set()
         self._python_external_import_roots: set = set()
@@ -85,6 +86,7 @@ class CallGraphAnalyzer:
         code_files = self._route_contextual_headers(code_files, base_dir)
         self._python_project_modules = self._collect_python_modules(code_files)
         self._python_external_import_roots = set()
+        self._dart_directives = {}
 
         files_analyzed = 0
         files_failed = 0
@@ -261,6 +263,8 @@ class CallGraphAnalyzer:
                     self._analyze_scala_file(file_path, content, repo_dir)
                 elif language == "rust":
                     self._analyze_rust_file(file_path, content, repo_dir)
+                elif language == "dart":
+                    self._analyze_dart_file(file_path, content, repo_dir)
                 # else:
                 #     logger.warning(
                 #         f"Unsupported language for call graph analysis: {language} for file {file_path}"
@@ -559,6 +563,32 @@ class CallGraphAnalyzer:
             self.call_relationships.extend(relationships)
         except Exception:
             logger.exception(f"Failed to analyze Rust file {file_path}")
+
+    def _analyze_dart_file(self, file_path: str, content: str, repo_dir: str):
+        """
+        Analyze Dart file using tree-sitter based analyzer.
+
+        Besides components and relationships, records the file's
+        import/export/part directives for Dart scope-aware resolution.
+
+        Args:
+            file_path: Path to the Dart file
+            content: File content string
+            repo_dir: Repository base directory
+        """
+        from codewiki.src.be.dependency_analyzer.analyzers.dart import TreeSitterDartAnalyzer
+
+        try:
+            analyzer = TreeSitterDartAnalyzer(str(file_path), content, repo_path=repo_dir)
+
+            for func in analyzer.nodes:
+                func_id = func.id if func.id else f"{file_path}:{func.name}"
+                self.functions[func_id] = func
+
+            self.call_relationships.extend(analyzer.call_relationships)
+            self._dart_directives[analyzer.relative_path] = analyzer.directives
+        except Exception:
+            logger.exception(f"Failed to analyze Dart file {file_path}")
 
     def _resolve_call_relationships(self):
         """
@@ -860,6 +890,8 @@ class CallGraphAnalyzer:
                 node_classes.append("lang-scala")
             elif file_ext == ".rs":
                 node_classes.append("lang-rust")
+            elif file_ext == ".dart":
+                node_classes.append("lang-dart")
 
             cytoscape_elements.append(
                 {

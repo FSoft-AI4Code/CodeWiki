@@ -50,6 +50,13 @@ DEFAULT_IGNORE_PATTERNS = {
     ".classpath",
     "gradle-app.setting",
     "*.gradle",
+    # Dart/Flutter: tool cache and generated sources
+    ".dart_tool",
+    ".dart_tool/",
+    "*.g.dart",
+    "*.freezed.dart",
+    "*.gr.dart",
+    "*.mocks.dart",
     # IDEs and editors / Java
     ".project",
     # C/C++
@@ -162,6 +169,7 @@ DEFAULT_INCLUDE_PATTERNS = [
     "*.kts",
     "*.scala",
     "*.sc",
+    "*.dart",
     "*.clj",
     "*.hs",
     "*.ml",
@@ -289,6 +297,7 @@ CODE_EXTENSIONS = {
     ".kt": "kotlin",
     ".scala": "scala",
     ".sc": "scala",
+    ".dart": "dart",
     ".cs": "csharp",
 }
 
@@ -334,6 +343,8 @@ ENTRY_POINT_PATTERNS = {
     "app.rs",
     "start.rs",
     "bin.rs",
+    # Dart/Flutter
+    "main.dart",
     # C/C++
     "main.c",
     "main.cpp",
@@ -533,6 +544,15 @@ FUNCTION_DEFINITION_PATTERNS = {
         "class {name}",
         "trait {name}",
         "object {name}",
+    ],
+    "dart": [
+        "class {name}",
+        "mixin {name}",
+        "extension {name}",
+        "enum {name}",
+        "void {name}(",
+        "Widget {name}(",
+        "Future<void> {name}(",
     ],
     "general": ["{name}("],  # Fallback pattern
 }
