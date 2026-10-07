@@ -36,6 +36,13 @@ from pathlib import Path
 
 from tree_sitter_language_pack import get_parser
 
+from codewiki.src.be.dependency_analyzer.analyzers.dart_flutter import (
+    COMPOSITION_METHOD_RE,
+    REF_METHODS,
+    RIVERPOD_ANNOTATIONS,
+    classify_class,
+    classify_top_level_initializer,
+)
 from codewiki.src.be.dependency_analyzer.analyzers.dart_imports import (
     DartDirective,
     parse_directives,
@@ -194,6 +201,10 @@ def _text(node) -> str:
     return node.text.decode("utf8", errors="replace") if node is not None else ""
 
 
+def _has_riverpod_annotation(annotations) -> bool:
+    return any(_text(a.child_by_field_name("name")) in RIVERPOD_ANNOTATIONS for a in annotations)
+
+
 def _first_child(node, *types):
     return next((c for c in node.named_children if c.type in types), None) if node else None
 
@@ -309,6 +320,7 @@ class TreeSitterDartAnalyzer:
                 for t in n.named_children[:1]
             }
             self._extract_declarations(root, lines)
+            self._apply_flutter_kinds(root, lines)
             self._extract_relationships()
         except Exception as e:  # noqa: BLE001 — a broken file must not abort the sweep
             logger.error(f"Error parsing Dart file {self.file_path}: {e}")
@@ -564,6 +576,60 @@ class TreeSitterDartAnalyzer:
         return node
 
     # ------------------------------------------------------------------
+    # Flutter / Riverpod
+    # ------------------------------------------------------------------
+
+    def _apply_flutter_kinds(self, root, lines):
+        # Same-file widget subclass chains: iterate to a fixpoint.
+        widgets: set[str] = set()
+        changed = True
+        while changed:
+            changed = False
+            for name, extends in self._class_extends.items():
+                if name not in widgets and classify_class(extends, widgets) == "widget":
+                    widgets.add(name)
+                    changed = True
+        for name, extends in self._class_extends.items():
+            kind = classify_class(extends, widgets)
+            if kind:
+                self._set_node_type(name, kind)
+
+        # @riverpod classes (annotation is a child) and functions (preceding sibling).
+        for child in root.named_children:
+            if child.type == "class_definition":
+                annotations = [c for c in child.named_children if c.type == "annotation"]
+                if _has_riverpod_annotation(annotations):
+                    self._set_node_type(_text(child.child_by_field_name("name")), "notifier")
+            elif child.type in _TOP_LEVEL_SIGNATURES:
+                annotations = []
+                sibling = child.prev_named_sibling
+                while sibling is not None and sibling.type in (
+                    "annotation",
+                    "documentation_comment",
+                    "comment",
+                ):
+                    if sibling.type == "annotation":
+                        annotations.append(sibling)
+                    sibling = sibling.prev_named_sibling
+                if _has_riverpod_annotation(annotations):
+                    self._set_node_type(_text(child.child_by_field_name("name")), "provider")
+
+        # Top-level provider / router variables become components.
+        for name, declaration in self._top_level_vars:
+            text = _text(declaration)
+            initializer = text.split("=", 1)[1] if "=" in text else ""
+            kind = classify_top_level_initializer(initializer)
+            if kind:
+                node = self._add_node(declaration, declaration, name, "function", kind, lines)
+                self._scan_targets.append(_ScanTarget(node.id, None, declaration))
+
+    def _set_node_type(self, name: str, node_type: str):
+        node = self.top_level_nodes.get(name)
+        if node is not None and node.component_type in ("class", "interface", "function"):
+            node.node_type = node_type
+            node.display_name = f"{node_type} {name}"
+
+    # ------------------------------------------------------------------
     # Pass 2: relationships
     # ------------------------------------------------------------------
 
@@ -589,9 +655,16 @@ class TreeSitterDartAnalyzer:
             self._scan(target, self._lift_target(target))
 
     def _lift_target(self, target) -> str | None:
-        """Class id that composition edges from this target are also lifted
-        to (Flutter build methods). Extended in the Flutter task."""
-        return None
+        """Instantiations in a widget's/state's build helpers and createState
+        are also recorded on the class: the widget tree is class-level."""
+        if not target.owner or not target.method_name:
+            return None
+        owner = self.top_level_nodes.get(target.owner)
+        if owner is None or owner.node_type not in ("widget", "state"):
+            return None
+        if not COMPOSITION_METHOD_RE.match(target.method_name):
+            return None
+        return owner.id
 
     def _scan(self, target, lift_to: str | None = None):
         local_types = _local_declared_types(target.signature, target.node)
@@ -734,8 +807,29 @@ class TreeSitterDartAnalyzer:
                 self._add_type_edge(target.caller, arg, line)
 
     def _handle_ref_call(self, caller: str, member: str, call_node, line: int) -> bool:
-        """Riverpod hook; implemented in the Flutter task."""
-        return False
+        """`ref.watch(fooProvider)` / `.read` / `.listen` / ...: an edge to the
+        provider (`.notifier`, `.future` and family arguments stripped)."""
+        if member not in REF_METHODS:
+            return False
+        arguments = _first_child(call_node, "arguments")
+        first = (
+            arguments.named_children[0]
+            if arguments is not None and arguments.named_children
+            else None
+        )
+        if first is not None and first.type == "argument":
+            first = first.named_children[0] if first.named_children else None
+        if first is None or first.type != "identifier":
+            return False
+        provider = _text(first)
+        if not provider.endswith("Provider"):
+            return False
+        local = self.top_level_nodes.get(provider)
+        if local is not None:
+            self._add_resolved(caller, local.id, line)
+        else:
+            self._add_raw(caller, provider, line)
+        return True
 
     # ------------------------------------------------------------------
     # Edge emission

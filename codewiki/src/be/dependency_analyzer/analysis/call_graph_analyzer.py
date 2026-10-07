@@ -645,6 +645,22 @@ class CallGraphAnalyzer:
             candidates = self._dart_scope_candidates(key, lang_indexes, scope)
             if len(candidates) == 1:
                 return candidates[0]
+
+        from codewiki.src.be.dependency_analyzer.analyzers.dart_flutter import (
+            provider_alias_candidates,
+        )
+
+        # riverpod_generator providers live in ignored *.g.dart files: map
+        # `fooProvider` to the @riverpod declaration it was generated from.
+        for alias in provider_alias_candidates(callee):
+            candidates = [
+                func_id
+                for func_id in self._dart_scope_candidates(alias, lang_indexes, scope)
+                if self.functions[func_id].node_type in ("provider", "notifier")
+                and self.functions[func_id].name == alias
+            ]
+            if len(candidates) == 1:
+                return candidates[0]
         return None
 
     def _resolve_call_relationships(self):
