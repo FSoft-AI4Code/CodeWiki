@@ -308,3 +308,81 @@ def test_this_field_method_call(tmp_path: Path) -> None:
     )
     edges = _edges(_analyze(tmp_path, source, "lib/thisf.dart")[1])
     assert ("A.f", "Api.get", True) in edges
+
+
+def _write_repo(tmp_path: Path, files: dict[str, str]) -> None:
+    (tmp_path / "pubspec.yaml").write_text("name: demo\n", encoding="utf-8")
+    for relpath, source in files.items():
+        path = tmp_path / relpath
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(source, encoding="utf-8")
+
+
+def test_imported_definition_wins_over_global_duplicate(tmp_path: Path) -> None:
+    _write_repo(
+        tmp_path,
+        {
+            "lib/a/home.dart": (
+                "import 'package:demo/a/widgets.dart';\n"
+                "class HomePage {\n  void show() { InfoCard(); }\n}\n"
+            ),
+            "lib/a/widgets.dart": "class InfoCard {}\n",
+            "lib/b/other.dart": "class InfoCard {}\n",
+        },
+    )
+    components = DependencyParser(str(tmp_path)).parse_repository()
+    deps = components["lib/a/home.dart::HomePage.show"].depends_on
+    assert "lib/a/widgets.dart::InfoCard" in deps
+    assert "lib/b/other.dart::InfoCard" not in deps
+
+
+def test_private_names_bind_within_library_only(tmp_path: Path) -> None:
+    _write_repo(
+        tmp_path,
+        {
+            "lib/c/lib.dart": "part 'part.dart';\nclass X {\n  void f() { _helper(); }\n}\n",
+            "lib/c/part.dart": "part of 'lib.dart';\nvoid _helper() {}\nvoid _onlyInC() {}\n",
+            "lib/d/z.dart": (
+                "void _helper() {}\nclass Z {\n  void g() { _helper(); _onlyInC(); }\n}\n"
+            ),
+        },
+    )
+    components = DependencyParser(str(tmp_path)).parse_repository()
+    assert components["lib/c/lib.dart::X.f"].depends_on == {"lib/c/part.dart::_helper"}
+    # Z.g sees its own _helper; _onlyInC is private to library c and must not bind.
+    assert components["lib/d/z.dart::Z.g"].depends_on == {"lib/d/z.dart::_helper"}
+
+
+def test_dotted_callee_falls_back_to_visible_type(tmp_path: Path) -> None:
+    _write_repo(
+        tmp_path,
+        {
+            "lib/api.dart": "class ApiClient {\n  void get() {}\n}\n",
+            "lib/other_api.dart": "class Other {\n  void get() {}\n}\n",
+            "lib/repo.dart": (
+                "import 'api.dart';\n"
+                "class Repo {\n  final ApiClient api;\n  Repo(this.api);\n"
+                "  void load() { api.get(); api.post(); }\n}\n"
+            ),
+        },
+    )
+    components = DependencyParser(str(tmp_path)).parse_repository()
+    deps = components["lib/repo.dart::Repo.load"].depends_on
+    assert "lib/api.dart::ApiClient.get" in deps
+    assert "lib/api.dart::ApiClient" in deps  # api.post(): no such method -> the type
+    assert "lib/other_api.dart::Other.get" not in deps
+
+
+def test_inherited_mixin_call_resolves_cross_file(tmp_path: Path) -> None:
+    _write_repo(
+        tmp_path,
+        {
+            "lib/log.dart": "mixin Loggable {\n  void log(String m) {}\n}\n",
+            "lib/svc.dart": (
+                "import 'log.dart';\nclass Svc with Loggable {\n  void run() { log('x'); }\n}\n"
+            ),
+        },
+    )
+    components = DependencyParser(str(tmp_path)).parse_repository()
+    assert "lib/log.dart::Loggable.log" in components["lib/svc.dart::Svc.run"].depends_on
+    assert "lib/log.dart::Loggable" in components["lib/svc.dart::Svc"].depends_on

@@ -63,6 +63,8 @@ class CallGraphAnalyzer:
         """Initialize the call graph analyzer."""
         self.functions: dict[str, Node] = {}
         self._dart_directives: dict[str, list] = {}
+        self._dart_visible: dict[str, set[str]] = {}
+        self._dart_library_members: dict[str, set[str]] = {}
         self.call_relationships: list[CallRelationship] = []
         self._python_project_modules: set = set()
         self._python_external_import_roots: set = set()
@@ -87,6 +89,8 @@ class CallGraphAnalyzer:
         self._python_project_modules = self._collect_python_modules(code_files)
         self._python_external_import_roots = set()
         self._dart_directives = {}
+        self._dart_visible = {}
+        self._dart_library_members = {}
 
         files_analyzed = 0
         files_failed = 0
@@ -117,6 +121,9 @@ class CallGraphAnalyzer:
             f"✓ Analysis complete: {files_analyzed}/{len(code_files)} files analyzed, "
             f"{files_failed} failed, {len(self.functions)} functions, {len(self.call_relationships)} relationships ({elapsed_time:.1f}s)"
         )
+
+        if self._dart_directives:
+            self._build_dart_scopes(base_dir)
 
         logger.debug("Resolving call relationships")
         self._resolve_call_relationships()
@@ -590,6 +597,56 @@ class CallGraphAnalyzer:
         except Exception:
             logger.exception(f"Failed to analyze Dart file {file_path}")
 
+    def _build_dart_scopes(self, base_dir: str) -> None:
+        """Resolve recorded Dart directives into per-file visibility scopes."""
+        from codewiki.src.be.dependency_analyzer.analyzers.dart_imports import (
+            DartPackageResolver,
+            build_scopes,
+        )
+
+        files = set(self._dart_directives)
+        resolver = DartPackageResolver.from_files(base_dir, files)
+        scopes = build_scopes(self._dart_directives, resolver, files)
+        self._dart_visible = scopes.visible
+        self._dart_library_members = scopes.library_members
+
+    def _dart_scope_candidates(self, key: str, lang_indexes: dict, scope: set[str]) -> list[str]:
+        candidates: list[str] = []
+        for func_id in [*lang_indexes["exact"].get(key, []), *lang_indexes["simple"].get(key, [])]:
+            func = self.functions.get(func_id)
+            if func_id in candidates or func is None:
+                continue
+            if Path(func.relative_path).as_posix() in scope:
+                candidates.append(func_id)
+        return candidates
+
+    def _resolve_dart_callee(
+        self, callee: str, caller: Node, lang_indexes: dict | None
+    ) -> str | None:
+        """Prefer definitions the caller's library can see (imports, parts,
+        re-exports); library-private names only resolve inside the library."""
+        from codewiki.src.be.dependency_analyzer.analyzers.dart_imports import (
+            is_private_dart_name,
+        )
+
+        if not lang_indexes or "::" in callee:
+            return None
+        caller_file = Path(caller.relative_path).as_posix()
+        if is_private_dart_name(callee):
+            scope = self._dart_library_members.get(caller_file, {caller_file})
+        else:
+            scope = self._dart_visible.get(caller_file)
+        if not scope:
+            return None
+        keys = [callee]
+        if "." in callee:
+            keys.append(callee.split(".")[0])
+        for key in keys:
+            candidates = self._dart_scope_candidates(key, lang_indexes, scope)
+            if len(candidates) == 1:
+                return candidates[0]
+        return None
+
     def _resolve_call_relationships(self):
         """
         Resolve function call relationships across all languages.
@@ -667,6 +724,16 @@ class CallGraphAnalyzer:
                 return True
         if language == "python" and "." in callee:
             return self._is_external_python_callee(callee)
+        if language == "dart":
+            from codewiki.src.be.dependency_analyzer.analyzers.dart_imports import (
+                is_private_dart_name,
+            )
+
+            # A library-private name that did not resolve inside its library
+            # can never be a component elsewhere; dropping it keeps the
+            # name-based fallback from binding another library's `_Body`.
+            if is_private_dart_name(callee):
+                return True
         return False
 
     def _is_external_python_callee(self, callee: str) -> bool:
@@ -751,6 +818,16 @@ class CallGraphAnalyzer:
         caller_language = caller.language if caller else None
 
         lang_indexes = indexes["by_lang"].get(caller_language) if caller_language else None
+        if caller_language == "dart" and caller is not None:
+            from codewiki.src.be.dependency_analyzer.analyzers.dart_imports import (
+                is_private_dart_name,
+            )
+
+            match = self._resolve_dart_callee(relationship.callee, caller, lang_indexes)
+            if match:
+                return match
+            if is_private_dart_name(relationship.callee):
+                return None
         if lang_indexes:
             match = self._resolve_callee_in(
                 relationship, lang_indexes["exact"], lang_indexes["simple"]
