@@ -610,14 +610,30 @@ class CallGraphAnalyzer:
         self._dart_visible = scopes.visible
         self._dart_library_members = scopes.library_members
 
-    def _dart_scope_candidates(self, key: str, lang_indexes: dict, scope: set[str]) -> list[str]:
+    def _has_dart_scope(self, caller: Node) -> bool:
+        return Path(caller.relative_path).as_posix() in self._dart_visible
+
+    def _dart_scope_candidates(
+        self, key: str, lang_indexes: dict, scope: set[str], caller_file: str | None = None
+    ) -> list[str]:
+        from codewiki.src.be.dependency_analyzer.analyzers.dart_imports import (
+            is_private_dart_name,
+        )
+
+        own_library = self._dart_library_members.get(caller_file, set()) if caller_file else set()
         candidates: list[str] = []
         for func_id in [*lang_indexes["exact"].get(key, []), *lang_indexes["simple"].get(key, [])]:
             func = self.functions.get(func_id)
             if func_id in candidates or func is None:
                 continue
-            if Path(func.relative_path).as_posix() in scope:
-                candidates.append(func_id)
+            func_file = Path(func.relative_path).as_posix()
+            if func_file not in scope:
+                continue
+            # A `_`-prefixed segment in the target (`_Ticker.tick`) is private
+            # to its library, whatever the callee's own spelling.
+            if is_private_dart_name(func.name) and func_file not in own_library:
+                continue
+            candidates.append(func_id)
         return candidates
 
     def _resolve_dart_callee(
@@ -642,7 +658,7 @@ class CallGraphAnalyzer:
         if "." in callee:
             keys.append(callee.split(".")[0])
         for key in keys:
-            candidates = self._dart_scope_candidates(key, lang_indexes, scope)
+            candidates = self._dart_scope_candidates(key, lang_indexes, scope, caller_file)
             if len(candidates) == 1:
                 return candidates[0]
 
@@ -657,7 +673,7 @@ class CallGraphAnalyzer:
         for alias in provider_alias_candidates(callee):
             candidates = [
                 func_id
-                for func_id in self._dart_scope_candidates(alias, lang_indexes, scope)
+                for func_id in self._dart_scope_candidates(alias, lang_indexes, scope, caller_file)
                 if self.functions[func_id].node_type
                 in (RIVERPOD_PROVIDER_TYPE, RIVERPOD_NOTIFIER_TYPE)
                 and self.functions[func_id].name == alias
@@ -696,12 +712,20 @@ class CallGraphAnalyzer:
             relationship
             for relationship in self.call_relationships
             if relationship.is_resolved
-            or not self._is_external_callee(
+            or not self._is_unresolvable_dart(relationship)
+            and not self._is_external_callee(
                 self._caller_language(relationship.caller),
                 relationship.callee,
                 dotted_packages,
             )
         ]
+
+    def _is_unresolvable_dart(self, relationship: CallRelationship) -> bool:
+        """A scoped Dart caller's callee that import-aware resolution rejected
+        is external or invisible; drop it so ast_parser's name-only fallback
+        cannot bind it to an unrelated component."""
+        caller = self.functions.get(relationship.caller)
+        return caller is not None and caller.language == "dart" and self._has_dart_scope(caller)
 
     def _dotted_project_packages(self) -> dict[str, set]:
         """Project packages/namespaces, partitioned by language. Java and C#
@@ -845,7 +869,9 @@ class CallGraphAnalyzer:
             match = self._resolve_dart_callee(relationship.callee, caller, lang_indexes)
             if match:
                 return match
-            if is_private_dart_name(relationship.callee):
+            # Dart resolution is import-driven: a caller with a scope never
+            # falls back to name guessing in other languages or libraries.
+            if is_private_dart_name(relationship.callee) or self._has_dart_scope(caller):
                 return None
         if lang_indexes:
             match = self._resolve_callee_in(

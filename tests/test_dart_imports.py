@@ -123,3 +123,14 @@ def test_is_private_dart_name() -> None:
     assert is_private_dart_name("Foo._bar")
     assert not is_private_dart_name("Foo.bar")
     assert not is_private_dart_name("lib/a.dart::_Body")
+
+
+def test_part_of_fallback_joins_library_without_part_directive() -> None:
+    resolver = DartPackageResolver({})
+    directives = {
+        "lib/lib.dart": [],
+        "lib/extra.dart": [DartDirective("part_of", "lib.dart")],
+    }
+    scopes = build_scopes(directives, resolver, set(directives))
+    assert scopes.library_members["lib/extra.dart"] == {"lib/lib.dart", "lib/extra.dart"}
+    assert scopes.visible["lib/lib.dart"] == {"lib/lib.dart", "lib/extra.dart"}

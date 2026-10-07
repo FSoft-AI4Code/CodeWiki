@@ -418,7 +418,13 @@ class TreeSitterDartAnalyzer:
     def _add_extension(self, node, lines):
         on_type = node.child_by_field_name("class")
         on_name = _text(_first_child(on_type, "type_identifier") or on_type) if on_type else ""
-        name = _text(node.child_by_field_name("name")) or f"extension_on_{on_name or 'unknown'}"
+        name = _text(node.child_by_field_name("name"))
+        if not name:
+            name = f"extension_on_{on_name or 'unknown'}"
+            if name in self.top_level_nodes:
+                # A second unnamed extension on the same type must not
+                # overwrite the first.
+                name = f"{name}_L{node.start_point[0] + 1}"
         self._extension_on[name] = on_name
         self._register_type(
             node, name, "class", "extension", lines, [on_name] if on_name else [], [on_type]
@@ -563,6 +569,12 @@ class TreeSitterDartAnalyzer:
         component_id = self._component_id(logical_name)
         start_idx = start.start_point[0]
         end_idx = end.end_point[0] + 1
+        # Annotations of members and top-level functions are preceding
+        # siblings; include them in the span (class annotations are children).
+        sibling = start.prev_named_sibling
+        while sibling is not None and sibling.type == "annotation":
+            start_idx = min(start_idx, sibling.start_point[0])
+            sibling = sibling.prev_named_sibling
         docstring = self._docstring(start)
         node = Node(
             id=component_id,

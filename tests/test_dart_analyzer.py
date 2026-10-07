@@ -126,9 +126,9 @@ def test_bases_docstrings_parameters_and_spans(tmp_path: Path) -> None:
     assert by_name["CarRepo.fetch"].docstring == "/// Loads the car."
     assert by_name["helper"].parameters == ["a", "b"]
     fetch = by_name["CarRepo.fetch"]
-    assert fetch.source_code.lstrip().startswith("Future<Car> fetch()")
+    assert fetch.source_code.lstrip().startswith("@override")
     assert fetch.source_code.rstrip().endswith("}")
-    assert fetch.end_line - fetch.start_line == 4
+    assert fetch.end_line - fetch.start_line == 5
 
 
 def test_import_prefixes_and_directives(tmp_path: Path) -> None:
@@ -166,6 +166,7 @@ def test_generated_dart_files_are_ignored(tmp_path: Path) -> None:
     (lib / "car.dart").write_text("part 'car.g.dart';\nclass Car {}\n", encoding="utf-8")
     (lib / "car.g.dart").write_text("part of 'car.dart';\nclass _$CarGen {}\n", encoding="utf-8")
     (lib / "car.freezed.dart").write_text("class _$CarFreezed {}\n", encoding="utf-8")
+    (lib / "car.gen.dart").write_text("class CarGen {}\n", encoding="utf-8")
     tool = tmp_path / ".dart_tool"
     tool.mkdir()
     (tool / "gen.dart").write_text("class Hidden {}\n", encoding="utf-8")
@@ -436,3 +437,98 @@ def test_null_aware_elements_do_not_break_later_declarations(tmp_path: Path) -> 
     names = {n.name for n in nodes}
     assert {"Repo", "Repo.save", "After", "After.run"} <= names
     assert any(r.caller.endswith("Repo.save") and r.callee == "helper" for r in rels)
+
+
+def test_unscoped_names_are_not_guessed_across_languages(tmp_path: Path) -> None:
+    _write_repo(
+        tmp_path,
+        {
+            "windows/runner/win32_window.h": (
+                "struct Size { int w; int h; };\nstruct Point { int x; int y; };\n"
+            ),
+            "lib/home.dart": ("class Home {\n  void build() { Size(10, 20); Point(1, 2); }\n}\n"),
+        },
+    )
+    components = DependencyParser(str(tmp_path)).parse_repository()
+    deps = components["lib/home.dart::Home.build"].depends_on
+    assert not {d for d in deps if d.startswith("windows/")}
+
+
+def test_dotted_call_does_not_bind_to_unimported_class(tmp_path: Path) -> None:
+    _write_repo(
+        tmp_path,
+        {
+            "lib/player.dart": "class Player {\n  void forward() {}\n}\n",
+            "lib/anim.dart": (
+                "class Anim {\n  final AnimationController controller;\n"
+                "  Anim(this.controller);\n  void run() { controller.forward(); }\n}\n"
+            ),
+        },
+    )
+    components = DependencyParser(str(tmp_path)).parse_repository()
+    assert "lib/player.dart::Player.forward" not in components["lib/anim.dart::Anim.run"].depends_on
+
+
+def test_bare_call_requires_import_of_defining_file(tmp_path: Path) -> None:
+    _write_repo(
+        tmp_path,
+        {
+            "lib/dialogs.dart": "void showDialog() {}\n",
+            "lib/page.dart": "class Page {\n  void open() { showDialog(); }\n}\n",
+        },
+    )
+    components = DependencyParser(str(tmp_path)).parse_repository()
+    assert components["lib/page.dart::Page.open"].depends_on == set()
+
+
+def test_private_target_in_other_library_is_not_bound(tmp_path: Path) -> None:
+    _write_repo(
+        tmp_path,
+        {
+            "lib/a.dart": "class _Ticker {\n  void tick() {}\n}\n",
+            "lib/b.dart": ("import 'a.dart';\nclass B {\n  void f() { tick(); }\n}\n"),
+        },
+    )
+    components = DependencyParser(str(tmp_path)).parse_repository()
+    assert "lib/a.dart::_Ticker.tick" not in components["lib/b.dart::B.f"].depends_on
+
+
+def test_barrel_reexport_selects_exported_definition(tmp_path: Path) -> None:
+    _write_repo(
+        tmp_path,
+        {
+            "lib/barrel.dart": "export 'src/card.dart';\n",
+            "lib/src/card.dart": "class InfoCard {}\n",
+            "lib/other/card.dart": "class InfoCard {}\n",
+            "lib/home.dart": (
+                "import 'package:demo/barrel.dart';\n"
+                "class Home {\n  void show() { InfoCard(); }\n}\n"
+            ),
+        },
+    )
+    components = DependencyParser(str(tmp_path)).parse_repository()
+    deps = components["lib/home.dart::Home.show"].depends_on
+    assert "lib/src/card.dart::InfoCard" in deps
+    assert "lib/other/card.dart::InfoCard" not in deps
+
+
+def test_two_unnamed_extensions_on_same_type_stay_distinct(tmp_path: Path) -> None:
+    source = (
+        "extension on String {\n  int a() => 1;\n}\nextension on String {\n  int b() => 2;\n}\n"
+    )
+    nodes, _ = _analyze(tmp_path, source)
+    ids = [n.id for n in nodes]
+    assert len([i for i in ids if "extension_on_String" in i and i.count(".") == 1]) == 2
+    assert any(i.endswith(".a") for i in ids) and any(i.endswith(".b") for i in ids)
+    assert len(ids) == len(set(ids))
+
+
+def test_member_annotations_are_part_of_the_span(tmp_path: Path) -> None:
+    source = (
+        "class A {\n  @override\n  @Deprecated('x')\n  void f() {}\n}\n@pragma('x')\nvoid g() {}\n"
+    )
+    nodes, _ = _analyze(tmp_path, source)
+    by_name = {n.name: n for n in nodes}
+    assert by_name["A.f"].source_code.lstrip().startswith("@override")
+    assert by_name["A.f"].start_line == 2
+    assert by_name["g"].source_code.lstrip().startswith("@pragma")

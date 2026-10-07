@@ -188,7 +188,15 @@ def build_scopes(
                         found.add(target)
         return found
 
+    closure_cache: dict[str, set[str]] = {}
+
     def exported_closure(start: str) -> set[str]:
+        library = library_of.get(start, start)
+        if library not in closure_cache:
+            closure_cache[library] = _exported_closure(start)
+        return closure_cache[library]
+
+    def _exported_closure(start: str) -> set[str]:
         result: set[str] = set()
         stack = [start]
         while stack:

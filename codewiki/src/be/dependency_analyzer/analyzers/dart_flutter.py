@@ -49,8 +49,9 @@ RIVERPOD_ANNOTATIONS = frozenset({"riverpod", "Riverpod"})
 REF_METHODS = frozenset(
     {"watch", "read", "listen", "listenManual", "invalidate", "refresh", "exists"}
 )
-# Methods whose instantiations are the widget's composition: build(),
-# helper builders (buildHeader, _buildRow) and createState().
+# Methods whose instantiations are the widget's composition: any method name
+# starting with `build`/`_build` (build, buildHeader, _buildRow, builder) plus
+# createState().
 COMPOSITION_METHOD_RE = re.compile(r"^(_?build\w*|createState)$")
 _INITIALIZER_CTOR_RE = re.compile(
     r"\A\s*(?:const\s+|new\s+)?([A-Z]\w*)(?:\.\w+)*\s*(?:<[^()]*>)?\s*\(", re.S
@@ -79,8 +80,6 @@ PROVIDER_CONSTRUCTORS = frozenset(
 def classify_class(extends: str | None, local_widgets: set[str]) -> str | None:
     if not extends:
         return None
-    if extends.startswith("_$"):
-        return "notifier"  # riverpod_generator base class
     if extends in FLUTTER_WIDGET_BASES or extends in local_widgets:
         return "widget"
     if extends in FLUTTER_STATE_BASES:

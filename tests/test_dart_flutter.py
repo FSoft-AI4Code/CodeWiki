@@ -83,12 +83,18 @@ def test_classifiers() -> None:
     assert classify_class("State", set()) == "state"
     assert classify_class("ConsumerState", set()) == "state"
     assert classify_class("Notifier", set()) == "notifier"
-    assert classify_class("_$Counter", set()) == "notifier"
+    assert classify_class("_$Counter", set()) is None
+    assert classify_class("Bloc", set()) == "bloc"
+    assert classify_class("HydratedCubit", set()) == "cubit"
     assert classify_class("Cubit", set()) == "cubit"
     assert classify_class("Repo", set()) is None
     assert classify_class(None, set()) is None
     assert classify_top_level_initializer(" FutureProvider<Car>((ref) => 1)") == "provider"
     assert classify_top_level_initializer(" StateProvider.autoDispose((ref) => 0)") == "provider"
+    assert (
+        classify_top_level_initializer(" FutureProvider.family<int, int>((ref, id) => id)")
+        == "provider"
+    )
     assert classify_top_level_initializer(" GoRouter(routes: [])") == "router"
     assert classify_top_level_initializer(" 'hi'") is None
     assert classify_top_level_initializer(" AuthProvider()") is None
@@ -184,4 +190,4 @@ def test_riverpod_codegen_alias_resolves(tmp_path: Path) -> None:
     assert "lib/state.dart::notAProvider" not in deps
     assert "lib/state.dart::AppDatabase" not in deps  # `extends _$X` alone is not @riverpod
     assert "lib/state.dart::Cart" not in deps  # ChangeNotifier is not @riverpod
-    assert components["lib/state.dart::AppDatabase"].node_type == "notifier"
+    assert components["lib/state.dart::AppDatabase"].node_type == "class"

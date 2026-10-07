@@ -133,8 +133,8 @@ Analyzers are standalone classes, one file per language. Follow
    (`cli/utils/validation.py`, `cli/utils/repo_validator.py`).
 5. **Tests.** Add `tests/test_<lang>_analyzer.py` with small source
    snippets that check component and edge extraction. See
-   `tests/test_scala_analyzer.py`, `tests/test_ruby_analyzer.py`, `tests/test_rust_analyzer.py`, and
-   `tests/test_dart_analyzer.py`.
+   `tests/test_scala_analyzer.py`, `tests/test_ruby_analyzer.py`,
+   `tests/test_rust_analyzer.py`, and `tests/test_dart_analyzer.py`.
 6. **Docs.** Add the language to the README list.
 
 ## Tests and lint

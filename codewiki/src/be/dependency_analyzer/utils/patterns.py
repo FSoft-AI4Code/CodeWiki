@@ -57,6 +57,13 @@ DEFAULT_IGNORE_PATTERNS = {
     "*.freezed.dart",
     "*.gr.dart",
     "*.mocks.dart",
+    "*.gen.dart",
+    "*.config.dart",
+    "*.pb.dart",
+    "*.pbenum.dart",
+    "*.pbjson.dart",
+    "*.pbgrpc.dart",
+    "*.chopper.dart",
     # IDEs and editors / Java
     ".project",
     # C/C++

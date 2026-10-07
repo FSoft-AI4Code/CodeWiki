@@ -16,7 +16,8 @@ uses [Semantic Versioning](https://semver.org/).
   functions and getters, and methods become components, with inheritance,
   field-type, instantiation and call edges. `package:`/relative imports,
   exports and `part` files decide which definition a name resolves to, and
-  library-private names never resolve outside their library. Flutter-aware:
+  library-private names never resolve outside their library; names not
+  visible through imports are dropped rather than guessed. Flutter-aware:
   widgets and State classes are typed, instantiations in `build()` become
   widget-to-widget edges, `ref.watch`/`ref.read` link widgets to Riverpod
   providers (including `@riverpod` codegen), and GoRouter routes link to their
