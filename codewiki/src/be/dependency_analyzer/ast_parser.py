@@ -104,6 +104,7 @@ class DependencyParser:
                 display_name=func_dict.get("display_name", ""),
                 component_id=component_id,
                 artifact_class=func_dict.get("artifact_class"),
+                language=func_dict.get("language"),
             )
 
             self.components[component_id] = node
@@ -189,6 +190,7 @@ class DependencyParser:
             ".scala",
             ".sc",
             ".rs",
+            ".dart",
         ]
         for ext in extensions:
             if path.endswith(ext):

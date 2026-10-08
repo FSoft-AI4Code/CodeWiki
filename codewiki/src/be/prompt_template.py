@@ -315,6 +315,20 @@ ARTIFACT_USAGE_NOTE = (
     "listed above) and cite the file path in the documentation."
 )
 
+# Appended to the user prompt when the module contains Dart sources. Kept
+# out of USER_PROMPT for the same reason as ARTIFACT_USAGE_NOTE.
+DART_FLUTTER_NOTE = (
+    "* NOTE (Dart/Flutter): when these components are Flutter code, also cover, "
+    "where they apply: (1) the widget tree — which widgets each widget builds "
+    "and where it is used, and Stateless vs Stateful/Consumer widgets; (2) state "
+    "management — where state lives (State classes, Riverpod providers and "
+    "notifiers, Bloc/Cubit, ChangeNotifier), which providers each widget "
+    "watches or reads, and how updates flow to the UI; (3) navigation — routes, "
+    "paths and screens (GoRouter, Navigator pushes) and how parameters are "
+    "passed; (4) lifecycle and async behaviour (initState/dispose, Futures, "
+    "Streams). Leave out any of these that do not apply."
+)
+
 REPO_OVERVIEW_ARTIFACT_ADDENDUM = """
 The repository also contains the following build, CI, container, packaging, manifest and configuration artifacts:
 {artifact_index}
@@ -371,6 +385,7 @@ EXTENSION_TO_LANGUAGE = {
     ".scala": "scala",
     ".sc": "scala",
     ".rs": "rust",
+    ".dart": "dart",
     ".php": "php",
     ".phtml": "php",
     ".inc": "php",
@@ -569,6 +584,12 @@ def format_user_prompt(
 
     artifact_index = render_artifact_index(components)
     artifact_section = f"\n\n{artifact_index}\n{ARTIFACT_USAGE_NOTE}" if artifact_index else ""
+    has_dart = any(
+        components[cid].relative_path.endswith(".dart")
+        for cid in core_component_ids
+        if cid in components
+    )
+    dart_section = f"\n\n{DART_FLUTTER_NOTE}" if has_dart else ""
 
     def _assemble(codes: str, tree: str) -> str:
         return (
@@ -579,6 +600,7 @@ def format_user_prompt(
             )
             + f"\n\n{links_note}"
             + artifact_section
+            + dart_section
         )
 
     prompt = _assemble(core_component_codes, formatted_module_tree)

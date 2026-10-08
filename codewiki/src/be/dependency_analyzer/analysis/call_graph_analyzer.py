@@ -62,6 +62,9 @@ class CallGraphAnalyzer:
     def __init__(self):
         """Initialize the call graph analyzer."""
         self.functions: dict[str, Node] = {}
+        self._dart_directives: dict[str, list] = {}
+        self._dart_visible: dict[str, set[str]] = {}
+        self._dart_library_members: dict[str, set[str]] = {}
         self.call_relationships: list[CallRelationship] = []
         self._python_project_modules: set = set()
         self._python_external_import_roots: set = set()
@@ -85,6 +88,9 @@ class CallGraphAnalyzer:
         code_files = self._route_contextual_headers(code_files, base_dir)
         self._python_project_modules = self._collect_python_modules(code_files)
         self._python_external_import_roots = set()
+        self._dart_directives = {}
+        self._dart_visible = {}
+        self._dart_library_members = {}
 
         files_analyzed = 0
         files_failed = 0
@@ -115,6 +121,9 @@ class CallGraphAnalyzer:
             f"✓ Analysis complete: {files_analyzed}/{len(code_files)} files analyzed, "
             f"{files_failed} failed, {len(self.functions)} functions, {len(self.call_relationships)} relationships ({elapsed_time:.1f}s)"
         )
+
+        if self._dart_directives:
+            self._build_dart_scopes(base_dir)
 
         logger.debug("Resolving call relationships")
         self._resolve_call_relationships()
@@ -261,6 +270,8 @@ class CallGraphAnalyzer:
                     self._analyze_scala_file(file_path, content, repo_dir)
                 elif language == "rust":
                     self._analyze_rust_file(file_path, content, repo_dir)
+                elif language == "dart":
+                    self._analyze_dart_file(file_path, content, repo_dir)
                 # else:
                 #     logger.warning(
                 #         f"Unsupported language for call graph analysis: {language} for file {file_path}"
@@ -560,6 +571,117 @@ class CallGraphAnalyzer:
         except Exception:
             logger.exception(f"Failed to analyze Rust file {file_path}")
 
+    def _analyze_dart_file(self, file_path: str, content: str, repo_dir: str):
+        """
+        Analyze Dart file using tree-sitter based analyzer.
+
+        Besides components and relationships, records the file's
+        import/export/part directives for Dart scope-aware resolution.
+
+        Args:
+            file_path: Path to the Dart file
+            content: File content string
+            repo_dir: Repository base directory
+        """
+        from codewiki.src.be.dependency_analyzer.analyzers.dart import TreeSitterDartAnalyzer
+
+        try:
+            analyzer = TreeSitterDartAnalyzer(str(file_path), content, repo_path=repo_dir)
+
+            for func in analyzer.nodes:
+                func_id = func.id if func.id else f"{file_path}:{func.name}"
+                self.functions[func_id] = func
+
+            self.call_relationships.extend(analyzer.call_relationships)
+            self._dart_directives[analyzer.relative_path] = analyzer.directives
+        except Exception:
+            logger.exception(f"Failed to analyze Dart file {file_path}")
+
+    def _build_dart_scopes(self, base_dir: str) -> None:
+        """Resolve recorded Dart directives into per-file visibility scopes."""
+        from codewiki.src.be.dependency_analyzer.analyzers.dart_imports import (
+            DartPackageResolver,
+            build_scopes,
+        )
+
+        files = set(self._dart_directives)
+        resolver = DartPackageResolver.from_files(base_dir, files)
+        scopes = build_scopes(self._dart_directives, resolver, files)
+        self._dart_visible = scopes.visible
+        self._dart_library_members = scopes.library_members
+
+    def _has_dart_scope(self, caller: Node) -> bool:
+        return Path(caller.relative_path).as_posix() in self._dart_visible
+
+    def _dart_scope_candidates(
+        self, key: str, lang_indexes: dict, scope: set[str], caller_file: str | None = None
+    ) -> list[str]:
+        from codewiki.src.be.dependency_analyzer.analyzers.dart_imports import (
+            is_private_dart_name,
+        )
+
+        own_library = self._dart_library_members.get(caller_file, set()) if caller_file else set()
+        candidates: list[str] = []
+        for func_id in [*lang_indexes["exact"].get(key, []), *lang_indexes["simple"].get(key, [])]:
+            func = self.functions.get(func_id)
+            if func_id in candidates or func is None:
+                continue
+            func_file = Path(func.relative_path).as_posix()
+            if func_file not in scope:
+                continue
+            # A `_`-prefixed segment in the target (`_Ticker.tick`) is private
+            # to its library, whatever the callee's own spelling.
+            if is_private_dart_name(func.name) and func_file not in own_library:
+                continue
+            candidates.append(func_id)
+        return candidates
+
+    def _resolve_dart_callee(
+        self, callee: str, caller: Node, lang_indexes: dict | None
+    ) -> str | None:
+        """Prefer definitions the caller's library can see (imports, parts,
+        re-exports); library-private names only resolve inside the library."""
+        from codewiki.src.be.dependency_analyzer.analyzers.dart_imports import (
+            is_private_dart_name,
+        )
+
+        if not lang_indexes or "::" in callee:
+            return None
+        caller_file = Path(caller.relative_path).as_posix()
+        if is_private_dart_name(callee):
+            scope = self._dart_library_members.get(caller_file, {caller_file})
+        else:
+            scope = self._dart_visible.get(caller_file)
+        if not scope:
+            return None
+        keys = [callee]
+        if "." in callee:
+            keys.append(callee.split(".")[0])
+        for key in keys:
+            candidates = self._dart_scope_candidates(key, lang_indexes, scope, caller_file)
+            if len(candidates) == 1:
+                return candidates[0]
+
+        from codewiki.src.be.dependency_analyzer.analyzers.dart_flutter import (
+            RIVERPOD_NOTIFIER_TYPE,
+            RIVERPOD_PROVIDER_TYPE,
+            provider_alias_candidates,
+        )
+
+        # riverpod_generator providers live in ignored *.g.dart files: map
+        # `fooProvider` to the @riverpod declaration it was generated from.
+        for alias in provider_alias_candidates(callee):
+            candidates = [
+                func_id
+                for func_id in self._dart_scope_candidates(alias, lang_indexes, scope, caller_file)
+                if self.functions[func_id].node_type
+                in (RIVERPOD_PROVIDER_TYPE, RIVERPOD_NOTIFIER_TYPE)
+                and self.functions[func_id].name == alias
+            ]
+            if len(candidates) == 1:
+                return candidates[0]
+        return None
+
     def _resolve_call_relationships(self):
         """
         Resolve function call relationships across all languages.
@@ -590,12 +712,20 @@ class CallGraphAnalyzer:
             relationship
             for relationship in self.call_relationships
             if relationship.is_resolved
-            or not self._is_external_callee(
+            or not self._is_unresolvable_dart(relationship)
+            and not self._is_external_callee(
                 self._caller_language(relationship.caller),
                 relationship.callee,
                 dotted_packages,
             )
         ]
+
+    def _is_unresolvable_dart(self, relationship: CallRelationship) -> bool:
+        """A scoped Dart caller's callee that import-aware resolution rejected
+        is external or invisible; drop it so ast_parser's name-only fallback
+        cannot bind it to an unrelated component."""
+        caller = self.functions.get(relationship.caller)
+        return caller is not None and caller.language == "dart" and self._has_dart_scope(caller)
 
     def _dotted_project_packages(self) -> dict[str, set]:
         """Project packages/namespaces, partitioned by language. Java and C#
@@ -637,6 +767,16 @@ class CallGraphAnalyzer:
                 return True
         if language == "python" and "." in callee:
             return self._is_external_python_callee(callee)
+        if language == "dart":
+            from codewiki.src.be.dependency_analyzer.analyzers.dart_imports import (
+                is_private_dart_name,
+            )
+
+            # A library-private name that did not resolve inside its library
+            # can never be a component elsewhere; dropping it keeps the
+            # name-based fallback from binding another library's `_Body`.
+            if is_private_dart_name(callee):
+                return True
         return False
 
     def _is_external_python_callee(self, callee: str) -> bool:
@@ -721,6 +861,18 @@ class CallGraphAnalyzer:
         caller_language = caller.language if caller else None
 
         lang_indexes = indexes["by_lang"].get(caller_language) if caller_language else None
+        if caller_language == "dart" and caller is not None:
+            from codewiki.src.be.dependency_analyzer.analyzers.dart_imports import (
+                is_private_dart_name,
+            )
+
+            match = self._resolve_dart_callee(relationship.callee, caller, lang_indexes)
+            if match:
+                return match
+            # Dart resolution is import-driven: a caller with a scope never
+            # falls back to name guessing in other languages or libraries.
+            if is_private_dart_name(relationship.callee) or self._has_dart_scope(caller):
+                return None
         if lang_indexes:
             match = self._resolve_callee_in(
                 relationship, lang_indexes["exact"], lang_indexes["simple"]
@@ -860,6 +1012,8 @@ class CallGraphAnalyzer:
                 node_classes.append("lang-scala")
             elif file_ext == ".rs":
                 node_classes.append("lang-rust")
+            elif file_ext == ".dart":
+                node_classes.append("lang-dart")
 
             cytoscape_elements.append(
                 {

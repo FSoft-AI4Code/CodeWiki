@@ -12,6 +12,17 @@ uses [Semantic Versioning](https://semver.org/).
   impl/trait methods become components, with trait-impl, field-type,
   struct-literal, and call edges. `#[cfg(test)]` modules are skipped, and
   `build.rs` is classified as a build artifact.
+- **Dart / Flutter analyzer.** Classes, mixins, extensions, enums, top-level
+  functions and getters, and methods become components, with inheritance,
+  field-type, instantiation and call edges. `package:`/relative imports,
+  exports and `part` files decide which definition a name resolves to, and
+  library-private names never resolve outside their library; names not
+  visible through imports are dropped rather than guessed. Flutter-aware:
+  widgets and State classes are typed, instantiations in `build()` become
+  widget-to-widget edges, `ref.watch`/`ref.read` link widgets to Riverpod
+  providers (including `@riverpod` codegen), and GoRouter routes link to their
+  screens. Generated `*.g.dart`/`*.freezed.dart` files and `.dart_tool/` are
+  ignored, and Dart modules get Flutter-specific documentation guidance.
 
 ### Changed
 

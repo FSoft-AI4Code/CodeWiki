@@ -340,7 +340,7 @@ class AnalysisService:
         Filter code files to only include supported languages.
 
         Supports Python, JavaScript, TypeScript, Java, C#, C, C++, PHP, Ruby, Kotlin,
-        Scala, and Rust.
+        Scala, Rust, and Dart.
         """
         supported_languages = {
             "python",
@@ -356,6 +356,7 @@ class AnalysisService:
             "rust",
             "kotlin",
             "scala",
+            "dart",
         }
 
         return [
@@ -379,6 +380,7 @@ class AnalysisService:
             "kotlin",
             "scala",
             "rust",
+            "dart",
         ]
 
     def _cleanup_repository(self, temp_dir: str):
