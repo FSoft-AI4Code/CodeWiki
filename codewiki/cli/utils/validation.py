@@ -201,7 +201,8 @@ def detect_supported_languages(directory: Path) -> list[tuple[str, int]]:
 
     def should_exclude_file(file_path: Path) -> bool:
         """Check if file is in an excluded directory."""
-        parts = file_path.parts
+        # Only look inside the repo: the repo itself may live under e.g. ".../target" or ".../env".
+        parts = file_path.relative_to(directory).parts
         return any(excluded_dir in parts for excluded_dir in excluded_dirs)
 
     language_counts = {}
