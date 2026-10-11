@@ -56,7 +56,11 @@ if os.environ.get("CODEWIKI_CYTHONIZE") == "1":
     setup(
         ext_modules=cythonize(
             py_sources("codewiki"),
-            compiler_directives={"language_level": "3"},
+            # annotation_typing=False: by default Cython turns annotations
+            # like `x: dict = ...` into exact-type checks, so subclasses
+            # (defaultdict, OrderedDict, Counter) raise "Expected dict, got
+            # collections.defaultdict" in the compiled wheel only.
+            compiler_directives={"language_level": "3", "annotation_typing": False},
             build_dir="build_cython",
         ),
     )

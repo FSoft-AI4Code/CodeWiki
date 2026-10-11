@@ -209,7 +209,9 @@ class RepoAnalyzer:
     def _build_file_tree(self, repo_dir: str) -> dict:
         def build_tree(path: Path, base_path: Path) -> dict | None:
             relative_path = path.relative_to(base_path)
-            relative_path_str = str(relative_path)
+            # POSIX on every OS: patterns, gitignore rules and component ids all
+            # use "/", and str() would give ".github\\workflows\\ci.yml" on Windows.
+            relative_path_str = relative_path.as_posix()
 
             # 🚫 Reject symlinks
             if path.is_symlink():

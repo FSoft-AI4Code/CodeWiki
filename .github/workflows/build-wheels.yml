@@ -61,6 +61,7 @@ jobs:
           "$RUNNER_TEMP/smoke/Scripts/python" -m pip install dist/*.whl
           cd "$RUNNER_TEMP"
           "$RUNNER_TEMP/smoke/Scripts/python" -m codewiki --help
+          bash "$GITHUB_WORKSPACE/packaging/build/test_wheel.sh" "$RUNNER_TEMP/smoke/Scripts/python" "$GITHUB_WORKSPACE"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -100,6 +101,7 @@ jobs:
             "python$v" -m venv "$venv"
             "$venv/bin/python" -m pip install dist-linux/*-cp${v/./}-*.whl
             (cd "$RUNNER_TEMP" && "$venv/bin/python" -m codewiki --help)
+            bash packaging/build/test_wheel.sh "$venv/bin/python" "$GITHUB_WORKSPACE"
             echo "::endgroup::"
           done
 
@@ -163,6 +165,7 @@ jobs:
           "$RUNNER_TEMP/smoke/bin/python" -m pip install wheelhouse/*.whl
           cd "$RUNNER_TEMP"
           "$RUNNER_TEMP/smoke/bin/python" -m codewiki --help
+          bash "$GITHUB_WORKSPACE/packaging/build/test_wheel.sh" "$RUNNER_TEMP/smoke/bin/python" "$GITHUB_WORKSPACE"
 
       - uses: actions/upload-artifact@v4
         with:

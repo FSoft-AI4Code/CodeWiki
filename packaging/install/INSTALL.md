@@ -62,7 +62,7 @@ release or taken from a CI run), use the file that matches your system. The
 filename says which one:
 
 ```
-nc_codewiki-2.0.1-cp313-cp313-win_amd64.whl
+nc_codewiki-2.0.2-cp313-cp313-win_amd64.whl
                   ^^^^^        ^^^^^^^^^
                   Python 3.13  Windows x86_64
 ```
@@ -75,7 +75,7 @@ nc_codewiki-2.0.1-cp313-cp313-win_amd64.whl
 | macOS (Apple Silicon or Intel) | `macosx_..._universal2` |
 
 ```bash
-pip install nc_codewiki-2.0.1-cp313-cp313-win_amd64.whl
+pip install nc_codewiki-2.0.2-cp313-cp313-win_amd64.whl
 ```
 
 Dependencies still come from PyPI, and the prerequisites above still apply.

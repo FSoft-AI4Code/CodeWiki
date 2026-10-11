@@ -6,6 +6,30 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-10-11
+
+### Fixed
+
+- **Compiled wheels crashed in dependency analysis** with `TypeError:
+  Expected dict, got collections.defaultdict`. Cython turned type
+  annotations such as `x: dict = ...` into exact-type checks, which reject
+  subclasses like `defaultdict`; plain Python never checks them. The wheels
+  are now built with `annotation_typing=False`.
+- **Linux and macOS wheels failed PyPI's RECORD check.** RECORD listed the
+  directory entries that auditwheel and delocate add (`codewiki/`, ...), so
+  it did not match the wheel's files. `strip_wheel.py` now drops directory
+  entries and fails the build if RECORD and the wheel contents differ.
+- **Windows path handling.** The repository scan built paths with backslashes, so
+  default ignore rules written with `/` (e.g. `.github` issue templates)
+  stopped matching and analyzed file paths differed from Linux/macOS. Paths
+  are now POSIX on every OS, and `find_doc` returns normalized paths.
+
+### Changed
+
+- The wheel build now runs the test suite against each installed wheel on
+  every platform and Python version (`packaging/build/test_wheel.sh`), not
+  just `codewiki --help`, so compiled-only failures block publishing.
+
 ## [2.0.1] - 2026-10-10
 
 First release published to PyPI, as **`nc-codewiki`**
@@ -150,5 +174,6 @@ listed here.
   JavaScript, TypeScript, C, C++, C#), web application, Docker image,
   CodeWikiBench.
 
+[2.0.2]: https://github.com/dandydarshan/CodeWiki/releases/tag/v2.0.2
 [2.0.1]: https://github.com/dandydarshan/CodeWiki/releases/tag/v2.0.1
 [2.0.0]: https://github.com/FSoft-AI4Code/CodeWiki/releases/tag/v2.0.0

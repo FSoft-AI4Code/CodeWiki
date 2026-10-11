@@ -8,10 +8,11 @@ For each module compiled by Cython (foo.cpython-312-*.so or foo.cp312-*.pyd)
 the matching foo.py is dropped. __init__.py / __main__.py always stay, as do
 modules setup.py excludes from compilation. The wheel's RECORD is rewritten
 so it lists exactly the files left, with fresh hashes, as the wheel spec
-requires. Standard library only, so it runs in any build environment.
+requires (and PyPI checks); directory entries are dropped. Standard library only, so it runs in any build environment.
 """
 
 import base64
+import csv
 import glob
 import hashlib
 import os
@@ -33,6 +34,24 @@ def _module_key(name: str) -> str:
 def _record_line(name: str, data: bytes) -> str:
     digest = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b"=").decode()
     return f"{name},sha256={digest},{len(data)}"
+
+
+def _check_record(path: str, record_name: str) -> None:
+    """Fail unless RECORD lists exactly the wheel's files, as PyPI checks
+    (warehouse/utils/wheel.py: directories and RECORD signatures exempt)."""
+    with zipfile.ZipFile(path) as z:
+        rows = list(csv.reader(z.read(record_name).decode().splitlines()))
+        record = {row[0] for row in rows if row}
+        files = {
+            n
+            for n in z.namelist()
+            if not n.endswith("/") and n not in (record_name + ".jws", record_name + ".p7s")
+        }
+    if record != files:
+        sys.exit(
+            f"{path}: RECORD does not match the wheel contents: "
+            f"not in RECORD {sorted(files - record)[:5]}, not in wheel {sorted(record - files)[:5]}"
+        )
 
 
 def strip_wheel(path: str) -> None:
@@ -63,7 +82,12 @@ def strip_wheel(path: str) -> None:
         sys.exit(f"{path}: expected one .dist-info/RECORD, found {len(records)}")
     record_name = records[0]
 
-    kept = [(info, data) for info, data in entries if info.filename not in removed]
+    # Directory entries are dropped too: they are optional in a wheel, and
+    # auditwheel/delocate add them, so RECORD would list "codewiki/" etc.,
+    # which PyPI's RECORD check reports as files missing from the wheel.
+    kept = [
+        (info, data) for info, data in entries if info.filename not in removed and not info.is_dir()
+    ]
     record = [
         _record_line(info.filename, data) for info, data in kept if info.filename != record_name
     ]
@@ -78,6 +102,7 @@ def strip_wheel(path: str) -> None:
             info.compress_type = zipfile.ZIP_DEFLATED
             zout.writestr(info, data)
     os.replace(tmp, path)
+    _check_record(path, record_name)
 
     left = [info.filename for info, _ in kept]
     readable = [

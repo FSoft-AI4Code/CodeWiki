@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://python.org/"><img alt="Python version" src="https://img.shields.io/badge/python-3.12+-blue?style=flat-square" /></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-2.0.1-blue?style=flat-square" />
+  <img alt="Version" src="https://img.shields.io/badge/version-2.0.2-blue?style=flat-square" />
   <a href="./LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-green.svg?style=flat-square" /></a>
   <a href="https://github.com/FSoft-AI4Code/CodeWiki/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/FSoft-AI4Code/CodeWiki/ci.yml?branch=main&style=flat-square&label=CI" /></a>
   <a href="https://aclanthology.org/2026.findings-acl.288/"><img alt="Paper: Findings of ACL 2026" src="https://img.shields.io/badge/paper-Findings%20of%20ACL%202026-b31b1b?style=flat-square" /></a>

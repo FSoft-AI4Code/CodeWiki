@@ -168,7 +168,8 @@ def find_doc(
     if module_tree is None:
         module_tree = load_module_tree(docs_dir)
     for rel in _candidate_relpaths(name, module_tree):
-        path = os.path.join(docs_dir, rel)
+        # rel is POSIX; normpath gives native separators (not "docs\\a/b.md" on Windows).
+        path = os.path.normpath(os.path.join(docs_dir, rel))
         if os.path.isfile(path):
             return path
     if search and name != OVERVIEW_STEM:

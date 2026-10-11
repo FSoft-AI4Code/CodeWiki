@@ -10,7 +10,7 @@ cd CodeWiki
 python3.12 -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
-codewiki --version               # 2.0.1
+codewiki --version               # 2.0.2
 ```
 
 Requirements: Python 3.12+, Git, and Node.js with npm at install time.

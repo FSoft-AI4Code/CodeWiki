@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nc-codewiki"
-version = "2.0.1"
+version = "2.0.2"
 description = "Transform codebases into comprehensive documentation using AI-powered analysis"
 readme = "README.md"
 requires-python = ">=3.12"
