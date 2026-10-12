@@ -614,7 +614,7 @@ class CallGraphAnalyzer:
         return Path(caller.relative_path).as_posix() in self._dart_visible
 
     def _dart_scope_candidates(
-        self, key: str, lang_indexes: dict, scope: set[str], caller_file: str | None = None
+        self, func_ids: list[str], scope: set[str], caller_file: str | None = None
     ) -> list[str]:
         from codewiki.src.be.dependency_analyzer.analyzers.dart_imports import (
             is_private_dart_name,
@@ -622,7 +622,7 @@ class CallGraphAnalyzer:
 
         own_library = self._dart_library_members.get(caller_file, set()) if caller_file else set()
         candidates: list[str] = []
-        for func_id in [*lang_indexes["exact"].get(key, []), *lang_indexes["simple"].get(key, [])]:
+        for func_id in func_ids:
             func = self.functions.get(func_id)
             if func_id in candidates or func is None:
                 continue
@@ -658,9 +658,16 @@ class CallGraphAnalyzer:
         if "." in callee:
             keys.append(callee.split(".")[0])
         for key in keys:
-            candidates = self._dart_scope_candidates(key, lang_indexes, scope, caller_file)
-            if len(candidates) == 1:
-                return candidates[0]
+            # Exact names first: an imported `helper()` must not turn ambiguous
+            # because some visible class also has a `helper` method.
+            for index in ("exact", "simple"):
+                candidates = self._dart_scope_candidates(
+                    lang_indexes[index].get(key, []), scope, caller_file
+                )
+                if len(candidates) == 1:
+                    return candidates[0]
+                if candidates:
+                    break
 
         from codewiki.src.be.dependency_analyzer.analyzers.dart_flutter import (
             RIVERPOD_NOTIFIER_TYPE,
@@ -673,7 +680,9 @@ class CallGraphAnalyzer:
         for alias in provider_alias_candidates(callee):
             candidates = [
                 func_id
-                for func_id in self._dart_scope_candidates(alias, lang_indexes, scope, caller_file)
+                for func_id in self._dart_scope_candidates(
+                    lang_indexes["exact"].get(alias, []), scope, caller_file
+                )
                 if self.functions[func_id].node_type
                 in (RIVERPOD_PROVIDER_TYPE, RIVERPOD_NOTIFIER_TYPE)
                 and self.functions[func_id].name == alias

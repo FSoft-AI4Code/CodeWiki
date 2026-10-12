@@ -493,6 +493,18 @@ def test_private_target_in_other_library_is_not_bound(tmp_path: Path) -> None:
     assert "lib/a.dart::_Ticker.tick" not in components["lib/b.dart::B.f"].depends_on
 
 
+def test_top_level_function_wins_over_same_named_method(tmp_path: Path) -> None:
+    _write_repo(
+        tmp_path,
+        {
+            "lib/util.dart": "void helper() {}\nclass Tool {\n  void helper() {}\n}\n",
+            "lib/main.dart": "import 'package:demo/util.dart';\nvoid go() { helper(); }\n",
+        },
+    )
+    components = DependencyParser(str(tmp_path)).parse_repository()
+    assert components["lib/main.dart::go"].depends_on == {"lib/util.dart::helper"}
+
+
 def test_barrel_reexport_selects_exported_definition(tmp_path: Path) -> None:
     _write_repo(
         tmp_path,
