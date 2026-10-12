@@ -58,6 +58,7 @@ def config_group():
 @click.option(
     "--agent-retries", type=int, help="Retries for a failing agent tool call (default: 3)"
 )
+@click.option("--concurrency", type=int, help="Module agents to run at the same time (default: 4)")
 @click.option(
     "--max-context-tokens",
     type=int,
@@ -112,6 +113,7 @@ def config_set(
     max_depth: Optional[int],
     request_limit: Optional[int] = None,
     agent_retries: Optional[int] = None,
+    concurrency: Optional[int] = None,
     max_context_tokens: Optional[int] = None,
     provider: Optional[str] = None,
     aws_region: Optional[str] = None,
@@ -184,6 +186,7 @@ def config_set(
                 max_depth,
                 request_limit is not None,
                 agent_retries is not None,
+                concurrency is not None,
                 max_context_tokens is not None,
                 provider,
                 aws_region,
@@ -255,6 +258,11 @@ def config_set(
                 raise ConfigurationError("agent_retries must be zero or a positive integer")
             validated_data["agent_retries"] = agent_retries
 
+        if concurrency is not None:
+            if concurrency < 1:
+                raise ConfigurationError("concurrency must be a positive integer")
+            validated_data["concurrency"] = concurrency
+
         if max_context_tokens is not None:
             if max_context_tokens < 0:
                 raise ConfigurationError("max_context_tokens must be zero or a positive integer")
@@ -294,6 +302,7 @@ def config_set(
             max_depth=validated_data.get("max_depth"),
             request_limit=validated_data.get("request_limit"),
             agent_retries=validated_data.get("agent_retries"),
+            concurrency=validated_data.get("concurrency"),
             max_context_tokens=validated_data.get("max_context_tokens"),
             provider=validated_data.get("provider"),
             aws_region=validated_data.get("aws_region"),
@@ -353,6 +362,9 @@ def config_set(
 
         if agent_retries is not None:
             click.secho(f"✓ Agent retries: {agent_retries}", fg="green")
+
+        if concurrency is not None:
+            click.secho(f"✓ Concurrency: {concurrency}", fg="green")
 
         if max_context_tokens is not None:
             click.secho(f"✓ Max context tokens: {max_context_tokens}", fg="green")
@@ -432,6 +444,7 @@ def config_show(output_json: bool):
                 "max_depth": config.max_depth if config else 2,
                 "request_limit": config.request_limit if config else 100,
                 "agent_retries": config.agent_retries if config else 3,
+                "concurrency": config.concurrency if config else 4,
                 "max_context_tokens": config.max_context_tokens if config else 0,
                 "use_gitignore": config.use_gitignore if config else True,
                 "prompt_caching": config.prompt_caching if config else True,
@@ -501,6 +514,7 @@ def config_show(output_json: bool):
                 click.echo(f"  Max Depth:               {config.max_depth}")
                 click.echo(f"  Request Limit:           {config.request_limit}")
                 click.echo(f"  Agent Retries:           {config.agent_retries}")
+                click.echo(f"  Concurrency:             {config.concurrency}")
                 click.echo(f"  Max Context Tokens:      {config.max_context_tokens or 'auto'}")
                 click.echo(f"  Use Gitignore:           {config.use_gitignore}")
 

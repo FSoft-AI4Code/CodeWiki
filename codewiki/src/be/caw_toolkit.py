@@ -21,6 +21,7 @@ import contextlib
 import json
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -291,79 +292,93 @@ class CawToolKit(
 
     def _run_sub_modules(self, sub_module_specs: dict[str, list[str]]) -> str:
         deps = self._deps
-        previous_module_name = deps.current_module_name
+        backend = self._backend
+        tree_lock = backend.module_tree.lock
+        parent_name = deps.current_module_name
         sub_module_specs = {
             name: normalize_component_ids(ids) for name, ids in sub_module_specs.items()
         }
-
-        # Resolve name collisions against the module tree and files already on
-        # disk before touching the tree (issue #76): names are unique across the wiki.
-        # A request that is already documented (plain or parent-prefixed name) is
-        # skipped rather than renamed x_2, x_3, ... (issue #113).
-        plan = plan_sub_module_specs(
-            sub_module_specs,
-            previous_module_name,
-            deps.module_tree,
-            deps.absolute_docs_path,
-        )
-        name_map = plan.name_map
         layout = config_layout(deps.config)
         parent_path = list(deps.path_to_current_module)
-        if not name_map:
-            return skipped_report(
-                plan.skipped, module_doc_file(previous_module_name, parent_path, layout)
+
+        with tree_lock:
+            # Resolve name collisions against the module tree and files already
+            # on disk before touching the tree (issue #76): names are unique
+            # across the wiki. A request that is already documented (plain or
+            # parent-prefixed name) is skipped rather than renamed x_2, x_3,
+            # ... (issue #113). Planning and inserting under one lock keeps two
+            # concurrent parents from claiming the same name.
+            plan = plan_sub_module_specs(
+                sub_module_specs,
+                parent_name,
+                deps.module_tree,
+                deps.absolute_docs_path,
             )
-        final_specs = {
-            name_map[requested_name]: core_ids
-            for requested_name, core_ids in sub_module_specs.items()
-            if requested_name in name_map
-        }
-
-        # Add sub-modules to the in-memory module tree.
-        value = deps.module_tree
-        for key in deps.path_to_current_module:
-            value = value[key]["children"]
-        for sub_name, core_ids in final_specs.items():
-            value[sub_name] = {"components": core_ids, "children": {}}
-
-        try:
-            for sub_name, core_ids in final_specs.items():
-                indent = "  " * deps.current_depth
-                arrow = "└─" if deps.current_depth > 0 else "→"
-                logger.info(
-                    "%s%s Generating documentation for sub-module: %s", indent, arrow, sub_name
+            name_map = plan.name_map
+            if not name_map:
+                return skipped_report(
+                    plan.skipped, module_doc_file(parent_name, parent_path, layout)
                 )
+            final_specs = {
+                name_map[requested_name]: core_ids
+                for requested_name, core_ids in sub_module_specs.items()
+                if requested_name in name_map
+            }
 
-                deps.current_module_name = sub_name
-                deps.path_to_current_module.append(sub_name)
-                deps.current_depth += 1
-                try:
-                    # Spawn a fresh caw session for the sub-module.  We already
-                    # run inside a worker thread (started by the parent tool
-                    # call), so call the sync entry point directly to avoid
-                    # double-wrapping.  ``start_depth`` carries the parent's
-                    # depth so the sub-agent's max_depth guard stays accurate.
-                    self._backend._run_module_agent_sync(
-                        module_name=sub_name,
-                        components=deps.components,
-                        core_component_ids=core_ids,
-                        module_path=list(deps.path_to_current_module),
-                        working_dir=deps.absolute_docs_path,
-                        start_depth=deps.current_depth,
-                        module_tree=deps.module_tree,
-                    )
-                finally:
-                    deps.path_to_current_module.pop()
-                    deps.current_depth -= 1
-        finally:
-            deps.current_module_name = previous_module_name
+            # Add sub-modules to the in-memory module tree.
+            value = deps.module_tree
+            for key in parent_path:
+                value = value[key]["children"]
+            for sub_name, core_ids in final_specs.items():
+                value[sub_name] = {"components": core_ids, "children": {}}
 
-        return sub_module_report(
-            name_map,
-            plan.skipped,
-            deps.absolute_docs_path,
-            deps.module_tree,
-            previous_module_name,
-            parent_path,
-            layout,
-        )
+        depth = deps.current_depth + 1
+        indent = "  " * deps.current_depth
+        arrow = "└─" if deps.current_depth > 0 else "→"
+
+        def run_one(sub_name: str, core_ids: list[str]) -> None:
+            logger.info("%s%s Generating documentation for sub-module: %s", indent, arrow, sub_name)
+            # Spawn a fresh caw session for the sub-module.  We already run
+            # inside a worker thread (started by the parent tool call), so call
+            # the sync entry point directly.  ``start_depth`` carries the
+            # parent's depth so the sub-agent's max_depth guard stays accurate.
+            backend._run_module_agent_sync(
+                module_name=sub_name,
+                components=deps.components,
+                core_component_ids=core_ids,
+                module_path=parent_path + [sub_name],
+                working_dir=deps.absolute_docs_path,
+                start_depth=depth,
+                module_tree=deps.module_tree,
+            )
+
+        # The parent session is idle until its sub-agents finish, so it lends
+        # its concurrency slot to them; siblings then run side by side, as many
+        # at once as there are free slots.
+        with backend.slots.lend():
+            workers = min(len(final_specs), backend.slots.size)
+            if workers <= 1:
+                for sub_name, core_ids in final_specs.items():
+                    run_one(sub_name, core_ids)
+            else:
+                with ThreadPoolExecutor(
+                    max_workers=workers, thread_name_prefix="codewiki-sub"
+                ) as pool:
+                    futures = [
+                        pool.submit(run_one, sub_name, core_ids)
+                        for sub_name, core_ids in final_specs.items()
+                    ]
+                    errors = [f.exception() for f in futures if f.exception() is not None]
+                if errors:
+                    raise errors[0]
+
+        with tree_lock:
+            return sub_module_report(
+                name_map,
+                plan.skipped,
+                deps.absolute_docs_path,
+                deps.module_tree,
+                parent_name,
+                parent_path,
+                layout,
+            )

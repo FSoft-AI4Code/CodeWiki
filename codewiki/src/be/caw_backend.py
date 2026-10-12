@@ -20,6 +20,7 @@ ignored (caw has no built-in fallback chain).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 import time
@@ -246,9 +247,7 @@ class CawBackend(LLMBackend):
         self._caw_provider = _resolve_caw_provider(config.provider)
         # main_model is passed straight through; empty string → caw default.
         self._model: str | None = config.main_model or None
-        # Resolve once, before any agent-run chdir can move the cwd —
-        # os.path.abspath is cwd-relative and _run_module_agent_sync recurses
-        # (via generate_sub_module_documentation) while the cwd is pinned.
+        # Resolve once: os.path.abspath is cwd-relative.
         self._repo_root = str(os.path.abspath(config.repo_path))
 
         # Fail loudly here rather than producing a confusing caw error mid-run.
@@ -325,15 +324,10 @@ class CawBackend(LLMBackend):
             tools=_agent_tool_group_for_provider(self._caw_provider),
             tool_servers=[toolkit],
         )
-        original_cwd = os.getcwd()
         run_cwd = deps.absolute_docs_path if self._caw_provider == "codex" else self._repo_root
         started = time.time()
         try:
-            os.chdir(run_cwd)
-            try:
-                traj = agent.completion(user_prompt)
-            finally:
-                os.chdir(original_cwd)
+            traj = agent.completion(user_prompt, cwd=run_cwd)
         except Exception as e:
             logger.error("Update agent for %s failed via caw: %s", deps.current_module_name, e)
             raise
@@ -368,14 +362,16 @@ class CawBackend(LLMBackend):
         # Hand the main loop to utils so the worker-thread tool calls can
         # marshal parse_mermaid_py back here.
         set_main_loop(asyncio.get_running_loop())
-        return await asyncio.to_thread(
-            self._run_module_agent_sync,
-            module_name,
-            components,
-            core_component_ids,
-            module_path,
-            working_dir,
-        )
+        async with self.slots.hold_async():
+            return await asyncio.to_thread(
+                self._run_module_agent_sync,
+                module_name,
+                components,
+                core_component_ids,
+                module_path,
+                working_dir,
+                hold_slot=False,
+            )
 
     def _run_module_agent_sync(
         self,
@@ -386,6 +382,7 @@ class CawBackend(LLMBackend):
         working_dir: str,
         start_depth: int = 1,
         module_tree: dict[str, Any] | None = None,
+        hold_slot: bool = True,
     ) -> dict[str, Any]:
         # ``start_depth`` lets the recursion preserve max_depth across nested
         # _run_module_agent_sync calls — each fresh deps object would otherwise
@@ -394,12 +391,15 @@ class CawBackend(LLMBackend):
         # recursion.  Reloading from disk only works at the top level — by the
         # time a sub-agent runs, the parent has staged new branches in memory
         # but has not yet saved (save happens after agent.completion returns).
+        # ``hold_slot`` is False when the caller already holds a concurrency
+        # slot for this session (run_module_agent).
         from codewiki.src.be.caw_toolkit import CawToolKit  # local import to avoid cycles
 
         config = self._config
         module_tree_path = os.path.join(working_dir, MODULE_TREE_FILENAME)
+        shared = self.module_tree
         if module_tree is None:
-            module_tree = file_manager.load_json(module_tree_path)
+            module_tree = shared.get(module_tree_path)
 
         # overview.md is the root module's own doc (renamed from
         # {repo_name}.md), so its presence only proves the root is done —
@@ -410,7 +410,8 @@ class CawBackend(LLMBackend):
             if os.path.exists(overview_docs_path):
                 logger.info("✓ Overview docs already exists at %s", overview_docs_path)
                 return module_tree
-        docs_path = find_doc(working_dir, module_name, module_tree) if module_path else None
+        with shared.lock:
+            docs_path = find_doc(working_dir, module_name, module_tree) if module_path else None
         if docs_path is None:
             docs_path = os.path.join(working_dir, f"{module_name}.md")
         if os.path.exists(docs_path):
@@ -471,58 +472,29 @@ class CawBackend(LLMBackend):
             tool_servers=[toolkit],
         )
 
-        user_prompt = format_user_prompt(
-            module_name=module_name,
-            core_component_ids=core_component_ids,
-            components=components,
-            module_tree=deps.module_tree,
-            module_path=list(module_path),
-            layout=config_layout(config),
-        )
+        with shared.lock:
+            user_prompt = format_user_prompt(
+                module_name=module_name,
+                core_component_ids=core_component_ids,
+                components=components,
+                module_tree=deps.module_tree,
+                module_path=list(module_path),
+                layout=config_layout(config),
+            )
 
-        # caw forks claude / codex via subprocess.Popen without a cwd, so the
-        # child CLI inherits Python's cwd — typically the repo root where the
-        # user invoked ``codewiki``.  Codex's native ``file_change`` tool
-        # (always present under the danger-full-access sandbox EXEC requires)
-        # then resolves relative paths against that cwd, dropping the .md at
-        # the repo root.  Pin cwd to the docs output dir for the duration of
-        # the agent run so file_change lands inside ``--output``.  Reads still
-        # go through MCP tools that use absolute paths from ``deps``, so
-        # they're cwd-independent.  Safe to mutate process-wide cwd because
-        # documentation_generator processes modules sequentially and recursive
-        # _run_module_agent_sync calls chdir to the same absolute_docs_path.
-        # caw runs claude with `--dangerously-skip-permissions`, expecting
-        # bypassPermissions ("Everything" runs without asking).  But an org
-        # managed policy can DISABLE bypass mode, in which case the flag is
-        # downgraded to `acceptEdits` — observed here: both
-        # `--dangerously-skip-permissions` and `--permission-mode
-        # bypassPermissions` report permissionMode=acceptEdits.
-        #   permission modes: https://code.claude.com/docs/en/permission-modes
-        #   (see #skip-all-checks-with-bypasspermissions-mode and its
-        #    disableBypassPermissionsMode managed setting).
-        # Under acceptEdits, auto-approval is limited to reads/edits INSIDE the
-        # working directory or additionalDirectories; paths outside that scope
-        # still prompt (== denied in non-interactive `-p`):
-        #   https://code.claude.com/docs/en/permission-modes#auto-approve-file-edits-with-acceptedits-mode
-        # caw chdir's into the output subdir (for codex's native file_change),
-        # so the source tree in the PARENT repo is out-of-scope and every
-        # source Read is denied -> empty docs.  claude writes via CodeWiki's
-        # str_replace_editor (absolute deps path), so it does NOT need cwd
-        # pinned to the output dir.  Pin cwd to the repo root so BOTH the source
-        # tree and the output dir fall inside the workspace (alt: --add-dir,
-        # https://code.claude.com/docs/en/cli-reference).  Codex keeps the
-        # output-dir chdir because its file_change resolves relative paths.
-        original_cwd = os.getcwd()
-        if self._caw_provider == "codex":
-            run_cwd = working_dir
-        else:
-            run_cwd = self._repo_root
+        # Each CLI session gets its own cwd (caw passes it to Popen) instead
+        # of a process-wide os.chdir, which concurrent sessions would race on.
+        # Codex: its native file_change resolves relative paths against cwd,
+        # so it runs in the docs dir to land pages inside ``--output``.
+        # Claude: an org policy can downgrade --dangerously-skip-permissions
+        # to acceptEdits, which only auto-approves reads inside the cwd, so it
+        # runs at the repo root to keep the source tree readable
+        # (https://code.claude.com/docs/en/permission-modes).
+        run_cwd = working_dir if self._caw_provider == "codex" else self._repo_root
+        slot = self.slots.hold() if hold_slot else contextlib.nullcontext()
         try:
-            os.chdir(run_cwd)
-            try:
-                traj = agent.completion(user_prompt)
-            finally:
-                os.chdir(original_cwd)
+            with slot:
+                traj = agent.completion(user_prompt, cwd=run_cwd)
             logger.info(
                 "Module %s completed via caw (turns=%d, tool_calls=%d)",
                 module_name,
@@ -538,7 +510,7 @@ class CawBackend(LLMBackend):
                 getattr(traj, "result", ""),
                 module_name,
             )
-            file_manager.save_json(deps.module_tree, module_tree_path)
+            shared.save(module_tree_path, deps.module_tree)
             return deps.module_tree
         except Exception as e:
             logger.error("Error processing module %s via caw: %s", module_name, e)

@@ -1,3 +1,7 @@
+import asyncio
+import contextlib
+from dataclasses import replace
+
 from pydantic_ai import RunContext, Tool, Agent
 from pydantic_ai.usage import UsageLimits
 
@@ -19,6 +23,14 @@ from codewiki.src.be.dependency_analyzer.utils.paths import normalize_component_
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def slots_hold(slots):
+    return slots.hold_async() if slots is not None else contextlib.nullcontext()
+
+
+def slots_lend(slots):
+    return slots.lend_async() if slots is not None else contextlib.nullcontext()
 
 
 async def generate_sub_module_documentation(
@@ -74,21 +86,20 @@ async def generate_sub_module_documentation(
     for sub_module_name, core_component_ids in final_specs.items():
         value[sub_module_name] = {"components": core_component_ids, "children": {}}
 
-    for sub_module_name, core_component_ids in final_specs.items():
-        # Create visual indentation for nested modules
-        indent = "  " * deps.current_depth
-        arrow = "└─" if deps.current_depth > 0 else "→"
+    indent = "  " * deps.current_depth
+    arrow = "└─" if deps.current_depth > 0 else "→"
 
+    async def run_one(sub_module_name: str, core_component_ids: list[str]) -> None:
         logger.info(f"{indent}{arrow} Generating documentation for sub-module: {sub_module_name}")
 
         num_tokens = count_tokens(
-            format_potential_core_components(core_component_ids, ctx.deps.components)[-1]
+            format_potential_core_components(core_component_ids, deps.components)[-1]
         )
 
         if (
-            is_complex_module(ctx.deps.components, core_component_ids)
-            and ctx.deps.current_depth < ctx.deps.max_depth
-            and num_tokens >= ctx.deps.config.max_token_per_leaf_module * ctx.deps.current_depth
+            is_complex_module(deps.components, core_component_ids)
+            and deps.current_depth < deps.max_depth
+            and num_tokens >= deps.config.max_token_per_leaf_module * deps.current_depth
         ):
             sub_agent = Agent(
                 model=fallback_models,
@@ -96,11 +107,11 @@ async def generate_sub_module_documentation(
                 deps_type=CodeWikiDeps,
                 system_prompt=format_system_prompt(
                     sub_module_name,
-                    ctx.deps.custom_instructions,
+                    deps.custom_instructions,
                     parent_path + [sub_module_name],
                     layout,
                 ),
-                retries=ctx.deps.config.agent_retries,
+                retries=deps.config.agent_retries,
                 tools=[
                     read_code_components_tool,
                     str_replace_editor_tool,
@@ -114,39 +125,46 @@ async def generate_sub_module_documentation(
                 deps_type=CodeWikiDeps,
                 system_prompt=format_leaf_system_prompt(
                     sub_module_name,
-                    ctx.deps.custom_instructions,
+                    deps.custom_instructions,
                     parent_path + [sub_module_name],
                     layout,
                 ),
-                retries=ctx.deps.config.agent_retries,
+                retries=deps.config.agent_retries,
                 tools=[read_code_components_tool, str_replace_editor_tool],
             )
 
-        deps.current_module_name = sub_module_name
-        deps.path_to_current_module.append(sub_module_name)
-        deps.current_depth += 1
-        # log the current module tree
-        # print(f"Current module tree: {json.dumps(deps.module_tree, indent=4)}")
-
-        await sub_agent.run(
-            format_user_prompt(
-                module_name=deps.current_module_name,
-                core_component_ids=core_component_ids,
-                components=ctx.deps.components,
-                module_tree=ctx.deps.module_tree,
-                module_path=list(deps.path_to_current_module),
-                layout=layout,
-            ),
-            deps=ctx.deps,
-            usage_limits=UsageLimits(request_limit=ctx.deps.config.request_limit),
+        # Each sub-agent gets its own deps (siblings run concurrently); the
+        # module tree and components stay shared.
+        sub_deps = replace(
+            deps,
+            registry={},
+            path_to_current_module=parent_path + [sub_module_name],
+            current_module_name=sub_module_name,
+            current_depth=deps.current_depth + 1,
         )
+        async with slots_hold(deps.slots):
+            await sub_agent.run(
+                format_user_prompt(
+                    module_name=sub_module_name,
+                    core_component_ids=core_component_ids,
+                    components=deps.components,
+                    module_tree=deps.module_tree,
+                    module_path=list(sub_deps.path_to_current_module),
+                    layout=layout,
+                ),
+                deps=sub_deps,
+                usage_limits=UsageLimits(request_limit=deps.config.request_limit),
+            )
 
-        # remove the sub-module name from the path to current module and the module tree
-        deps.path_to_current_module.pop()
-        deps.current_depth -= 1
-
-    # restore the previous module name
-    deps.current_module_name = previous_module_name
+    # This agent is idle until its sub-agents finish, so it lends its slot.
+    async with slots_lend(deps.slots):
+        results = await asyncio.gather(
+            *(run_one(name, ids) for name, ids in final_specs.items()),
+            return_exceptions=True,
+        )
+    errors = [r for r in results if isinstance(r, BaseException)]
+    if errors:
+        raise errors[0]
 
     return sub_module_report(
         name_map,

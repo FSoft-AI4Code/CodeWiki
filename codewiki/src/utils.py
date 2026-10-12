@@ -1,5 +1,6 @@
 import os
 import json
+import threading
 from typing import Any, Optional, Dict
 
 
@@ -18,9 +19,11 @@ class FileManager:
 
     @staticmethod
     def save_json(data: Any, filepath: str) -> None:
-        """Save data as JSON to file."""
-        with open(filepath, "w", encoding="utf-8") as f:
+        """Save data as JSON to file (atomically, so readers never see half a file)."""
+        tmp_path = f"{filepath}.{os.getpid()}.{threading.get_ident()}.tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4, ensure_ascii=False)
+        os.replace(tmp_path, filepath)
 
     @staticmethod
     def load_json(filepath: str) -> Optional[Dict[str, Any]]:

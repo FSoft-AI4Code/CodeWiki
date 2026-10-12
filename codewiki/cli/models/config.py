@@ -157,6 +157,7 @@ class Configuration:
         max_depth: Maximum depth for hierarchical decomposition (default: 2)
         request_limit: Maximum model requests per agent run (default: 100)
         agent_retries: Retries for a failing tool call (default: 3)
+        concurrency: Module agents to run at the same time (default: 4)
         max_context_tokens: Model context window in tokens (default: 0 = learn from provider errors)
         use_gitignore: Apply Git ignore rules during repository analysis
         prompt_caching: Add prompt-cache breakpoints to agentic LLM calls (default: True)
@@ -178,6 +179,7 @@ class Configuration:
     max_depth: int = 2
     request_limit: int = 100
     agent_retries: int = 3
+    concurrency: int = 4
     max_context_tokens: int = 0
     use_gitignore: bool = True
     prompt_caching: bool = True
@@ -220,6 +222,7 @@ class Configuration:
             "max_depth": self.max_depth,
             "request_limit": self.request_limit,
             "agent_retries": self.agent_retries,
+            "concurrency": self.concurrency,
             "max_context_tokens": self.max_context_tokens,
             "use_gitignore": self.use_gitignore,
             "prompt_caching": self.prompt_caching,
@@ -260,6 +263,7 @@ class Configuration:
             max_depth=data.get("max_depth", 2),
             request_limit=data.get("request_limit", 100),
             agent_retries=data.get("agent_retries", 3),
+            concurrency=data.get("concurrency", 4),
             max_context_tokens=data.get("max_context_tokens", 0),
             use_gitignore=data.get("use_gitignore", True),
             prompt_caching=data.get("prompt_caching", True),
@@ -329,6 +333,7 @@ class Configuration:
             max_depth=self.max_depth,
             request_limit=self.request_limit,
             agent_retries=self.agent_retries,
+            concurrency=self.concurrency,
             max_context_tokens=self.max_context_tokens,
             agent_instructions=final_instructions.to_dict() if final_instructions else None,
             use_gitignore=self.use_gitignore,

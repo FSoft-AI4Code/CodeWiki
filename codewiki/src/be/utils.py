@@ -169,6 +169,34 @@ _MERMAID_PY_BROKEN = os.environ.get("MERMAID_VALIDATE", "1") == "0"
 _MERMAID_PY_PROBED = True  # Skip probing — rely on env var
 
 
+# PythonMonkey prints JS noise to stderr, so validation points sys.stderr at
+# devnull. Concurrent agents validate at the same time; a plain save/restore
+# per call interleaves and can leave stderr on a closed devnull, so the swap
+# is reference-counted: the first caller swaps, the last one restores.
+_stderr_lock = threading.Lock()
+_stderr_users = 0
+_saved_stderr = None
+
+
+def _quiet_stderr_enter() -> None:
+    global _stderr_users, _saved_stderr
+    with _stderr_lock:
+        if _stderr_users == 0:
+            _saved_stderr = sys.stderr
+            sys.stderr = open(os.devnull, "w")  # noqa: SIM115 — closed in _quiet_stderr_exit
+        _stderr_users += 1
+
+
+def _quiet_stderr_exit() -> None:
+    global _stderr_users, _saved_stderr
+    with _stderr_lock:
+        _stderr_users -= 1
+        if _stderr_users == 0:
+            sys.stderr.close()
+            sys.stderr = _saved_stderr
+            _saved_stderr = None
+
+
 async def _try_pythonmonkey_parse(diagram_content: str) -> str | None:
     """Attempt to parse via PythonMonkey/mermaid-parser-py.
 
@@ -180,16 +208,13 @@ async def _try_pythonmonkey_parse(diagram_content: str) -> str | None:
     if _PYTHONMONKEY_BROKEN:
         return None
 
-    import os
-
     try:
         from mermaid_parser.parser import parse_mermaid_py
     except Exception:
         _PYTHONMONKEY_BROKEN = True
         return None
 
-    old_stderr = sys.stderr
-    sys.stderr = open(os.devnull, "w")
+    _quiet_stderr_enter()
     try:
         if (
             _main_loop is not None
@@ -215,8 +240,7 @@ async def _try_pythonmonkey_parse(diagram_content: str) -> str | None:
         # Unknown error from the JS parser — fall back rather than surface it.
         return None
     finally:
-        sys.stderr.close()
-        sys.stderr = old_stderr
+        _quiet_stderr_exit()
 
 
 def _parse_via_mermaid_py(diagram_content: str) -> str:

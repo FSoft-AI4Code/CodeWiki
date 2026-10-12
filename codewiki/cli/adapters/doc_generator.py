@@ -22,7 +22,7 @@ from codewiki.cli.utils.progress import ProgressTracker
 # Import backend modules
 from codewiki.src.be.documentation_generator import DocumentationGenerator
 from codewiki.src.be.doc_layout import list_doc_files
-from codewiki.src.config import DEFAULT_LAYOUT
+from codewiki.src.config import DEFAULT_CONCURRENCY, DEFAULT_LAYOUT
 from codewiki.src.config import Config as BackendConfig
 from codewiki.src.config import set_cli_context
 
@@ -159,6 +159,7 @@ class CLIDocumentationGenerator:
                 max_depth=self.config.get("max_depth", 2),
                 request_limit=self.config.get("request_limit", 100),
                 agent_retries=self.config.get("agent_retries", 3),
+                concurrency=self.config.get("concurrency", DEFAULT_CONCURRENCY),
                 max_context_tokens=self.config.get("max_context_tokens", 0),
                 agent_instructions=self.config.get("agent_instructions"),
                 use_gitignore=self.config.get("use_gitignore", True),

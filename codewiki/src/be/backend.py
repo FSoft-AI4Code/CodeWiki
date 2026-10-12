@@ -18,8 +18,12 @@ Provider selection happens in one place: :func:`get_backend`.
 from __future__ import annotations
 
 import abc
+import asyncio
+import functools
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List
+
+from codewiki.src.be.agent_slots import AgentSlots, SharedModuleTree
 
 if TYPE_CHECKING:
     from codewiki.src.be.agent_tools.deps import CodeWikiDeps
@@ -82,6 +86,30 @@ class LLMBackend(abc.ABC):
     """
 
     last_usage: dict[str, Any] | None = None
+
+    @functools.cached_property
+    def slots(self) -> AgentSlots:
+        """Caps concurrent agent sessions at ``config.concurrency``."""
+        return AgentSlots(getattr(getattr(self, "_config", None), "concurrency", 1))
+
+    @functools.cached_property
+    def module_tree(self) -> SharedModuleTree:
+        """The module tree shared by every agent of this run."""
+        return SharedModuleTree()
+
+    async def complete_async(
+        self,
+        prompt: str,
+        *,
+        model: str | None = None,
+        system_prompt: str | None = None,
+    ) -> str:
+        """``complete`` in a worker thread, inside a slot, so it does not block
+        the event loop (and the agents' Mermaid validation that runs on it)."""
+        async with self.slots.hold_async():
+            return await asyncio.to_thread(
+                self.complete, prompt, model=model, system_prompt=system_prompt
+            )
 
     @abc.abstractmethod
     def complete(

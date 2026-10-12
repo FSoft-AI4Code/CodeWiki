@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Any
 from codewiki.src.be.dependency_analyzer.models.core import Node
 from codewiki.src.config import Config
 
@@ -20,3 +21,6 @@ class CodeWikiDeps:
     # (create / str_replace / insert / undo_edit) to a docs file whose
     # absolute, resolved path is not in this set. ``None`` = unrestricted.
     allowed_write_paths: set[str] | None = None
+    # The run's AgentSlots (codewiki.src.be.agent_slots); sub-agents take a
+    # slot each and a delegating parent lends its own. ``None`` = no cap.
+    slots: Any = None

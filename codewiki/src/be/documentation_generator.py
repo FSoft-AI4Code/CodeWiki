@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -250,65 +251,23 @@ class DocumentationGenerator:
         module_tree_path = os.path.join(working_dir, MODULE_TREE_FILENAME)
         module_tree = file_manager.load_json(module_tree_path)
 
-        # Get processing order (leaf modules first) from module_tree.json, not
-        # first_module_tree.json. The first tree only holds the initial
-        # clustering result (and stays {} in whole-repository mode), while
-        # module_tree.json also carries the sub-modules agents inserted via
-        # generate_sub_module_documentation_tool. --update/--compare-to
-        # invalidates docs against module_tree.json, so ordering from the
-        # first tree would skip any invalidated agent-inserted module and the
-        # run would end in IncompleteDocumentationError. Iterating the full
-        # tree is safe on resume: every module whose .md already exists
-        # short-circuits in run_module_agent/generate_parent_module_docs, so
-        # unaffected modules cost no LLM calls. In whole-repository mode a
-        # regenerated overview.md is rebuilt from the module docs via
-        # generate_parent_module_docs([]) rather than by the whole-repo agent.
-        processing_order = self.get_processing_order(module_tree)
-
-        # Process modules in dependency order
+        # Process the tree from module_tree.json, not first_module_tree.json.
+        # The first tree only holds the initial clustering result (and stays
+        # {} in whole-repository mode), while module_tree.json also carries
+        # the sub-modules agents inserted via generate_sub_module_documentation.
+        # --update/--compare-to invalidates docs against module_tree.json, so
+        # walking the first tree would skip any invalidated agent-inserted
+        # module and the run would end in IncompleteDocumentationError.
+        # Walking the full tree is safe on resume: every module whose .md
+        # already exists short-circuits in run_module_agent /
+        # generate_parent_module_docs, so unaffected modules cost no LLM
+        # calls. In whole-repository mode a regenerated overview.md is rebuilt
+        # from the module docs via generate_parent_module_docs([]) rather than
+        # by the whole-repo agent.
         final_module_tree = module_tree
-        processed_modules = set()
 
         if len(module_tree) > 0:
-            for module_path, module_name in processing_order:
-                try:
-                    # Reload module tree to get latest hierarchical structure from sub-agent modifications
-                    module_tree = file_manager.load_json(module_tree_path)
-
-                    # Get the module info from the tree
-                    module_info = module_tree
-                    for path_part in module_path:
-                        module_info = module_info[path_part]
-                        if path_part != module_path[-1]:  # Not the last part
-                            module_info = module_info.get("children", {})
-
-                    # Skip if already processed
-                    module_key = "/".join(module_path)
-                    if module_key in processed_modules:
-                        continue
-
-                    # Process the module
-                    if self.is_leaf_module(module_info):
-                        logger.info(f"📄 Processing leaf module: {module_key}")
-                        final_module_tree = await self.backend.run_module_agent(
-                            module_name=module_name,
-                            components=components,
-                            core_component_ids=module_info["components"],
-                            module_path=module_path,
-                            working_dir=working_dir,
-                        )
-                    else:
-                        logger.info(f"📁 Processing parent module: {module_key}")
-                        final_module_tree = await self.generate_parent_module_docs(
-                            module_path, working_dir
-                        )
-
-                    processed_modules.add(module_key)
-
-                except Exception as e:  # noqa: BLE001 — one failed module must not abort the run
-                    logger.error(f"Failed to process module {module_key}: {e!s}")
-                    logger.error(f"Traceback: {traceback.format_exc()}")
-                    continue
+            await self._process_module_tree(module_tree, components, working_dir)
 
             # Generate repo overview
             logger.info("📚 Generating repository overview")
@@ -340,6 +299,53 @@ class DocumentationGenerator:
         organize_docs(working_dir, config_layout(self.config))
 
         return working_dir
+
+    async def _process_module_tree(
+        self, module_tree: dict[str, Any], components: dict[str, Any], working_dir: str
+    ) -> None:
+        """Document every module, children before their parent.
+
+        Modules that do not depend on each other (siblings, and leaves of
+        different branches) run concurrently, up to ``config.concurrency`` at
+        a time; with concurrency 1 they run one after another as before. A
+        parent page is written once all its children are done, since it
+        summarizes their pages.
+        """
+        gate = asyncio.Semaphore(max(1, int(getattr(self.config, "concurrency", 1) or 1)))
+
+        async def process(module_path: list[str], module_info: dict[str, Any]) -> None:
+            module_key = "/".join(module_path)
+            children = module_info.get("children")
+            try:
+                if isinstance(children, dict) and children:
+                    await asyncio.gather(
+                        *(process(module_path + [name], info) for name, info in children.items())
+                    )
+                    async with gate:
+                        logger.info(f"📁 Processing parent module: {module_key}")
+                        await self.generate_parent_module_docs(module_path, working_dir)
+                else:
+                    async with gate:
+                        logger.info(f"📄 Processing leaf module: {module_key}")
+                        await self.backend.run_module_agent(
+                            module_name=module_path[-1],
+                            components=components,
+                            core_component_ids=module_info["components"],
+                            module_path=module_path,
+                            working_dir=working_dir,
+                        )
+            except Exception as e:  # noqa: BLE001 — one failed module must not abort the run
+                logger.error(f"Failed to process module {module_key}: {e!s}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
+
+        await asyncio.gather(*(process([name], info) for name, info in module_tree.items()))
+
+    async def _complete(self, prompt: str, system_prompt: str) -> str:
+        """Single-shot completion off the event loop, so running agents keep going."""
+        complete_async = getattr(self.backend, "complete_async", None)
+        if complete_async is not None:
+            return await complete_async(prompt, system_prompt=system_prompt)
+        return await asyncio.to_thread(self.backend.complete, prompt, system_prompt=system_prompt)
 
     async def generate_parent_module_docs(
         self,
@@ -402,7 +408,7 @@ class DocumentationGenerator:
         logger.debug(f"Overview prompt for {module_name}: {len(prompt)} chars")
 
         try:
-            parent_docs = self.backend.complete(
+            parent_docs = await self._complete(
                 prompt,
                 system_prompt=format_overview_system_prompt(self.config.get_prompt_addition()),
             )

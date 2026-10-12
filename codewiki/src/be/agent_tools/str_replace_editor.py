@@ -392,8 +392,10 @@ class WindowExpander:
             Tuple of 1-based line numbers of the start and end of the viewport.
             Both inclusive.
         """
-        # print("Input:", start, stop)
-        assert 1 <= start <= stop <= len(lines), (start, stop, len(lines))
+        # Clamp rather than assert: a bad window must not crash the agent's
+        # tool call (an emptied file once gave (1, 0, 1) and killed the run).
+        stop = max(1, min(stop, len(lines)))
+        start = max(1, min(start, stop))
         if max_added_lines <= 0:
             # Already at max range, no expansion
             return start, stop
@@ -697,9 +699,11 @@ class EditTool:
         # Create a snippet of the edited section
         replacement_line = file_content.split(old_str)[0].count("\n")
         start_line = max(1, replacement_line - SNIPPET_LINES)
+        # split("\n"), not splitlines(): it is the list expand_window gets,
+        # and it counts an emptied file as one (blank) line rather than zero.
         end_line = min(
             replacement_line + SNIPPET_LINES + new_str.count("\n"),
-            len(new_file_content.splitlines()),
+            len(new_file_content.split("\n")),
         )
         start_line, end_line = WindowExpander(suffix=path.suffix).expand_window(
             new_file_content.split("\n"),
