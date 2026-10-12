@@ -127,6 +127,9 @@ class CawToolKit(
     @tool(
         description=(
             "Custom editing tool for viewing, creating and editing files.\n"
+            "* `working_dir` is required on every call and must be exactly `repo` "
+            "(the source code, read-only) or `docs` (the documentation output). "
+            "`path` is relative to it.\n"
             "* If `path` is a file, `view` displays the result of applying `cat -n`. "
             "If `path` is a directory, `view` lists non-hidden files and directories (plus `.github`) up to 2 levels deep.\n"
             "* The `create` command cannot be used if the specified `path` already exists as a file.\n"

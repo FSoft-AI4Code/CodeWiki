@@ -39,7 +39,7 @@ from codewiki.src.be.prompt_template import (
     format_user_prompt,
 )
 from codewiki.src.be.utils import count_tokens, is_complex_module, set_main_loop
-from codewiki.src.be.doc_layout import config_layout, find_doc
+from codewiki.src.be.doc_layout import config_layout, find_doc, module_doc_file
 from codewiki.src.config import MODULE_TREE_FILENAME, OVERVIEW_FILENAME, Config
 from codewiki.src.utils import file_manager
 
@@ -204,6 +204,38 @@ def _patch_claude_allowed_tools() -> None:
 
 _patch_claude_allowed_tools()
 # --- end stopgap --------------------------------------------------------------
+
+
+# Below this a final reply is a status note ("Done."), not a page.
+_MIN_FALLBACK_DOC_CHARS = 500
+
+
+def save_unwritten_doc(docs_path: str, final_text: str | None, module_name: str) -> bool:
+    """Save the agent's final reply as the module page if it never wrote one.
+
+    Subscription CLIs sometimes answer with the whole page as their final
+    message instead of calling str_replace_editor, so the run "completes"
+    with no file and generation then fails on the missing doc. Only a reply
+    that looks like a page (a ``#`` heading, substantial length) is saved;
+    anything else is left for the missing-docs check to report.
+    """
+    if os.path.exists(docs_path) or not final_text:
+        return False
+    lines = final_text.strip().splitlines()
+    start = next((i for i, line in enumerate(lines) if line.startswith("# ")), None)
+    if start is None:
+        return False
+    content = "\n".join(lines[start:]).strip()
+    if len(content) < _MIN_FALLBACK_DOC_CHARS:
+        return False
+    logger.warning(
+        "Module %s finished without writing %s; saving its final reply as the page.",
+        module_name,
+        docs_path,
+    )
+    os.makedirs(os.path.dirname(docs_path), exist_ok=True)
+    file_manager.save_text(content + "\n", docs_path)
+    return True
 
 
 class CawBackend(LLMBackend):
@@ -498,6 +530,14 @@ class CawBackend(LLMBackend):
                 traj.total_tool_calls,
             )
             self.last_usage = usage_to_dict(getattr(traj, "total_usage", None))
+            save_unwritten_doc(
+                os.path.join(
+                    working_dir,
+                    module_doc_file(module_name, list(module_path), config_layout(config)),
+                ),
+                getattr(traj, "result", ""),
+                module_name,
+            )
             file_manager.save_json(deps.module_tree, module_tree_path)
             return deps.module_tree
         except Exception as e:

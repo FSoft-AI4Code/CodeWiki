@@ -167,6 +167,25 @@ def test_super_group_modules_none_response_keeps_tree():
     assert super_group_modules(tree, config, completer=lambda prompt: None) == tree
 
 
+def test_super_group_modules_maps_component_ids_to_their_module():
+    # Seen on a real run: the LLM listed component ids (shown indented under
+    # each module in the prompt) instead of module names.
+    tree = {
+        f"Module{i}": {"path": f"m{i}", "components": [f"m{i}/f.py::A", f"m{i}/f.py::B"]}
+        for i in range(6)
+    }
+    grouping = {
+        "Core": {"modules": ["m0/f.py::A", "m0/f.py::B", "m1/f.py::A", "Module2"]},
+        "Edge": {"modules": ["Module3", "m4/f.py::B"]},
+    }
+    response = f"<GROUPED_MODULES>{grouping!r}</GROUPED_MODULES>"
+    result = super_group_modules(tree, _config(), completer=lambda prompt: response)
+
+    assert set(result) == {"Core", "Edge", "Module5"}
+    assert list(result["Core"]["children"]) == ["Module0", "Module1", "Module2"]
+    assert list(result["Edge"]["children"]) == ["Module3", "Module4"]
+
+
 def test_extract_content_returns_none_on_truncated_empty_response():
     response = SimpleNamespace(
         choices=[
