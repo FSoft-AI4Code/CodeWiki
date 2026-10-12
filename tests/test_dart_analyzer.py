@@ -505,6 +505,28 @@ def test_top_level_function_wins_over_same_named_method(tmp_path: Path) -> None:
     assert components["lib/main.dart::go"].depends_on == {"lib/util.dart::helper"}
 
 
+def test_missing_pubspec_falls_back_to_dart_name_matching(tmp_path: Path, caplog) -> None:
+    files = {
+        "lib/util.dart": "class Engine {\n  void start() {}\n}\n",
+        "lib/main.dart": (
+            "import 'package:app/util.dart';\n"
+            "class Car {\n  final Engine e = Engine();\n  void go() { e.start(); Size(1, 2); }\n}\n"
+        ),
+        "windows/runner/win32_window.h": "struct Size { int w; int h; };\n",
+    }
+    for relpath, source in files.items():
+        path = tmp_path / relpath
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(source, encoding="utf-8")
+    with caplog.at_level("WARNING"):
+        components = DependencyParser(str(tmp_path)).parse_repository()
+    assert "No pubspec.yaml" in caplog.text
+    assert "lib/util.dart::Engine" in components["lib/main.dart::Car"].depends_on
+    deps = components["lib/main.dart::Car.go"].depends_on
+    assert "lib/util.dart::Engine.start" in deps
+    assert not {d for d in deps if d.startswith("windows/")}
+
+
 def test_barrel_reexport_selects_exported_definition(tmp_path: Path) -> None:
     _write_repo(
         tmp_path,

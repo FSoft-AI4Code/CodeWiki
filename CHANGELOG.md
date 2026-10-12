@@ -17,7 +17,10 @@ uses [Semantic Versioning](https://semver.org/).
   field-type, instantiation and call edges. `package:`/relative imports,
   exports and `part` files decide which definition a name resolves to, and
   library-private names never resolve outside their library; names not
-  visible through imports are dropped rather than guessed. Flutter-aware:
+  visible through imports are dropped rather than guessed. Without a
+  `pubspec.yaml` in the analyzed tree, `package:` imports cannot be resolved,
+  so Dart calls fall back to name matching across Dart files (with a
+  warning). Flutter-aware:
   widgets and State classes are typed, instantiations in `build()` become
   widget-to-widget edges, `ref.watch`/`ref.read` link widgets to Riverpod
   providers (including `@riverpod` codegen), and GoRouter routes link to their

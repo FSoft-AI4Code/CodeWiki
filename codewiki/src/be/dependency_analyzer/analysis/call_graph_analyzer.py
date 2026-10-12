@@ -65,6 +65,7 @@ class CallGraphAnalyzer:
         self._dart_directives: dict[str, list] = {}
         self._dart_visible: dict[str, set[str]] = {}
         self._dart_library_members: dict[str, set[str]] = {}
+        self._dart_unscoped = False
         self.call_relationships: list[CallRelationship] = []
         self._python_project_modules: set = set()
         self._python_external_import_roots: set = set()
@@ -91,6 +92,7 @@ class CallGraphAnalyzer:
         self._dart_directives = {}
         self._dart_visible = {}
         self._dart_library_members = {}
+        self._dart_unscoped = False
 
         files_analyzed = 0
         files_failed = 0
@@ -607,14 +609,21 @@ class CallGraphAnalyzer:
         files = set(self._dart_directives)
         resolver = DartPackageResolver.from_files(base_dir, files)
         scopes = build_scopes(self._dart_directives, resolver, files)
-        self._dart_visible = scopes.visible
         self._dart_library_members = scopes.library_members
-
-    def _has_dart_scope(self, caller: Node) -> bool:
-        return Path(caller.relative_path).as_posix() in self._dart_visible
+        if resolver.packages:
+            self._dart_visible = scopes.visible
+            return
+        # Without a pubspec.yaml (e.g. only `lib/` was analyzed) `package:`
+        # imports resolve to nothing, and scoping would drop nearly every
+        # cross-file edge. Match names across all Dart files instead.
+        self._dart_unscoped = True
+        logger.warning(
+            "No pubspec.yaml found for the analyzed Dart files; `package:` imports "
+            "cannot be resolved, so Dart calls are matched by name across Dart files."
+        )
 
     def _dart_scope_candidates(
-        self, func_ids: list[str], scope: set[str], caller_file: str | None = None
+        self, func_ids: list[str], scope: set[str] | None, caller_file: str | None = None
     ) -> list[str]:
         from codewiki.src.be.dependency_analyzer.analyzers.dart_imports import (
             is_private_dart_name,
@@ -627,7 +636,7 @@ class CallGraphAnalyzer:
             if func_id in candidates or func is None:
                 continue
             func_file = Path(func.relative_path).as_posix()
-            if func_file not in scope:
+            if scope is not None and func_file not in scope:
                 continue
             # A `_`-prefixed segment in the target (`_Ticker.tick`) is private
             # to its library, whatever the callee's own spelling.
@@ -648,12 +657,15 @@ class CallGraphAnalyzer:
         if not lang_indexes or "::" in callee:
             return None
         caller_file = Path(caller.relative_path).as_posix()
+        scope: set[str] | None
         if is_private_dart_name(callee):
             scope = self._dart_library_members.get(caller_file, {caller_file})
+        elif self._dart_unscoped:
+            scope = None  # any Dart file
         else:
             scope = self._dart_visible.get(caller_file)
-        if not scope:
-            return None
+            if not scope:
+                return None
         keys = [callee]
         if "." in callee:
             keys.append(callee.split(".")[0])
@@ -730,11 +742,11 @@ class CallGraphAnalyzer:
         ]
 
     def _is_unresolvable_dart(self, relationship: CallRelationship) -> bool:
-        """A scoped Dart caller's callee that import-aware resolution rejected
-        is external or invisible; drop it so ast_parser's name-only fallback
-        cannot bind it to an unrelated component."""
+        """A Dart caller's callee that Dart resolution rejected is external or
+        invisible; drop it so ast_parser's name-only fallback cannot bind it
+        to an unrelated component."""
         caller = self.functions.get(relationship.caller)
-        return caller is not None and caller.language == "dart" and self._has_dart_scope(caller)
+        return caller is not None and caller.language == "dart"
 
     def _dotted_project_packages(self) -> dict[str, set]:
         """Project packages/namespaces, partitioned by language. Java and C#
@@ -871,17 +883,9 @@ class CallGraphAnalyzer:
 
         lang_indexes = indexes["by_lang"].get(caller_language) if caller_language else None
         if caller_language == "dart" and caller is not None:
-            from codewiki.src.be.dependency_analyzer.analyzers.dart_imports import (
-                is_private_dart_name,
-            )
-
-            match = self._resolve_dart_callee(relationship.callee, caller, lang_indexes)
-            if match:
-                return match
-            # Dart resolution is import-driven: a caller with a scope never
-            # falls back to name guessing in other languages or libraries.
-            if is_private_dart_name(relationship.callee) or self._has_dart_scope(caller):
-                return None
+            # Dart resolution is authoritative: it never falls back to name
+            # guessing in other languages or invisible libraries.
+            return self._resolve_dart_callee(relationship.callee, caller, lang_indexes)
         if lang_indexes:
             match = self._resolve_callee_in(
                 relationship, lang_indexes["exact"], lang_indexes["simple"]
