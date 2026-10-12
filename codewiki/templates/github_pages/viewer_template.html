@@ -25,6 +25,7 @@
     <script src="https://cdn.jsdelivr.net/npm/mermaid@11.9.0/dist/mermaid.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked@11.0.0/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked-gfm-heading-id@3.1.3/lib/index.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.4/dist/purify.min.js"></script>
     <style>
         :root {
             --primary-color: #d95f00;
@@ -1211,6 +1212,247 @@
                 padding-left: 52px;
             }
         }
+
+        /* ---------- Ask AI chat (talks to `codewiki serve` on this machine) ---------- */
+        .content-toolbar {
+            display: flex;
+            gap: 8px;
+            align-items: stretch;
+        }
+
+        .content-toolbar .search-trigger {
+            flex: 1;
+        }
+
+        .chat-trigger {
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 13px;
+            font-family: inherit;
+            background: var(--panel-bg);
+            color: var(--text-color);
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        .chat-trigger:hover,
+        .chat-trigger:focus {
+            border-color: var(--primary-color);
+            outline: none;
+        }
+
+        .chat-panel {
+            position: fixed;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 600;
+            width: min(440px, 100vw);
+            display: flex;
+            flex-direction: column;
+            background: var(--panel-bg);
+            border-left: 1px solid var(--border-color);
+            box-shadow: -12px 0 40px rgba(0, 0, 0, 0.18);
+            transform: translateX(100%);
+            transition: transform 0.2s ease;
+        }
+
+        .chat-panel.open {
+            transform: none;
+        }
+
+        .chat-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .chat-title {
+            font-weight: 600;
+            color: var(--heading-color);
+        }
+
+        .chat-freshness {
+            flex: 1;
+            font-size: 11px;
+            color: var(--muted-color);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .chat-close,
+        .chat-new {
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 3px 8px;
+            font-size: 12px;
+            background: transparent;
+            color: var(--muted-color);
+            cursor: pointer;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .chat-msg {
+            font-size: 14px;
+            line-height: 1.55;
+            color: var(--body-color);
+            overflow-wrap: anywhere;
+        }
+
+        .chat-msg.user {
+            align-self: flex-end;
+            max-width: 85%;
+            padding: 8px 12px;
+            border-radius: 12px 12px 2px 12px;
+            background: var(--secondary-color);
+            color: var(--text-color);
+            white-space: pre-wrap;
+        }
+
+        .chat-msg.assistant pre {
+            max-width: 100%;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+
+        .chat-msg.error {
+            padding: 8px 12px;
+            border: 1px solid var(--error-border);
+            border-radius: 8px;
+            background: var(--error-bg);
+            color: var(--error-color);
+        }
+
+        .chat-msg a.chat-cite {
+            text-decoration: none;
+            border-bottom: 1px dotted var(--primary-color);
+        }
+
+        .chat-sources {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .chat-source {
+            font-size: 11px;
+            padding: 2px 8px;
+            border: 1px solid var(--border-color);
+            border-radius: 999px;
+            color: var(--muted-color);
+            text-decoration: none;
+            cursor: pointer;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .chat-source.stale {
+            border-style: dashed;
+        }
+
+        .chat-stats {
+            margin-top: 6px;
+            font-size: 11px;
+            color: var(--muted-color);
+        }
+
+        .chat-status {
+            min-height: 18px;
+            padding: 0 14px 6px;
+            font-size: 12px;
+            color: var(--muted-color);
+        }
+
+        .chat-form {
+            display: flex;
+            gap: 8px;
+            padding: 10px 14px 14px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .chat-input {
+            flex: 1;
+            min-height: 40px;
+            max-height: 160px;
+            resize: vertical;
+            padding: 8px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font: inherit;
+            font-size: 14px;
+            background: var(--page-bg);
+            color: var(--text-color);
+        }
+
+        .chat-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        .chat-send {
+            padding: 0 14px;
+            border: none;
+            border-radius: 8px;
+            background: var(--primary-color);
+            color: #fff;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .chat-send:disabled {
+            opacity: 0.5;
+            cursor: default;
+        }
+
+        .chat-offline {
+            font-size: 14px;
+            color: var(--body-color);
+        }
+
+        .chat-offline pre {
+            position: relative;
+            padding: 10px 12px;
+            border-radius: 8px;
+            background: var(--code-bg);
+            border: 1px solid var(--border-color);
+            font-size: 13px;
+        }
+
+        .stale-banner {
+            margin-bottom: 16px;
+            padding: 10px 14px;
+            border: 1px solid var(--border-color);
+            border-left: 4px solid var(--primary-color);
+            border-radius: 6px;
+            background: var(--secondary-color);
+            font-size: 13px;
+            color: var(--text-color);
+        }
+
+        @media (max-width: 768px) {
+            .chat-trigger-label {
+                display: none;
+            }
+        }
     </style>
 </head>
 <body>
@@ -1227,6 +1469,21 @@
             <div class="search-modal-results" id="search-modal-results"></div>
         </div>
     </div>
+
+    <aside class="chat-panel" id="chat-panel" aria-label="Ask AI" aria-hidden="true">
+        <div class="chat-header">
+            <span class="chat-title">Ask AI</span>
+            <span class="chat-freshness" id="chat-freshness"></span>
+            <button class="chat-new" id="chat-new" type="button" title="Start a new conversation">New</button>
+            <button class="chat-close" id="chat-close" type="button" aria-label="Close chat">Esc</button>
+        </div>
+        <div class="chat-messages" id="chat-messages"></div>
+        <div class="chat-status" id="chat-status" aria-live="polite"></div>
+        <form class="chat-form" id="chat-form">
+            <textarea class="chat-input" id="chat-input" rows="2" placeholder="Ask about the code, e.g. what breaks if I rename X?" aria-label="Your question"></textarea>
+            <button class="chat-send" id="chat-send" type="submit">Ask</button>
+        </form>
+    </aside>
 
     <div class="container">
         <nav class="sidebar" id="sidebar">
@@ -1263,6 +1520,10 @@
                             <span class="search-trigger-icon">🔎</span>
                             <span class="search-trigger-label">Search docs…</span>
                             <span class="search-trigger-kbd">Ctrl K</span>
+                        </button>
+                        <button class="chat-trigger" id="chat-trigger" type="button" aria-label="Ask AI about this codebase">
+                            <span>💬</span>
+                            <span class="chat-trigger-label">Ask AI</span>
                         </button>
                     </div>
                     <div class="doc-column">
@@ -1392,6 +1653,7 @@
             setupMobileDrawer();
             setupLinkInterception();
             setupSearchModal();
+            setupChat();
             setupStickyToolbar();
             initMermaid();
 
@@ -2254,6 +2516,7 @@
 
                 buildTOC();
                 renderPagerLinks(filename);
+                showStaleBanner(filename);
 
                 // Scroll after diagrams render, since they shift the layout
                 if (anchor) {
@@ -2319,9 +2582,14 @@
             }
         }
 
+        function sanitizeHtml(html) {
+            // Pages and chat answers are model-written: never let them run script.
+            return window.DOMPurify ? DOMPurify.sanitize(html) : html;
+        }
+
         function renderMarkdown(markdown) {
             // Convert markdown to HTML using marked
-            let html = marked.parse(markdown);
+            let html = sanitizeHtml(marked.parse(markdown));
 
             // Process mermaid code blocks
             html = html.replace(
@@ -2751,6 +3019,350 @@
         function closeDrawer() {
             document.getElementById('sidebar').classList.remove('open');
             document.getElementById('backdrop').classList.remove('visible');
+        }
+
+        // ---------- Ask AI ----------
+        // The page never holds an API key: questions go to `codewiki serve`
+        // on the developer's machine, which answers with their CodeWiki config.
+
+        const CHAT_CONFIG = (CONFIG && CONFIG.chat) || {};
+        const CHAT_SESSION_KEY = 'codewiki-chat:' + (CONFIG.repository_url || document.title);
+        let chatServer = null;      // {base, health} once found
+        let chatBusy = false;
+        let chatState = { sessionId: null, messages: [] };
+
+        function chatLoadState() {
+            try {
+                const saved = JSON.parse(sessionStorage.getItem(CHAT_SESSION_KEY) || 'null');
+                if (saved && Array.isArray(saved.messages)) chatState = saved;
+            } catch (e) { /* storage unavailable: start fresh */ }
+        }
+
+        function chatSaveState() {
+            try { sessionStorage.setItem(CHAT_SESSION_KEY, JSON.stringify(chatState)); } catch (e) { }
+        }
+
+        function chatCandidates() {
+            const out = [];
+            // Served by `codewiki serve` itself: same origin, no cross-site request.
+            if (location.protocol === 'http:' || location.protocol === 'https:') out.push(location.origin);
+            (CHAT_CONFIG.endpoints || ['http://127.0.0.1:8765']).forEach(function(e) {
+                const base = String(e).replace(/\/+$/, '');
+                if (out.indexOf(base) === -1) out.push(base);
+            });
+            return out;
+        }
+
+        async function probeChatServer(base) {
+            const ctrl = new AbortController();
+            const timer = setTimeout(function() { ctrl.abort(); }, 1500);
+            try {
+                const r = await fetch(base + '/api/health', { signal: ctrl.signal });
+                if (!r.ok) return null;
+                const health = await r.json();
+                return health && health.ok ? { base: base, health: health } : null;
+            } catch (e) {
+                return null;
+            } finally {
+                clearTimeout(timer);
+            }
+        }
+
+        async function findChatServer(sameOriginOnly) {
+            if (chatServer) return chatServer;
+            const bases = chatCandidates().filter(function(b) {
+                return !sameOriginOnly || b === location.origin;
+            });
+            for (const base of bases) {
+                const found = await probeChatServer(base);
+                if (found) {
+                    chatServer = found;
+                    renderChatFreshness();
+                    return found;
+                }
+            }
+            return null;
+        }
+
+        function renderChatFreshness() {
+            const el = document.getElementById('chat-freshness');
+            if (!el) return;
+            el.textContent = chatServer ? chatServer.health.freshness.summary : '';
+            el.title = el.textContent;
+        }
+
+        function showStaleBanner(filename) {
+            if (!chatServer) return;
+            const stale = chatServer.health.freshness.stale_pages || [];
+            if (stale.indexOf(filename) === -1) return;
+            const content = document.getElementById('content');
+            if (content.querySelector('.stale-banner')) return;
+            const banner = document.createElement('div');
+            banner.className = 'stale-banner';
+            banner.innerHTML = '⚠️ The code this page describes changed after it was written (' +
+                escapeHtml(chatServer.health.freshness.summary) + '). Ask AI answers from the current ' +
+                'code; refresh the page with <code>codewiki generate --update</code>.';
+            content.insertBefore(banner, content.firstChild);
+        }
+
+        function codeLink(path, start, end) {
+            const repo = CONFIG.repository_url;
+            if (!repo) return null;
+            const ref = CONFIG.commit_id || 'HEAD';
+            let url = repo.replace(/\/+$/, '') + '/blob/' + ref + '/' + path;
+            if (start) url += '#L' + start + (end && end !== start ? '-L' + end : '');
+            return url;
+        }
+
+        // `src/x.py:L10-L20`, `src/x.py:10`, `Page.md#anchor` -> links
+        const CITE_CODE_RE = /^([\w.\/-]+\.[\w]+):L?(\d+)(?:-L?(\d+))?$/;
+        const CITE_PAGE_RE = /^([\w.,&()\/ -]+\.md)(?:#([\w-]+))?$/;
+
+        function linkCitation(text) {
+            let m = text.match(CITE_PAGE_RE);
+            if (m) return { page: m[1], anchor: m[2] || null };
+            m = text.match(CITE_CODE_RE);
+            if (m) return { url: codeLink(m[1], m[2], m[3]) };
+            return null;
+        }
+
+        function decorateCitations(root) {
+            root.querySelectorAll('code').forEach(function(code) {
+                if (code.closest('pre')) return;
+                const target = linkCitation(code.textContent.trim());
+                if (!target) return;
+                const a = document.createElement('a');
+                a.className = 'chat-cite';
+                if (target.page) {
+                    a.href = buildHash(target.page, target.anchor);
+                    a.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        navigateTo(target.page, target.anchor);
+                    });
+                } else if (target.url) {
+                    a.href = target.url;
+                    a.target = '_blank';
+                    a.rel = 'noopener';
+                } else {
+                    return;
+                }
+                code.parentNode.insertBefore(a, code);
+                a.appendChild(code);
+            });
+        }
+
+        function renderChatMessage(msg) {
+            const el = document.createElement('div');
+            el.className = 'chat-msg ' + msg.role;
+            if (msg.role === 'user' || msg.role === 'error') {
+                el.textContent = msg.text;
+                return el;
+            }
+            el.innerHTML = sanitizeHtml(marked.parse(msg.text || ''));
+            decorateCitations(el);
+            if (typeof hljs !== 'undefined') {
+                el.querySelectorAll('pre code').forEach(function(block) { hljs.highlightElement(block); });
+            }
+            if (msg.sources && msg.sources.length) {
+                const box = document.createElement('div');
+                box.className = 'chat-sources';
+                msg.sources.forEach(function(src) {
+                    const chip = document.createElement('a');
+                    chip.className = 'chat-source' + (src.stale ? ' stale' : '');
+                    chip.textContent = src.location;
+                    chip.title = (src.title || src.id) + (src.stale ? ' (doc older than the code)' : '');
+                    const target = linkCitation(src.location);
+                    if (target && target.page) {
+                        chip.href = buildHash(target.page, target.anchor);
+                        chip.addEventListener('click', function(e) {
+                            e.preventDefault();
+                            navigateTo(target.page, target.anchor);
+                        });
+                    } else if (target && target.url) {
+                        chip.href = target.url;
+                        chip.target = '_blank';
+                        chip.rel = 'noopener';
+                    }
+                    box.appendChild(chip);
+                });
+                el.appendChild(box);
+            }
+            if (msg.stats) {
+                const stats = document.createElement('div');
+                stats.className = 'chat-stats';
+                stats.textContent = msg.stats;
+                el.appendChild(stats);
+            }
+            return el;
+        }
+
+        function renderChat() {
+            const box = document.getElementById('chat-messages');
+            box.innerHTML = '';
+            if (!chatState.messages.length) {
+                const hint = document.createElement('div');
+                hint.className = 'chat-msg assistant';
+                hint.innerHTML = '<p>Ask anything about this codebase: how something works, where it ' +
+                    'lives, or what breaks if you change it. Answers cite the code and pages they use.</p>';
+                box.appendChild(hint);
+            }
+            chatState.messages.forEach(function(m) { box.appendChild(renderChatMessage(m)); });
+            box.scrollTop = box.scrollHeight;
+        }
+
+        function renderChatOffline() {
+            const box = document.getElementById('chat-messages');
+            const port = (CHAT_CONFIG.endpoints && CHAT_CONFIG.endpoints[0] || 'http://127.0.0.1:8765')
+                .replace(/^.*:(\d+).*$/, '$1');
+            const cmd = 'codewiki serve --docs ' + (CHAT_CONFIG.docs_hint || 'docs') +
+                (port !== '8765' ? ' --port ' + port : '');
+            const safari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+            box.innerHTML = '<div class="chat-offline">' +
+                '<p><strong>Chat needs CodeWiki running on your machine.</strong> In your checkout of ' +
+                'this repository, run:</p><pre><code>' + escapeHtml(cmd) + '</code></pre>' +
+                '<p>Then reopen this panel. Questions are answered with your own CodeWiki ' +
+                'configuration; no key is stored in this page.</p>' +
+                (safari && location.protocol === 'https:'
+                    ? '<p>Safari blocks this site from reaching your machine. Open the docs from the ' +
+                      'local server instead: <a href="http://127.0.0.1:' + escapeHtml(port) + '/">http://127.0.0.1:' +
+                      escapeHtml(port) + '/</a></p>'
+                    : '') +
+                '</div>';
+            const pre = box.querySelector('pre');
+            if (pre && navigator.clipboard) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'chat-new';
+                btn.textContent = 'Copy';
+                btn.style.marginTop = '6px';
+                btn.addEventListener('click', function() {
+                    navigator.clipboard.writeText(cmd).then(function() { btn.textContent = 'Copied'; });
+                });
+                pre.after(btn);
+            }
+        }
+
+        function setChatStatus(text) {
+            document.getElementById('chat-status').textContent = text || '';
+        }
+
+        async function openChat() {
+            const panel = document.getElementById('chat-panel');
+            panel.classList.add('open');
+            panel.setAttribute('aria-hidden', 'false');
+            setChatStatus(chatServer ? '' : 'Looking for codewiki serve…');
+            const server = await findChatServer(false);
+            setChatStatus('');
+            if (!server) {
+                renderChatOffline();
+                return;
+            }
+            renderChat();
+            document.getElementById('chat-input').focus();
+        }
+
+        function closeChat() {
+            const panel = document.getElementById('chat-panel');
+            panel.classList.remove('open');
+            panel.setAttribute('aria-hidden', 'true');
+        }
+
+        async function sendChat(question) {
+            if (chatBusy || !question.trim()) return;
+            const server = await findChatServer(false);
+            if (!server) {
+                renderChatOffline();
+                return;
+            }
+            chatBusy = true;
+            document.getElementById('chat-send').disabled = true;
+            chatState.messages.push({ role: 'user', text: question });
+            renderChat();
+            setChatStatus('Thinking…');
+            try {
+                const response = await fetch(server.base + '/api/ask', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question: question, session_id: chatState.sessionId })
+                });
+                if (!response.ok) {
+                    let detail = response.statusText;
+                    try { detail = (await response.json()).detail || detail; } catch (e) { }
+                    throw new Error(detail);
+                }
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let finished = false;
+                while (!finished) {
+                    const chunk = await reader.read();
+                    if (chunk.done) break;
+                    buffer += decoder.decode(chunk.value, { stream: true });
+                    let nl;
+                    while ((nl = buffer.indexOf('\n')) >= 0) {
+                        const line = buffer.slice(0, nl).trim();
+                        buffer = buffer.slice(nl + 1);
+                        if (!line) continue;
+                        const event = JSON.parse(line);
+                        if (event.type === 'status') {
+                            setChatStatus(event.message);
+                        } else if (event.type === 'answer') {
+                            chatState.sessionId = event.session_id;
+                            chatState.messages.push({
+                                role: 'assistant',
+                                text: event.answer,
+                                sources: event.sources,
+                                stats: event.stats.footer
+                            });
+                            finished = true;
+                        } else if (event.type === 'error') {
+                            throw new Error(event.message);
+                        }
+                    }
+                }
+            } catch (e) {
+                chatState.messages.push({ role: 'error', text: 'Could not answer: ' + e.message });
+            } finally {
+                chatBusy = false;
+                document.getElementById('chat-send').disabled = false;
+                setChatStatus('');
+                chatSaveState();
+                renderChat();
+            }
+        }
+
+        function setupChat() {
+            chatLoadState();
+            document.getElementById('chat-trigger').addEventListener('click', openChat);
+            document.getElementById('chat-close').addEventListener('click', closeChat);
+            document.getElementById('chat-new').addEventListener('click', function() {
+                chatState = { sessionId: null, messages: [] };
+                chatSaveState();
+                if (chatServer) renderChat();
+            });
+            const input = document.getElementById('chat-input');
+            document.getElementById('chat-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const q = input.value;
+                input.value = '';
+                sendChat(q);
+            });
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    document.getElementById('chat-form').requestSubmit();
+                }
+            });
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && document.getElementById('chat-panel').classList.contains('open')) {
+                    closeChat();
+                }
+            });
+            // Only same-origin is probed up front (served by `codewiki serve`): a page on
+            // GitHub Pages reaches for localhost only once the reader opens the chat.
+            findChatServer(true).then(function(server) {
+                if (server && currentFile) showStaleBanner(currentFile);
+            });
         }
 
         // ---------- Utilities ----------

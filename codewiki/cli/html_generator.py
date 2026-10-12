@@ -11,7 +11,7 @@ from typing import Optional, Dict, Any
 from codewiki.cli.utils.errors import FileSystemError
 from codewiki.cli.utils.fs import safe_write, safe_read
 from codewiki.src.be.search_index import build_search_index
-from codewiki.src.config import SEARCH_INDEX_FILENAME
+from codewiki.src.config import DEFAULT_QA_PORT, SEARCH_INDEX_FILENAME
 from codewiki.src.language import language_tag
 
 logger = logging.getLogger(__name__)
@@ -208,8 +208,18 @@ class HTMLGenerator:
             except Exception:
                 docs_base_path = "."
 
-        # Prepare JSON data for embedding
-        config_json = json.dumps(config, indent=2)
+        # The Ask AI window talks to `codewiki serve` on the reader's machine;
+        # citations link to the source at the docs' commit when the repo is known.
+        commit_id = ((metadata or {}).get("generation_info") or {}).get("commit_id")
+        config = {
+            "repository_url": repository_url,
+            "commit_id": commit_id,
+            "chat": {"endpoints": [f"http://127.0.0.1:{DEFAULT_QA_PORT}"]},
+            **config,
+        }
+
+        # Prepare JSON data for embedding (no "</script>" can close the tag early)
+        config_json = json.dumps(config, indent=2).replace("</", "<\\/")
         module_tree_json = json.dumps(module_tree, indent=2)
         metadata_json = json.dumps(metadata, indent=2) if metadata else "null"
 

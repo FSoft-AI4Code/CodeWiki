@@ -374,7 +374,7 @@ class QAEngine:
             freshness=freshness,
         )
         log_question(run.stats, question, ix.docs_dir, self.log_questions)
-        logger.info("Q&A: %s", run.stats.footer())
+        logger.debug("Q&A: %s", run.stats.footer())
         return result
 
     @staticmethod
