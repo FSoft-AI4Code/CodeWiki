@@ -254,7 +254,9 @@ def neutral_cwd() -> str:
     return path
 
 
-_PLAIN_TIMEOUT_SEC = 900
+# A prompt-only answer takes well under a minute; a CLI that is still running
+# after this is stuck (e.g. a wrapper script waiting on something).
+_PLAIN_TIMEOUT_SEC = 300
 
 
 class CawBackend(LLMBackend):
@@ -355,7 +357,11 @@ class CawBackend(LLMBackend):
                 check=False,
             )
         except subprocess.TimeoutExpired as e:
-            raise RuntimeError(f"claude did not answer within {_PLAIN_TIMEOUT_SEC}s") from e
+            raise RuntimeError(
+                f"claude did not answer within {_PLAIN_TIMEOUT_SEC}s. Check that "
+                "`claude -p hello` works from this process's environment (an MCP client "
+                "may start CodeWiki with a reduced PATH/environment)."
+            ) from e
         data = None
         for line in reversed(proc.stdout.splitlines()):  # shims may print before the JSON
             if line.startswith("{"):
