@@ -58,7 +58,6 @@ DEFAULT_IGNORE_PATTERNS = {
     "*.gr.dart",
     "*.mocks.dart",
     "*.gen.dart",
-    "*.config.dart",
     "*.pb.dart",
     "*.pbenum.dart",
     "*.pbjson.dart",
