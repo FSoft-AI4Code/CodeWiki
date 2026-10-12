@@ -24,9 +24,10 @@ except ImportError:  # older releases (e.g. the pinned 1.0.6) only have ModelHTT
 from pydantic_ai.models.openai import OpenAIChatModel, OpenAIChatModelSettings
 from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.providers.openai import OpenAIProvider
-from openai import OpenAI, BadRequestError
+from openai import DefaultHttpxClient, OpenAI, BadRequestError
 
 from codewiki.src.be import context_budget
+from codewiki.src.be.generation_progress import notify_http_response
 from codewiki.src.config import Config
 
 logger = logging.getLogger(__name__)
@@ -273,6 +274,43 @@ class CachingOpenAIModel(CompatibleOpenAIModel):
             return result
 
 
+# --- HTTP 429 reporting -------------------------------------------------------
+# Every model response passes these httpx hooks so the progress reporter can
+# say "rate-limited, retrying" instead of a run that silently slows down.
+
+
+def _on_response(response) -> None:
+    notify_http_response(response.status_code, response.headers.get("retry-after"))
+
+
+async def _on_async_response(response) -> None:
+    _on_response(response)
+
+
+def _add_response_hook(http_client, hook) -> None:
+    """Append ``hook`` to an httpx client's response hooks (once)."""
+    hooks = getattr(http_client, "event_hooks", None)
+    if not isinstance(hooks, dict):
+        return
+    response_hooks = list(hooks.get("response", []))
+    if hook not in response_hooks:
+        http_client.event_hooks = {**hooks, "response": [*response_hooks, hook]}
+
+
+class _ThrottleAwareProvider(OpenAIProvider):
+    """OpenAIProvider whose HTTP client (also a re-created one) reports 429s."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        _add_response_hook(getattr(self.client, "_client", None), _on_async_response)
+
+    def _set_http_client(self, http_client) -> None:
+        _add_response_hook(http_client, _on_async_response)
+        parent = getattr(super(), "_set_http_client", None)
+        if parent is not None:
+            parent(http_client)
+
+
 def _create_litellm_openai_client(config: Config) -> OpenAI:
     """
     Create an OpenAI-compatible client backed by litellm's proxy.
@@ -302,7 +340,7 @@ def create_main_model(config: Config) -> CachingOpenAIModel:
         prompt_caching=config.prompt_caching,
         cache_registry_key=config.llm_base_url or "",
         context_window=getattr(config, "max_context_tokens", 0),
-        provider=OpenAIProvider(base_url=config.llm_base_url, api_key=config.llm_api_key),
+        provider=_ThrottleAwareProvider(base_url=config.llm_base_url, api_key=config.llm_api_key),
         settings=_build_model_settings(config, config.main_model),
     )
 
@@ -314,7 +352,7 @@ def create_fallback_model(config: Config) -> CachingOpenAIModel:
         prompt_caching=config.prompt_caching,
         cache_registry_key=config.llm_base_url or "",
         context_window=getattr(config, "max_context_tokens", 0),
-        provider=OpenAIProvider(base_url=config.llm_base_url, api_key=config.llm_api_key),
+        provider=_ThrottleAwareProvider(base_url=config.llm_base_url, api_key=config.llm_api_key),
         settings=_build_model_settings(config, config.fallback_model),
     )
 
@@ -332,7 +370,11 @@ def create_fallback_models(config: Config) -> FallbackModel:
 
 def create_openai_client(config: Config) -> OpenAI:
     """Create OpenAI client from configuration."""
-    return OpenAI(base_url=config.llm_base_url, api_key=config.llm_api_key)
+    return OpenAI(
+        base_url=config.llm_base_url,
+        api_key=config.llm_api_key,
+        http_client=DefaultHttpxClient(event_hooks={"response": [_on_response]}),
+    )
 
 
 # Usage of the most recent completion, read by LLMBackend.complete implementations.

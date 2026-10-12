@@ -89,6 +89,10 @@ class ProgressTracker:
             elapsed = self._format_elapsed()
             click.echo(f"[{elapsed}]   {message}")
 
+    def note(self, message: str):
+        """Print a progress line in both normal and verbose mode."""
+        click.echo(f"[{self._format_elapsed()}]   {message}")
+
     def complete_stage(self, message: Optional[str] = None):
         """
         Complete current stage.

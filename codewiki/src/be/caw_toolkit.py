@@ -34,6 +34,7 @@ from codewiki.src.be.dependency_analyzer.utils.paths import (
     normalize_component_ids,
 )
 from codewiki.src.be.doc_layout import config_layout, module_doc_file
+from codewiki.src.be.generation_progress import progress_of
 from codewiki.src.be.module_naming import skipped_report, plan_sub_module_specs, sub_module_report
 
 if TYPE_CHECKING:
@@ -332,6 +333,8 @@ class CawToolKit(
             for sub_name, core_ids in final_specs.items():
                 value[sub_name] = {"components": core_ids, "children": {}}
 
+        progress = progress_of(backend)
+        progress.add(len(final_specs))
         depth = deps.current_depth + 1
         indent = "  " * deps.current_depth
         arrow = "└─" if deps.current_depth > 0 else "→"
@@ -342,15 +345,16 @@ class CawToolKit(
             # inside a worker thread (started by the parent tool call), so call
             # the sync entry point directly.  ``start_depth`` carries the
             # parent's depth so the sub-agent's max_depth guard stays accurate.
-            backend._run_module_agent_sync(
-                module_name=sub_name,
-                components=deps.components,
-                core_component_ids=core_ids,
-                module_path=parent_path + [sub_name],
-                working_dir=deps.absolute_docs_path,
-                start_depth=depth,
-                module_tree=deps.module_tree,
-            )
+            with progress.track("/".join(parent_path + [sub_name])):
+                backend._run_module_agent_sync(
+                    module_name=sub_name,
+                    components=deps.components,
+                    core_component_ids=core_ids,
+                    module_path=parent_path + [sub_name],
+                    working_dir=deps.absolute_docs_path,
+                    start_depth=depth,
+                    module_tree=deps.module_tree,
+                )
 
         # The parent session is idle until its sub-agents finish, so it lends
         # its concurrency slot to them; siblings then run side by side, as many

@@ -204,3 +204,198 @@ def test_caw_sub_modules_run_side_by_side_within_the_slot_budget(tmp_path):
     assert deps.path_to_current_module == ["parent"]
     assert all((tmp_path / f"sub{i}.md").exists() for i in range(5))
     assert "sub0" in report
+
+
+# --- pydantic sub-module fan-out --------------------------------------------
+
+
+def test_pydantic_sub_modules_run_concurrently_with_their_own_deps(tmp_path, monkeypatch):
+    from codewiki.src.be.agent_tools import generate_sub_module_documentations as tool_mod
+    from codewiki.src.be.agent_tools.deps import CodeWikiDeps
+    from codewiki.src.be.generation_progress import GenerationProgress
+
+    seen: list[tuple[str, list[str], int]] = []
+    state = {"active": 0, "peak": 0}
+
+    class FakeAgent:
+        def __init__(self, *args, name=None, **kwargs):
+            self.name = name
+
+        async def run(self, prompt, deps, usage_limits=None):
+            state["active"] += 1
+            state["peak"] = max(state["peak"], state["active"])
+            seen.append(
+                (deps.current_module_name, list(deps.path_to_current_module), deps.current_depth)
+            )
+            await asyncio.sleep(0.05)
+            Path(deps.absolute_docs_path, f"{deps.current_module_name}.md").write_text("# page\n")
+            state["active"] -= 1
+
+    monkeypatch.setattr(tool_mod, "Agent", FakeAgent)
+    monkeypatch.setattr(tool_mod, "create_fallback_models", lambda config: None)
+
+    messages: list[str] = []
+    progress = GenerationProgress(concurrency=3, emit=messages.append)
+    deps = CodeWikiDeps(
+        absolute_docs_path=str(tmp_path),
+        absolute_repo_path=str(tmp_path),
+        registry={},
+        components={},
+        path_to_current_module=["parent"],
+        current_module_name="parent",
+        module_tree={"parent": {"components": [], "children": {}}},
+        max_depth=2,
+        current_depth=1,
+        config=SimpleNamespace(
+            layout="flat", max_token_per_leaf_module=4000, agent_retries=1, request_limit=5
+        ),
+        slots=AgentSlots(3),
+        progress=progress,
+    )
+    specs = {f"sub{i}": [f"f{i}.py::X"] for i in range(5)}
+
+    async def run():
+        async with deps.slots.hold_async():  # the parent agent's own slot
+            return await tool_mod.generate_sub_module_documentation(
+                SimpleNamespace(deps=deps), specs
+            )
+
+    report = asyncio.run(run())
+
+    assert state["peak"] == 3
+    assert sorted(name for name, _, _ in seen) == sorted(specs)
+    assert all(path == ["parent", name] and depth == 2 for name, path, depth in seen)
+    # The parent's own deps were not touched by its children.
+    assert deps.path_to_current_module == ["parent"] and deps.current_module_name == "parent"
+    assert set(deps.module_tree["parent"]["children"]) == set(specs)
+    assert "sub0" in report
+    assert progress.total == 5 and progress.done == 5
+    assert len([m for m in messages if m.startswith("✓ parent/sub")]) == 5
+
+
+# --- progress reporting -----------------------------------------------------
+
+
+class _Clock:
+    def __init__(self):
+        self.now = 1000.0
+
+    def __call__(self):
+        return self.now
+
+
+def test_progress_status_line_and_eta():
+    from codewiki.src.be.generation_progress import GenerationProgress
+
+    clock, messages = _Clock(), []
+    p = GenerationProgress(concurrency=2, emit=messages.append, clock=clock)
+    p.add(5)
+    assert "ETA after the first module" in p.status()
+
+    with p.track("a"):
+        clock.now += 120
+    # 4 left x 120 s each / 2 at a time = 4 min
+    assert messages[-1] == "✓ a (2m 00s) · 1/5 done (20%) · ETA ~4m 00s"
+
+    p.add(3)  # an agent split a module into three sub-modules
+    with p.track("b"):
+        clock.now += 60
+    # average 90 s, 6 left, 2 at a time
+    assert messages[-1] == "✓ b (1m 00s) · 2/8 done (25%) · ETA ~4m 30s"
+
+
+def test_progress_reports_failures_and_already_documented_pages():
+    from codewiki.src.be.generation_progress import GenerationProgress
+
+    clock, messages = _Clock(), []
+    p = GenerationProgress(emit=messages.append, clock=clock)
+    p.add(2)
+    with p.track("cached"):
+        clock.now += 0.1
+    try:
+        with p.track("broken"):
+            clock.now += 30
+            raise RuntimeError("boom")
+    except RuntimeError:
+        pass
+    assert messages[0].startswith("✓ cached (already documented) · 1/2 done (50%)")
+    assert messages[1] == "✗ broken failed after 30s · 2/2 done (100%) · 1 failed"
+    assert p.summary()[0].endswith("; 1 failed")
+
+
+def test_progress_hears_caw_usage_limit_and_http_429():
+    import logging
+
+    from codewiki.src.be.generation_progress import GenerationProgress, notify_http_response
+
+    messages = []
+    p = GenerationProgress(concurrency=4, emit=messages.append)
+    with p.activate():
+        logging.getLogger("codewiki._vendor.caw.agent").warning(
+            "Usage limit reached. Auto-waiting %s min before resuming.", 24
+        )
+        notify_http_response(429, "7")
+        notify_http_response(429, "7")  # noted once a minute, still counted
+        notify_http_response(200, None)
+    notify_http_response(429, None)  # no active run: ignored
+    assert messages[0].startswith("⏸ Usage limit reached: paused until ~")
+    assert "(24 min)" in messages[0]
+    assert messages[1].startswith(
+        "⏳ Rate-limited by the provider (HTTP 429, 1 so far): retrying in 7s"
+    )
+    assert len(messages) == 2
+    assert "2 rate-limited request(s)" in p.summary()[0]
+
+
+def test_module_file_count_includes_sub_modules():
+    from codewiki.cli.adapters.doc_generator import _module_file_count
+
+    info = {
+        "components": ["a.py::A", "a.py::B"],
+        "children": {
+            "x": {"components": ["b.py::C", "Dockerfile"], "children": {}},
+            "y": {"components": ["a.py::D"], "children": {}},
+        },
+    }
+    assert _module_file_count(info) == 3
+    assert _module_file_count({"components": [], "children": {}}) == 0
+
+
+def test_scheduler_prints_progress_and_summary(tmp_path):
+    messages: list[str] = []
+    leaf = {"components": [], "children": {}}
+    tree = {"parent": {"components": [], "children": {"c0": dict(leaf), "c1": dict(leaf)}}}
+    (tmp_path / "module_tree.json").write_text(json.dumps(tree))
+    gen = object.__new__(DocumentationGenerator)
+    gen.config = SimpleNamespace(
+        docs_dir=str(tmp_path),
+        repo_path=str(tmp_path),
+        get_prompt_addition=lambda: "",
+        layout="flat",
+        concurrency=2,
+    )
+    gen.backend = _SlowBackend(delay=0.01)
+    gen.progress_emit = messages.append
+    asyncio.run(gen.generate_module_documentation({}, []))
+
+    done_lines = [m for m in messages if m.startswith("✓ ")]
+    # c0, c1, parent, repository overview
+    assert len(done_lines) == 4
+    assert done_lines[-1].startswith("✓ Repository overview")
+    assert "4/4 done (100%)" in done_lines[-1]
+    assert messages[-1].startswith("Documented 4 module page(s)") or messages[-2].startswith(
+        "Documented 4 module page(s)"
+    )
+
+
+def test_running_count_comes_from_held_slots():
+    from codewiki.src.be.generation_progress import GenerationProgress
+
+    slots = AgentSlots(2)
+    p = GenerationProgress(concurrency=2, emit=lambda m: None, active=lambda: slots.active)
+    p.add(4)
+    with slots.hold():
+        assert "1 running" in p.status()
+        with slots.lend():  # a parent waiting on its sub-modules
+            assert "running" not in p.status()
+    assert slots.active == 0

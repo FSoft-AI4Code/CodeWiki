@@ -32,6 +32,7 @@ from codewiki.src.be.prompt_template import (
     format_user_prompt,
 )
 from codewiki.src.be.cluster_modules import format_potential_core_components
+from codewiki.src.be.generation_progress import progress_of
 from codewiki.src.be.utils import count_tokens, is_complex_module
 from codewiki.src.be.doc_layout import config_layout, find_doc
 from codewiki.src.config import MODULE_TREE_FILENAME, OVERVIEW_FILENAME, Config
@@ -177,6 +178,7 @@ class PydanticAIBackend(LLMBackend):
             config=config,
             custom_instructions=self._custom_instructions,
             slots=self.slots,
+            progress=progress_of(self),
         )
 
         try:

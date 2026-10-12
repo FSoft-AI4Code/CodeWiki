@@ -7,6 +7,7 @@ from pydantic_ai.usage import UsageLimits
 
 from codewiki.src.be.agent_tools.deps import CodeWikiDeps
 from codewiki.src.be.doc_layout import config_layout, module_doc_file
+from codewiki.src.be.generation_progress import progress_of
 from codewiki.src.be.module_naming import skipped_report, plan_sub_module_specs, sub_module_report
 from codewiki.src.be.agent_tools.read_code_components import read_code_components_tool
 from codewiki.src.be.agent_tools.str_replace_editor import str_replace_editor_tool
@@ -88,6 +89,8 @@ async def generate_sub_module_documentation(
 
     indent = "  " * deps.current_depth
     arrow = "└─" if deps.current_depth > 0 else "→"
+    progress = progress_of(deps)
+    progress.add(len(final_specs))
 
     async def run_one(sub_module_name: str, core_component_ids: list[str]) -> None:
         logger.info(f"{indent}{arrow} Generating documentation for sub-module: {sub_module_name}")
@@ -142,19 +145,22 @@ async def generate_sub_module_documentation(
             current_module_name=sub_module_name,
             current_depth=deps.current_depth + 1,
         )
-        async with slots_hold(deps.slots):
-            await sub_agent.run(
-                format_user_prompt(
-                    module_name=sub_module_name,
-                    core_component_ids=core_component_ids,
-                    components=deps.components,
-                    module_tree=deps.module_tree,
-                    module_path=list(sub_deps.path_to_current_module),
-                    layout=layout,
-                ),
-                deps=sub_deps,
-                usage_limits=UsageLimits(request_limit=deps.config.request_limit),
-            )
+        # Track outside the slot so the status line, printed on exit, does
+        # not count this finished agent as still running.
+        with progress.track("/".join(sub_deps.path_to_current_module)):
+            async with slots_hold(deps.slots):
+                await sub_agent.run(
+                    format_user_prompt(
+                        module_name=sub_module_name,
+                        core_component_ids=core_component_ids,
+                        components=deps.components,
+                        module_tree=deps.module_tree,
+                        module_path=list(sub_deps.path_to_current_module),
+                        layout=layout,
+                    ),
+                    deps=sub_deps,
+                    usage_limits=UsageLimits(request_limit=deps.config.request_limit),
+                )
 
     # This agent is idle until its sub-agents finish, so it lends its slot.
     async with slots_lend(deps.slots):

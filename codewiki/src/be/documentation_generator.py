@@ -18,6 +18,7 @@ from codewiki.src.be.crosslinker import CrossLinkReport, crosslink_docs
 from codewiki.src.be.dependency_analyzer import DependencyGraphBuilder
 from codewiki.src.be.dependency_analyzer.analyzers.artifact import render_artifact_index
 from codewiki.src.be.dependency_analyzer.utils.paths import normalize_module_tree_ids
+from codewiki.src.be.generation_progress import NULL_PROGRESS, GenerationProgress
 from codewiki.src.be.doc_layout import (
     config_layout,
     list_doc_files,
@@ -266,42 +267,76 @@ class DocumentationGenerator:
         # by the whole-repo agent.
         final_module_tree = module_tree
 
-        if len(module_tree) > 0:
-            await self._process_module_tree(module_tree, components, working_dir)
+        # Status line after every page; agents' sub-modules add to the total
+        # as they are planned (the backends reach the reporter through
+        # ``backend.progress``).
+        emit = getattr(self, "progress_emit", None)
+        slots = getattr(self.backend, "slots", None)
+        progress = GenerationProgress(
+            getattr(self.config, "concurrency", 1),
+            emit=emit,
+            active=(lambda: slots.active) if slots is not None else None,
+        )
+        self.backend.progress = progress
 
-            # Generate repo overview
-            logger.info("📚 Generating repository overview")
-            final_module_tree = await self.generate_parent_module_docs(
-                [], working_dir, components=components
-            )
-        else:
-            logger.info("Processing whole repo because repo can fit in the context window")
-            repo_name = os.path.basename(os.path.normpath(self.config.repo_path))
-            final_module_tree = await self.backend.run_module_agent(
-                module_name=repo_name,
-                components=components,
-                core_component_ids=leaf_nodes,
-                module_path=[],
-                working_dir=working_dir,
-            )
+        with progress.activate():
+            if len(module_tree) > 0:
+                progress.add(self._count_modules(module_tree) + 1)  # + repository overview
+                await self._process_module_tree(module_tree, components, working_dir, progress)
 
-            # save final_module_tree to module_tree.json
-            file_manager.save_json(
-                final_module_tree, os.path.join(working_dir, MODULE_TREE_FILENAME)
-            )
+                # Generate repo overview
+                logger.info("📚 Generating repository overview")
+                with progress.track("Repository overview"):
+                    final_module_tree = await self.generate_parent_module_docs(
+                        [], working_dir, components=components
+                    )
+            else:
+                logger.info("Processing whole repo because repo can fit in the context window")
+                repo_name = os.path.basename(os.path.normpath(self.config.repo_path))
+                progress.add(1)
+                with progress.track(repo_name):
+                    final_module_tree = await self.backend.run_module_agent(
+                        module_name=repo_name,
+                        components=components,
+                        core_component_ids=leaf_nodes,
+                        module_path=[],
+                        working_dir=working_dir,
+                    )
 
-            # rename repo_name.md to overview.md
-            repo_overview_path = os.path.join(working_dir, f"{repo_name}.md")
-            if os.path.exists(repo_overview_path):
-                os.rename(repo_overview_path, os.path.join(working_dir, OVERVIEW_FILENAME))
+                # save final_module_tree to module_tree.json
+                file_manager.save_json(
+                    final_module_tree, os.path.join(working_dir, MODULE_TREE_FILENAME)
+                )
+
+                # rename repo_name.md to overview.md
+                repo_overview_path = os.path.join(working_dir, f"{repo_name}.md")
+                if os.path.exists(repo_overview_path):
+                    os.rename(repo_overview_path, os.path.join(working_dir, OVERVIEW_FILENAME))
+        for line in progress.summary():
+            (emit or logger.info)(line)
 
         # Move pages an agent saved in the wrong folder and fix links between pages
         organize_docs(working_dir, config_layout(self.config))
 
         return working_dir
 
+    @classmethod
+    def _count_modules(cls, tree: dict[str, Any]) -> int:
+        """Modules in a tree, parents included (each one is a page)."""
+        count = 0
+        for info in tree.values():
+            count += 1
+            children = info.get("children") if isinstance(info, dict) else None
+            if isinstance(children, dict):
+                count += cls._count_modules(children)
+        return count
+
     async def _process_module_tree(
-        self, module_tree: dict[str, Any], components: dict[str, Any], working_dir: str
+        self,
+        module_tree: dict[str, Any],
+        components: dict[str, Any],
+        working_dir: str,
+        progress: GenerationProgress = NULL_PROGRESS,
     ) -> None:
         """Document every module, children before their parent.
 
@@ -323,17 +358,19 @@ class DocumentationGenerator:
                     )
                     async with gate:
                         logger.info(f"📁 Processing parent module: {module_key}")
-                        await self.generate_parent_module_docs(module_path, working_dir)
+                        with progress.track(module_key):
+                            await self.generate_parent_module_docs(module_path, working_dir)
                 else:
                     async with gate:
                         logger.info(f"📄 Processing leaf module: {module_key}")
-                        await self.backend.run_module_agent(
-                            module_name=module_path[-1],
-                            components=components,
-                            core_component_ids=module_info["components"],
-                            module_path=module_path,
-                            working_dir=working_dir,
-                        )
+                        with progress.track(module_key):
+                            await self.backend.run_module_agent(
+                                module_name=module_path[-1],
+                                components=components,
+                                core_component_ids=module_info["components"],
+                                module_path=module_path,
+                                working_dir=working_dir,
+                            )
             except Exception as e:  # noqa: BLE001 — one failed module must not abort the run
                 logger.error(f"Failed to process module {module_key}: {e!s}")
                 logger.error(f"Traceback: {traceback.format_exc()}")

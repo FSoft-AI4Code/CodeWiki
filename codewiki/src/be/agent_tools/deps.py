@@ -24,3 +24,5 @@ class CodeWikiDeps:
     # The run's AgentSlots (codewiki.src.be.agent_slots); sub-agents take a
     # slot each and a delegating parent lends its own. ``None`` = no cap.
     slots: Any = None
+    # The run's GenerationProgress (sub-modules add to its total). ``None`` = untracked.
+    progress: Any = None

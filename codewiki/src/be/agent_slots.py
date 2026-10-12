@@ -32,13 +32,26 @@ class AgentSlots:
     def __init__(self, size: int) -> None:
         self.size = max(1, int(size or 1))
         self._sem = threading.BoundedSemaphore(self.size)
+        self._count_lock = threading.Lock()
+        self._held = 0
+
+    @property
+    def active(self) -> int:
+        """Sessions holding a slot right now (a delegating parent does not)."""
+        return self._held
+
+    def _acquired(self, delta: int) -> None:
+        with self._count_lock:
+            self._held += delta
 
     @contextlib.contextmanager
     def hold(self) -> Iterator[None]:
         self._sem.acquire()
+        self._acquired(1)
         try:
             yield
         finally:
+            self._acquired(-1)
             self._sem.release()
 
     @contextlib.asynccontextmanager
@@ -47,28 +60,34 @@ class AgentSlots:
         # modules would otherwise park the default executor's threads.
         while not self._sem.acquire(blocking=False):
             await asyncio.sleep(_POLL_SECONDS)
+        self._acquired(1)
         try:
             yield
         finally:
+            self._acquired(-1)
             self._sem.release()
 
     @contextlib.contextmanager
     def lend(self) -> Iterator[None]:
         """Give the caller's slot back while it waits on sub-agents."""
+        self._acquired(-1)
         self._sem.release()
         try:
             yield
         finally:
             self._sem.acquire()
+            self._acquired(1)
 
     @contextlib.asynccontextmanager
     async def lend_async(self) -> AsyncIterator[None]:
+        self._acquired(-1)
         self._sem.release()
         try:
             yield
         finally:
             while not self._sem.acquire(blocking=False):
                 await asyncio.sleep(_POLL_SECONDS)
+            self._acquired(1)
 
 
 def merge_module_tree(dst: dict[str, Any], src: dict[str, Any]) -> None:
