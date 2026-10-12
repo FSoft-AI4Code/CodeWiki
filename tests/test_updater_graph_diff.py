@@ -12,6 +12,7 @@ from codewiki.src.be.updater.graph_diff import (
     CLASS_RENAMED,
     DIFF_TRUNCATED_MARKER,
     body_hash,
+    documented_source,
     diff_graphs,
 )
 from codewiki.src.be.updater.options import UpdateOptions
@@ -83,3 +84,21 @@ def test_diff_truncation():
     new = {"a.py::f": node("a.py::f", "function", big_new)}
     d = diff_graphs(old, new, UpdateOptions(max_diff_tokens=50))
     assert DIFF_TRUNCATED_MARKER in d.records["a.py::f"].diff
+
+
+def test_doc_comment_only_change_is_a_body_change():
+    # Rust keeps `///` doc comments above the item, outside source_code.
+    code = "pub fn summarize(m: &Module) -> String {\n    call(m)\n}\n"
+    a = node("src/llm.rs::summarize", "function", code)
+    b = node("src/llm.rs::summarize", "function", code)
+    b.docstring = "/// Sends only names and imports, with temperature 0 and at most 120 tokens."
+    d = diff_graphs({a.id: a}, {b.id: b})
+    assert d.body == {a.id}
+    assert "+/// Sends only names and imports, with temperature 0" in d.records[a.id].diff
+
+
+def test_docstring_inside_source_is_not_counted_twice():
+    code = 'def g():\n    """Return one."""\n    return 1\n'
+    a = node("f.py::g", "function", code)
+    a.docstring = "Return one."
+    assert documented_source(a) == code
