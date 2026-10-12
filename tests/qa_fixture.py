@@ -60,6 +60,20 @@ class TimestampSigner(Signer):
         if self.get_timestamp() - int(stamp) > max_age:
             raise ValueError("signature expired")
         return value
+
+
+def legacy_window():
+    MAX_AGE = 5  # a local of the same name, not the module constant
+    return MAX_AGE
+
+
+def configured_age(settings):
+    return getattr(settings, "MAX_AGE", 0) or default_age()
+
+
+def default_age():
+    # MAX_AGE is the fallback
+    return MAX_AGE
 '''
 
 SIGNING_MD = """# Signing
@@ -108,7 +122,11 @@ def build(tmp_path: Path, use_git: bool = True) -> tuple[Path, Path]:
     repo = tmp_path / "repo"
     (repo / "pkg").mkdir(parents=True)
     (repo / "tests").mkdir()
-    (repo / "pkg" / "__init__.py").write_text("")
+    (repo / "pkg" / "__init__.py").write_text(
+        'from pkg.timed import MAX_AGE\n\n__all__ = ["MAX_AGE"]\n'
+    )
+    (repo / "config").mkdir()
+    (repo / "config" / "settings.yaml").write_text("MAX_AGE: 30\n")
     (repo / "pkg" / "signer.py").write_text(SIGNER)
     (repo / "pkg" / "timed.py").write_text(TIMED)
     (repo / "tests" / "test_timed.py").write_text(

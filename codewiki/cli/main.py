@@ -6,6 +6,7 @@ import sys
 import click
 
 from codewiki import __version__
+from codewiki.cli.commands.ask import ask_command
 from codewiki.cli.commands.config import config_group
 from codewiki.cli.commands.generate import generate_command
 from codewiki.cli.utils.branding import print_banner
@@ -43,6 +44,7 @@ def version():
 # Register command groups
 cli.add_command(config_group)
 cli.add_command(generate_command, name="generate")
+cli.add_command(ask_command, name="ask")
 
 
 @cli.command(name="mcp")

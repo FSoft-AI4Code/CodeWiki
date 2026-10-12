@@ -362,6 +362,66 @@ def _qa_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="codewiki_impact",
+            description=(
+                "What does changing, renaming or removing a symbol affect? Pass a variable, "
+                "constant, parameter (Class.method.param), function or class. Returns every "
+                "definition and usage site in the current code labelled from the AST "
+                "(read/write/keyword arg/import/re-export), the functions containing them, their "
+                "callers two hops out, tests that touch it, public-API exposure and dynamic "
+                "access static analysis cannot see. Same-named locals and comment mentions are "
+                "listed separately. No LLM."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "symbol": {
+                        "type": "string",
+                        "description": "e.g. MAX_AGE, Signer.unsign, TimestampSigner.unsign.max_age",
+                    },
+                    "file": {
+                        "type": "string",
+                        "description": "Repo-relative file that defines it (narrows parameters)",
+                    },
+                    "change": {
+                        "type": "string",
+                        "enum": ["rename", "remove", "modify"],
+                        "description": "The planned change (default modify)",
+                    },
+                    "docs_dir": _DOCS_DIR_PROP,
+                },
+                "required": ["symbol"],
+            },
+        ),
+        Tool(
+            name="codewiki_ask",
+            description=(
+                "Answer a question about the codebase with citations, using CodeWiki's own LLM "
+                "(the provider set with `codewiki config set`). It searches the docs and code, "
+                "picks what to read from metadata, reads only those sections and function "
+                "bodies within a token budget, and answers with file:line citations plus stats "
+                "(time, LLM calls, tokens). Change-impact questions use codewiki_impact "
+                "internally. Pass session_id from a previous answer for follow-ups. Prefer "
+                "codewiki_search + codewiki_read when you can reason over the code yourself."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "question": {"type": "string", "description": "The question"},
+                    "session_id": {
+                        "type": "string",
+                        "description": "From an earlier answer, for follow-up questions",
+                    },
+                    "max_context_tokens": {
+                        "type": "integer",
+                        "description": "Cap on code/doc tokens given to the answering model",
+                    },
+                    "docs_dir": _DOCS_DIR_PROP,
+                },
+                "required": ["question"],
+            },
+        ),
+        Tool(
             name="codewiki_outline",
             description=(
                 "The documentation's module tree with a one-line summary per module page: a "
@@ -469,6 +529,8 @@ _QA_HANDLERS = {
     "codewiki_read": "handle_read",
     "codewiki_outline": "handle_outline",
     "codewiki_status": "handle_status",
+    "codewiki_impact": "handle_impact",
+    "codewiki_ask": "handle_ask",
 }
 
 

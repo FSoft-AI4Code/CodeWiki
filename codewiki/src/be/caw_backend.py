@@ -21,8 +21,11 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import os
+import subprocess
+import tempfile
 import time
 import shutil
 from typing import Any
@@ -239,6 +242,21 @@ def save_unwritten_doc(docs_path: str, final_text: str | None, module_name: str)
     return True
 
 
+def neutral_cwd() -> str:
+    """An empty working directory for prompt-only CLI calls.
+
+    The CLIs load project context from their working directory (claude:
+    CLAUDE.md and the project's auto-memory). A prompt-only call must see
+    just its prompt, not whatever project the user's shell is in.
+    """
+    path = os.path.join(tempfile.gettempdir(), "codewiki-plain-completion")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+_PLAIN_TIMEOUT_SEC = 900
+
+
 class CawBackend(LLMBackend):
     """Routes LLM operations through the claude / codex CLI subscription."""
 
@@ -279,21 +297,88 @@ class CawBackend(LLMBackend):
         *,
         model: str | None = None,
         system_prompt: str | None = None,
+        allow_tools: bool = True,
     ) -> str:
         # Blocks the calling thread for the lifetime of the claude/codex
         # subprocess.  Callers running this from an async context (e.g. the
         # documentation_generator) accept this — there is no concurrent work
         # to do while clustering is in flight anyway.
         effective_model = model or self._model
+        if not allow_tools and self._caw_provider == "claude_code":
+            return self._plain_claude_completion(prompt, system_prompt, effective_model)
         agent = CawAgent(
             provider=self._caw_provider,
             model=effective_model,
-            tools=ToolGroup.READER,
+            # caw rejects an empty tool set; INTERACTION alone (AskUserQuestion,
+            # unusable in -p) leaves no file, shell or web access.
+            tools=ToolGroup.READER if allow_tools else ToolGroup.INTERACTION,
             system_prompt=system_prompt,
         )
-        traj = agent.completion(prompt)
+        if allow_tools:
+            traj = agent.completion(prompt)
+        else:
+            traj = agent.completion(prompt, cwd=neutral_cwd())
         self.last_usage = usage_to_dict(getattr(traj, "total_usage", None))
         return traj.result
+
+    def _plain_claude_completion(
+        self, prompt: str, system_prompt: str | None, model: str | None
+    ) -> str:
+        """``claude -p`` with no tools, no MCP servers and a neutral cwd.
+
+        caw cannot pass these flags. Without them every call also carries
+        Claude Code's tool definitions and the user's MCP servers: ~17k
+        prompt tokens of overhead against ~500 (measured), plus the
+        project memory of whatever directory the shell is in.
+        """
+        cmd = [
+            "claude",
+            "-p",
+            "--output-format",
+            "json",
+            "--tools",
+            "",
+            "--strict-mcp-config",
+        ]
+        if model:
+            cmd += ["--model", model]
+        if system_prompt:
+            cmd += ["--system-prompt", system_prompt]
+        try:
+            proc = subprocess.run(  # noqa: S603 — fixed argv, prompt on stdin
+                cmd,
+                input=prompt,
+                capture_output=True,
+                text=True,
+                cwd=neutral_cwd(),
+                timeout=_PLAIN_TIMEOUT_SEC,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise RuntimeError(f"claude did not answer within {_PLAIN_TIMEOUT_SEC}s") from e
+        data = None
+        for line in reversed(proc.stdout.splitlines()):  # shims may print before the JSON
+            if line.startswith("{"):
+                try:
+                    data = json.loads(line)
+                    break
+                except ValueError:
+                    continue
+        if data is None:
+            tail = (proc.stderr or proc.stdout or "").strip()[-500:]
+            raise RuntimeError(f"claude returned no result (exit {proc.returncode}): {tail}")
+        usage = data.get("usage") or {}
+        self.last_usage = {
+            "input_tokens": usage.get("input_tokens") or 0,
+            "output_tokens": usage.get("output_tokens") or 0,
+            "cache_read_tokens": usage.get("cache_read_input_tokens") or 0,
+            "cache_write_tokens": usage.get("cache_creation_input_tokens") or 0,
+            "cost_usd": data.get("total_cost_usd") or 0.0,
+        }
+        result = data.get("result") or ""
+        if data.get("is_error"):
+            raise RuntimeError(f"claude: {result or data.get('subtype') or 'error'}")
+        return result
 
     # ------------------------------------------------------------------
     # Update agent (incremental updater): read tools + str_replace_editor,

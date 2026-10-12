@@ -58,3 +58,47 @@ def get_index(docs_dir: str | None = None, repo_path: str | None = None) -> QAIn
             index = QAIndex(path, repo_path)
             _cache[path] = (index, now)
         return _cache[path][0]
+
+
+_backends: dict[tuple[str, str | None], object] = {}
+
+
+def load_backend(index: QAIndex, model: str | None = None):
+    """The LLM backend from the user's CodeWiki config (``codewiki config set``).
+
+    Same provider resolution as ``codewiki generate``: claude-code / codex use
+    the CLI subscription, other providers the stored API key.
+    """
+    key = (index.docs_dir, model)
+    with _lock:
+        if key in _backends:
+            return _backends[key]
+    from codewiki.cli.config_manager import ConfigManager
+    from codewiki.src.be.backend import get_backend, is_caw_provider
+
+    manager = ConfigManager()
+    if not manager.load():
+        raise RuntimeError("CodeWiki is not configured. Run `codewiki config set` first.")
+    config = manager.get_config()
+    api_key = manager.get_api_key()
+    if not api_key and not is_caw_provider(getattr(config, "provider", "")):
+        raise RuntimeError("No API key configured. Run `codewiki config set --api-key <key>`.")
+    backend_config = config.to_backend_config(
+        repo_path=index.repo_path or os.path.dirname(index.docs_dir),
+        output_dir=index.docs_dir,
+        api_key=api_key or "",
+    )
+    if model:
+        backend_config.main_model = model
+    backend = get_backend(backend_config)
+    with _lock:
+        _backends[key] = backend
+    return backend
+
+
+def get_engine(docs_dir: str | None = None, model: str | None = None, **engine_options):
+    """A Q&A engine over the (cached) index of ``docs_dir``."""
+    from codewiki.src.be.qa.engine import QAEngine
+
+    index = get_index(docs_dir)
+    return QAEngine(index, load_backend(index, model), **engine_options)

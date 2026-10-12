@@ -118,8 +118,14 @@ class LLMBackend(abc.ABC):
         *,
         model: str | None = None,
         system_prompt: str | None = None,
+        allow_tools: bool = True,
     ) -> str:
-        """Single-shot text completion, with an optional system message."""
+        """Single-shot text completion, with an optional system message.
+
+        ``allow_tools=False`` asks for a plain answer from the prompt alone:
+        a subscription CLI would otherwise open files itself (the Q&A engine
+        already put exactly what is needed in the prompt).
+        """
 
     @abc.abstractmethod
     async def run_module_agent(

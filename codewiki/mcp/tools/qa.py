@@ -116,3 +116,36 @@ def handle_read(args: dict[str, Any]) -> str:
     if related:
         footer.append("Related ids: " + ", ".join(related[:10]))
     return "\n\n".join(blocks + ["\n".join(footer)])
+
+
+def handle_impact(args: dict[str, Any]) -> str:
+    from codewiki.src.be.qa.impact import find_references
+
+    symbol = (args.get("symbol") or "").strip()
+    if not symbol:
+        raise ValueError("symbol is required")
+    change = args.get("change") or "modify"
+    if change not in ("rename", "remove", "modify"):
+        raise ValueError("change must be one of: rename, remove, modify")
+    index = get_index(args.get("docs_dir"))
+    report = find_references(index, symbol, file=args.get("file") or None, change=change)
+    text = report.render()
+    if report.all_ids:
+        text += "\n\nRead the affected code with codewiki_read(ids=[...]) using the ids above."
+    return f"{text}\n\n[{_freshness_line(index)}]"
+
+
+def handle_ask(args: dict[str, Any]) -> str:
+    from codewiki.src.be.qa import get_engine
+
+    question = (args.get("question") or "").strip()
+    if not question:
+        raise ValueError("question is required")
+    budget = args.get("max_context_tokens")
+    engine = get_engine(args.get("docs_dir"))
+    result = engine.ask(
+        question,
+        session_id=args.get("session_id") or None,
+        max_context_tokens=int(budget) if budget else None,
+    )
+    return result.render()

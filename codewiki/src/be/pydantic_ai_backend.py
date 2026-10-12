@@ -67,6 +67,7 @@ class PydanticAIBackend(LLMBackend):
         *,
         model: str | None = None,
         system_prompt: str | None = None,
+        allow_tools: bool = True,  # API completions never use tools
     ) -> str:
         pop_last_usage()
         result = call_llm(prompt, self._config, model=model, system_prompt=system_prompt)

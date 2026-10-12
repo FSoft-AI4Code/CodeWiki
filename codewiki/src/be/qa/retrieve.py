@@ -239,11 +239,35 @@ class Retriever:
             truncated = True
         return ReadItem(uid, kind, title, location, text, approx_tokens(text), stale, truncated)
 
+    def _contained(self, ids: list[str]) -> set[str]:
+        """Selected code units whose lines lie inside another selected unit of the same file.
+
+        Reading ``Class`` and ``Class.method`` would send the method body twice;
+        the container already holds it.
+        """
+        code = [self.index.code[i] for i in ids if i in self.index.code]
+        inside = set()
+        for unit in code:
+            for other in code:
+                if (
+                    other.id != unit.id
+                    and other.file == unit.file
+                    and other.start_line <= unit.start_line
+                    and unit.end_line <= other.end_line
+                    and (other.end_line - other.start_line) > (unit.end_line - unit.start_line)
+                ):
+                    inside.add(unit.id)
+                    break
+        return inside
+
     def assemble(self, ids: list[str], budget_tokens: int) -> list[ReadItem]:
         """Greedy fill in the given order; a too-big first item is truncated, later ones skipped."""
         out: list[ReadItem] = []
         used = 0
+        skip = self._contained(ids)
         for uid in ids:
+            if uid in skip:
+                continue
             item = self.read_one(uid)
             if item is None:
                 continue
