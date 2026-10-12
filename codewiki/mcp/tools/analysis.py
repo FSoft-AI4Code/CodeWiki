@@ -229,6 +229,7 @@ def _detect_via_mtime(
         ".scala",
         ".sc",
         ".rs",
+        ".dart",
     }
 
     changed: list[str] = []
