@@ -28,8 +28,15 @@ from codewiki.src.be.dependency_analyzer.utils.security import safe_open_text
 logger = logging.getLogger(__name__)
 
 
-class TimeoutError(Exception):
-    """Raised when file parsing exceeds timeout."""
+class TimeoutError(BaseException):
+    """Raised when file parsing exceeds timeout.
+
+    A ``BaseException`` on purpose: the language analyzers wrap many small
+    steps in ``except Exception`` blocks.  If the alarm fired inside one of
+    them, the error was swallowed, the alarm was already spent, and a slow
+    file (e.g. a multi-megabyte vendored JS bundle) ran forever.  Only
+    ``_analyze_code_file`` catches it.
+    """
 
 
 @contextmanager
