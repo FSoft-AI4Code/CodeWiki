@@ -30,6 +30,7 @@ from caw import Agent as CawAgent
 from caw import ToolGroup
 
 from codewiki.src.be.agent_tools.deps import CodeWikiDeps
+from codewiki.src.be.agent_tools.doc_guard import doc_written
 from codewiki.src.be.backend import AgentReply, LLMBackend, usage_to_dict
 from codewiki.src.be.cluster_modules import format_potential_core_components
 from codewiki.src.be.dependency_analyzer.models.core import Node
@@ -39,7 +40,7 @@ from codewiki.src.be.prompt_template import (
     format_user_prompt,
 )
 from codewiki.src.be.utils import count_tokens, is_complex_module, set_main_loop
-from codewiki.src.be.doc_layout import config_layout, find_doc
+from codewiki.src.be.doc_layout import config_layout, find_doc, module_doc_file
 from codewiki.src.config import MODULE_TREE_FILENAME, OVERVIEW_FILENAME, Config
 from codewiki.src.utils import file_manager
 
@@ -497,6 +498,16 @@ class CawBackend(LLMBackend):
                 traj.num_turns,
                 traj.total_tool_calls,
             )
+            if not doc_written(working_dir, module_name, list(module_path), deps.module_tree):
+                logger.error(
+                    "Agent for %s finished without writing %s (turns=%d, tool_calls=%d). "
+                    "Final answer: %s",
+                    module_name,
+                    module_doc_file(module_name, list(module_path), config_layout(config)),
+                    traj.num_turns,
+                    traj.total_tool_calls,
+                    " ".join((traj.result or "").split())[:300] or "<empty>",
+                )
             self.last_usage = usage_to_dict(getattr(traj, "total_usage", None))
             file_manager.save_json(deps.module_tree, module_tree_path)
             return deps.module_tree

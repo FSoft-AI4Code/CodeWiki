@@ -18,6 +18,7 @@ from pydantic_ai import Agent
 from pydantic_ai.usage import UsageLimits
 
 from codewiki.src.be.agent_tools.deps import CodeWikiDeps
+from codewiki.src.be.agent_tools.doc_guard import run_until_doc_written
 from codewiki.src.be.agent_tools.generate_sub_module_documentations import (
     generate_sub_module_documentation_tool,
 )
@@ -168,7 +169,8 @@ class PydanticAIBackend(LLMBackend):
         )
 
         try:
-            result = await agent.run(
+            _, usage = await run_until_doc_written(
+                agent,
                 format_user_prompt(
                     module_name=module_name,
                     core_component_ids=core_component_ids,
@@ -178,9 +180,12 @@ class PydanticAIBackend(LLMBackend):
                     layout=config_layout(config),
                 ),
                 deps=deps,
+                module_name=module_name,
+                module_path=module_path,
+                layout=config_layout(config),
                 usage_limits=UsageLimits(request_limit=config.request_limit),
             )
-            self.last_usage = _run_usage(result)
+            self.last_usage = usage_to_dict(usage)
             file_manager.save_json(deps.module_tree, module_tree_path)
             return deps.module_tree
         except Exception as e:
