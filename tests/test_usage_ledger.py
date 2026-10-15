@@ -4,13 +4,22 @@ import json
 import threading
 from types import SimpleNamespace
 
-from caw.models import UsageStats
+import pytest
 
 from codewiki.cli.utils.instructions import _echo_usage
-from codewiki.src.be import caw_backend
-from codewiki.src.be.backend import UsageLedger
-from codewiki.src.be.caw_backend import CawBackend
+from codewiki.src.be.backend import LLMBackend, UsageLedger
 from codewiki.src.be.documentation_generator import DocumentationGenerator
+
+
+def _usage(input_tokens=0, output_tokens=0, cache_read_tokens=0, cost_usd=0.0):
+    """Stand-in for caw's UsageStats (CI does not install caw)."""
+    return SimpleNamespace(
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cache_read_tokens=cache_read_tokens,
+        cache_write_tokens=0,
+        cost_usd=cost_usd,
+    )
 
 
 def test_summary_totals_and_phases():
@@ -74,7 +83,11 @@ def test_add_is_thread_safe():
     assert summary["totals"]["input_tokens"] == 4000
 
 
-def _caw_backend(monkeypatch, usage: UsageStats) -> CawBackend:
+def _caw_backend(monkeypatch, usage):
+    pytest.importorskip("caw")
+    from codewiki.src.be import caw_backend
+    from codewiki.src.be.caw_backend import CawBackend
+
     class FakeCawAgent:
         def __init__(self, **kwargs):
             self.model = kwargs.get("model")
@@ -96,7 +109,7 @@ def _caw_backend(monkeypatch, usage: UsageStats) -> CawBackend:
 
 
 def test_caw_complete_records_usage(monkeypatch):
-    usage = UsageStats(input_tokens=1000, output_tokens=200, cache_read_tokens=50, cost_usd=0.12)
+    usage = _usage(input_tokens=1000, output_tokens=200, cache_read_tokens=50, cost_usd=0.12)
     backend = _caw_backend(monkeypatch, usage)
 
     with backend.usage_ledger.in_phase("overview", target="repo"):
@@ -112,8 +125,17 @@ def test_caw_complete_records_usage(monkeypatch):
     assert call["cost_usd"] == 0.12
 
 
-def test_metadata_includes_usage(tmp_path, monkeypatch):
-    backend = _caw_backend(monkeypatch, UsageStats(input_tokens=10, cost_usd=0.25))
+class _StubBackend(LLMBackend):
+    def complete(self, prompt, *, model=None, system_prompt=None):
+        self._record_usage("complete", "", _usage(input_tokens=10, cost_usd=0.25))
+        return "ok"
+
+    async def run_module_agent(self, *args, **kwargs):
+        return {}
+
+
+def test_metadata_includes_usage(tmp_path):
+    backend = _StubBackend()
     backend.complete("prompt")
 
     gen = object.__new__(DocumentationGenerator)
