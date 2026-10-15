@@ -61,7 +61,7 @@ dependencies = [
     "python-multipart>=0.0.20",
     "colorama>=0.4.6",
     "logfire>=4.1.0",
-    "coding-agent-wrapper @ git+https://github.com/anhnh2002/caw@fix/codex-exec-robustness",
+    "coding-agent-wrapper @ git+https://github.com/anhnh2002/caw@main",
     "mcp>=1.0.0"
 ]
 

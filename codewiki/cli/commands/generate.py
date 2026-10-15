@@ -851,6 +851,10 @@ def generate_command(
                 "total_files_analyzed": job.statistics.total_files_analyzed,
                 "generation_time": generation_time,
                 "total_tokens_used": job.statistics.total_tokens_used,
+                "usage_totals": job.statistics.usage_totals,
+                "total_cost_usd": job.statistics.total_cost_usd,
+                "unpriced_models": job.statistics.unpriced_models,
+                "provider": getattr(config, "provider", "openai-compatible"),
             },
         )
 
