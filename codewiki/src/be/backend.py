@@ -18,6 +18,9 @@ Provider selection happens in one place: :func:`get_backend`.
 from __future__ import annotations
 
 import abc
+import contextlib
+import threading
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List
 
@@ -65,6 +68,87 @@ def usage_to_dict(usage: Any) -> dict[str, Any] | None:
     return out or None
 
 
+_TOKEN_KEYS = ("input_tokens", "output_tokens", "prompt_tokens", "completion_tokens")
+
+
+@dataclass
+class UsageLedger:
+    """Every LLM call of one CodeWiki run, with its tokens and cost.
+
+    Calls are recorded once per CLI process / agent run, so nested caw
+    sub-module agents (separate ``claude`` / ``codex`` processes) add up
+    without double counting.  ``add`` can be called from caw's MCP worker
+    threads, hence the lock.  ``phase`` labels the stage the calls belong to
+    (clustering, modules, overview, ...) and ``target`` the page a
+    ``complete()`` call is for; stages run sequentially.
+    """
+
+    phase: str = "generate"
+    target: str = ""
+    entries: list[dict[str, Any]] = field(default_factory=list)
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
+
+    @contextlib.contextmanager
+    def in_phase(self, name: str, target: str = "") -> Iterator[None]:
+        previous = (self.phase, self.target)
+        self.phase, self.target = name, target
+        try:
+            yield
+        finally:
+            self.phase, self.target = previous
+
+    def add(
+        self,
+        kind: str,
+        target: str,
+        usage: dict[str, Any] | None,
+        *,
+        seconds: float = 0.0,
+        model: str | None = None,
+    ) -> None:
+        entry: dict[str, Any] = {
+            "phase": self.phase,
+            "kind": kind,
+            "target": target or self.target,
+            "model": model or "",
+            "seconds": round(seconds, 2),
+            **(usage or {}),
+        }
+        with self._lock:
+            self.entries.append(entry)
+
+    def summary(self) -> dict[str, Any]:
+        """Totals overall and per phase, plus the per-call list.
+
+        A call with tokens but no ``cost_usd`` is *unpriced*: its model is
+        listed under ``unpriced_models`` so a $0 total is never mistaken for
+        a free run.
+        """
+        with self._lock:
+            entries = [dict(e) for e in self.entries]
+        totals: dict[str, float] = {}
+        by_phase: dict[str, dict[str, float]] = {}
+        unpriced: set[str] = set()
+        for e in entries:
+            phase_totals = by_phase.setdefault(e["phase"], {"calls": 0})
+            phase_totals["calls"] += 1
+            for k, v in e.items():
+                if k == "seconds" or not isinstance(v, (int, float)) or isinstance(v, bool):
+                    continue
+                totals[k] = totals.get(k, 0) + v
+                phase_totals[k] = phase_totals.get(k, 0) + v
+            if not e.get("cost_usd") and any(e.get(k) for k in _TOKEN_KEYS):
+                unpriced.add(e["model"] or "<default>")
+        return {
+            "scope": "this run only (modules resumed from disk cost nothing)",
+            "n_calls": len(entries),
+            "totals": totals,
+            "by_phase": by_phase,
+            "unpriced_models": sorted(unpriced),
+            "calls": entries,
+        }
+
+
 CAW_PROVIDERS = frozenset({"claude-code", "codex"})
 
 
@@ -79,9 +163,32 @@ class LLMBackend(abc.ABC):
     ``last_usage`` holds the token usage of the most recent ``complete`` /
     ``run_module_agent`` / ``run_update_agent`` call when the provider exposes
     it (``None`` otherwise). The incremental updater reads it for its record.
+    ``usage_ledger`` accumulates every call of the run for the cost report.
     """
 
     last_usage: dict[str, Any] | None = None
+    _usage_ledger: UsageLedger | None = None
+
+    @property
+    def usage_ledger(self) -> UsageLedger:
+        if self._usage_ledger is None:
+            self._usage_ledger = UsageLedger()
+        return self._usage_ledger
+
+    def _record_usage(
+        self,
+        kind: str,
+        target: str,
+        usage: Any,
+        *,
+        seconds: float = 0.0,
+        model: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Set ``last_usage`` from a provider usage object and log it in the ledger."""
+        usage_dict = usage_to_dict(usage)
+        self.last_usage = usage_dict
+        self.usage_ledger.add(kind, target, usage_dict, seconds=seconds, model=model)
+        return usage_dict
 
     @abc.abstractmethod
     def complete(

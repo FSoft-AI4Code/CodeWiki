@@ -68,6 +68,7 @@ class CLIDocumentationGenerator:
         self.commit_id = commit_id
         self.progress_tracker = ProgressTracker(total_stages=5, verbose=verbose)
         self.job = DocumentationJob()
+        self._usage_ledger = None
 
         # Setup job metadata
         self.job.repository_path = str(repo_path)
@@ -168,6 +169,7 @@ class CLIDocumentationGenerator:
 
             # Run backend documentation generation
             asyncio.run(self._run_backend_generation(backend_config))
+            self._record_usage_statistics()
 
             # Stage 4: HTML Generation (optional)
             if self.generate_html:
@@ -198,6 +200,7 @@ class CLIDocumentationGenerator:
 
         # Create documentation generator
         doc_generator = DocumentationGenerator(backend_config, commit_id=self.commit_id)
+        self._usage_ledger = doc_generator.usage_ledger
 
         # Incremental update (component-level): keep the previous graph before
         # the builder overwrites it, so the updater can diff old against new.
@@ -309,18 +312,21 @@ class CLIDocumentationGenerator:
                             "Clustering modules with LLM...",
                         )
                 cluster_model = backend_config.cluster_model or None
-                module_tree = cluster_modules(
-                    leaf_nodes,
-                    components,
-                    backend_config,
-                    completer=lambda p: doc_generator.backend.complete(p, model=cluster_model),
-                )
-                if module_tree:
-                    module_tree = super_group_modules(
-                        module_tree,
+                with doc_generator.usage_ledger.in_phase("clustering"):
+                    module_tree = cluster_modules(
+                        leaf_nodes,
+                        components,
                         backend_config,
                         completer=lambda p: doc_generator.backend.complete(p, model=cluster_model),
                     )
+                    if module_tree:
+                        module_tree = super_group_modules(
+                            module_tree,
+                            backend_config,
+                            completer=lambda p: doc_generator.backend.complete(
+                                p, model=cluster_model
+                            ),
+                        )
                 # Artifact nodes the clustering LLM dropped get a fixed module
                 # so build/CI/config coverage does not depend on the LLM.
                 if getattr(backend_config, "artifacts_enabled", True):
@@ -440,7 +446,8 @@ class CLIDocumentationGenerator:
         updater = IncrementalUpdater(
             backend_config, doc_generator.backend, doc_generator, update_opts
         )
-        record = await updater.run(prev_graph_path, components, leaf_nodes, revision)
+        with doc_generator.usage_ledger.in_phase("update"):
+            record = await updater.run(prev_graph_path, components, leaf_nodes, revision)
         self._last_update_record = record
         summary = record.summary()
         if self.verbose:
@@ -546,6 +553,29 @@ class CLIDocumentationGenerator:
             self.progress_tracker.update_stage(1.0, "Generated index.html")
 
         self.progress_tracker.complete_stage()
+
+    def _record_usage_statistics(self):
+        """Copy the run's token and cost totals from the usage ledger into the job."""
+        if self._usage_ledger is None:
+            return
+        summary = self._usage_ledger.summary()
+        totals = summary["totals"]
+        stats = self.job.statistics
+        stats.usage_totals = totals
+        stats.total_tokens_used = int(
+            sum(
+                totals.get(k, 0)
+                for k in (
+                    "input_tokens",
+                    "output_tokens",
+                    "cache_read_tokens",
+                    "cache_write_tokens",
+                )
+            )
+            or totals.get("total_tokens", 0)
+        )
+        stats.total_cost_usd = totals.get("cost_usd")
+        stats.unpriced_models = summary["unpriced_models"]
 
     def _finalize_job(self):
         """Finalize the job (metadata already created by backend)."""

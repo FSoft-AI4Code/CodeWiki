@@ -68,8 +68,15 @@ class PydanticAIBackend(LLMBackend):
         system_prompt: str | None = None,
     ) -> str:
         pop_last_usage()
+        started = time.time()
         result = call_llm(prompt, self._config, model=model, system_prompt=system_prompt)
-        self.last_usage = pop_last_usage()
+        self._record_usage(
+            "complete",
+            "",
+            pop_last_usage(),
+            seconds=time.time() - started,
+            model=model or self._config.main_model,
+        )
         return result
 
     async def run_update_agent(
@@ -93,8 +100,13 @@ class PydanticAIBackend(LLMBackend):
             usage_limits=UsageLimits(request_limit=self._config.request_limit),
         )
         seconds = time.time() - started
-        usage = _run_usage(result)
-        self.last_usage = usage
+        usage = self._record_usage(
+            "update_agent",
+            deps.current_module_name,
+            _run_usage(result),
+            seconds=seconds,
+            model=self._config.main_model,
+        )
         text = result.output if isinstance(result.output, str) else str(result.output)
         return AgentReply(text=text, usage=usage, seconds=seconds)
 
@@ -167,6 +179,7 @@ class PydanticAIBackend(LLMBackend):
             custom_instructions=self._custom_instructions,
         )
 
+        started = time.time()
         try:
             result = await agent.run(
                 format_user_prompt(
@@ -180,7 +193,15 @@ class PydanticAIBackend(LLMBackend):
                 deps=deps,
                 usage_limits=UsageLimits(request_limit=config.request_limit),
             )
-            self.last_usage = _run_usage(result)
+            # Covers this module's own run; pydantic-ai sub-module agents run
+            # with their own usage and are not counted here.
+            self._record_usage(
+                "module_agent",
+                module_name,
+                _run_usage(result),
+                seconds=time.time() - started,
+                model=config.main_model,
+            )
             file_manager.save_json(deps.module_tree, module_tree_path)
             return deps.module_tree
         except Exception as e:

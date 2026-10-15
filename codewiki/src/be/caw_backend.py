@@ -30,7 +30,7 @@ from caw import Agent as CawAgent
 from caw import ToolGroup
 
 from codewiki.src.be.agent_tools.deps import CodeWikiDeps
-from codewiki.src.be.backend import AgentReply, LLMBackend, usage_to_dict
+from codewiki.src.be.backend import AgentReply, LLMBackend
 from codewiki.src.be.cluster_modules import format_potential_core_components
 from codewiki.src.be.dependency_analyzer.models.core import Node
 from codewiki.src.be.prompt_template import (
@@ -260,8 +260,15 @@ class CawBackend(LLMBackend):
             tools=ToolGroup.READER,
             system_prompt=system_prompt,
         )
+        started = time.time()
         traj = agent.completion(prompt)
-        self.last_usage = usage_to_dict(getattr(traj, "total_usage", None))
+        self._record_usage(
+            "complete",
+            "",
+            getattr(traj, "total_usage", None),
+            seconds=time.time() - started,
+            model=getattr(traj, "model", None) or effective_model,
+        )
         return traj.result
 
     # ------------------------------------------------------------------
@@ -305,12 +312,18 @@ class CawBackend(LLMBackend):
         except Exception as e:
             logger.error("Update agent for %s failed via caw: %s", deps.current_module_name, e)
             raise
-        usage = usage_to_dict(getattr(traj, "total_usage", None))
-        self.last_usage = usage
+        seconds = time.time() - started
+        usage = self._record_usage(
+            "update_agent",
+            deps.current_module_name,
+            getattr(traj, "total_usage", None),
+            seconds=seconds,
+            model=getattr(traj, "model", None) or self._model,
+        )
         return AgentReply(
             text=traj.result or "",
             usage=usage,
-            seconds=time.time() - started,
+            seconds=seconds,
             meta={"turns": traj.num_turns, "tool_calls": traj.total_tool_calls},
         )
 
@@ -485,19 +498,29 @@ class CawBackend(LLMBackend):
             run_cwd = working_dir
         else:
             run_cwd = self._repo_root
+        started = time.time()
         try:
             os.chdir(run_cwd)
             try:
                 traj = agent.completion(user_prompt)
             finally:
                 os.chdir(original_cwd)
+            # Nested sub-module agents are separate CLI processes that record
+            # their own usage, so this covers only this module's own run.
+            usage = self._record_usage(
+                "module_agent",
+                module_name,
+                getattr(traj, "total_usage", None),
+                seconds=time.time() - started,
+                model=getattr(traj, "model", None) or self._model,
+            )
             logger.info(
-                "Module %s completed via caw (turns=%d, tool_calls=%d)",
+                "Module %s completed via caw (turns=%d, tool_calls=%d, cost=$%.4f)",
                 module_name,
                 traj.num_turns,
                 traj.total_tool_calls,
+                (usage or {}).get("cost_usd", 0.0),
             )
-            self.last_usage = usage_to_dict(getattr(traj, "total_usage", None))
             file_manager.save_json(deps.module_tree, module_tree_path)
             return deps.module_tree
         except Exception as e:
