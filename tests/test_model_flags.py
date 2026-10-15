@@ -16,10 +16,21 @@ class Stop(Exception):
 def captured(tmp_path, monkeypatch):
     seen = {}
     cfg = SimpleNamespace(
-        main_model="saved-main", cluster_model="saved-cluster", fallback_model="saved-fallback",
-        base_url="http://x", provider="openai-compatible", aws_region="us-east-1",
-        agent_instructions=None, max_tokens=1, max_token_per_module=1, max_token_per_leaf_module=1,
-        max_depth=1, request_limit=1, agent_retries=1, use_gitignore=True, prompt_caching=False,
+        main_model="saved-main",
+        cluster_model="saved-cluster",
+        fallback_model="saved-fallback",
+        base_url="http://x",
+        provider="openai-compatible",
+        aws_region="us-east-1",
+        agent_instructions=None,
+        max_tokens=1,
+        max_token_per_module=1,
+        max_token_per_leaf_module=1,
+        max_depth=1,
+        request_limit=1,
+        agent_retries=1,
+        use_gitignore=True,
+        prompt_caching=False,
     )
 
     class FakeManager:
@@ -49,10 +60,19 @@ def captured(tmp_path, monkeypatch):
 def test_saved_models_by_default(captured):
     CliRunner().invoke(gen.generate_command, ["-o", "out"])
     assert (captured["main_model"], captured["cluster_model"], captured["fallback_model"]) == (
-        "saved-main", "saved-cluster", "saved-fallback")
+        "saved-main",
+        "saved-cluster",
+        "saved-fallback",
+    )
 
 
 def test_flags_override_saved_models(captured):
-    CliRunner().invoke(gen.generate_command, ["-o", "out", "--main-model", "m", "--cluster-model", "c",
-                                              "--fallback-model", "f"])
-    assert (captured["main_model"], captured["cluster_model"], captured["fallback_model"]) == ("m", "c", "f")
+    CliRunner().invoke(
+        gen.generate_command,
+        ["-o", "out", "--main-model", "m", "--cluster-model", "c", "--fallback-model", "f"],
+    )
+    assert (captured["main_model"], captured["cluster_model"], captured["fallback_model"]) == (
+        "m",
+        "c",
+        "f",
+    )
