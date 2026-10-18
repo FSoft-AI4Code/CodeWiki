@@ -3,11 +3,15 @@ name: Build wheels
 # Builds the source-hidden (Cython-compiled) wheels with the scripts in
 # packaging/build/, so CI and local builds run the same steps.
 #
-# Pushes to main only build and smoke-test. Pushing a tag like v2.0.1 also
+# Pull requests to main and pushes to main only build and test, so wheel
+# breakage shows up before merging. Pushing a tag like v2.0.1 also
 # publishes the wheels to PyPI as nc-codewiki (wheels only, no sdist, so the
 # source is never uploaded). Bump `version` in pyproject.toml first: PyPI
 # accepts each version only once.
 on:
+  pull_request:
+    branches: [main]
+    paths-ignore: ["**.md", "guides/**", "benchmarks/**"]
   push:
     branches: [main]
     tags: ["v*"]
