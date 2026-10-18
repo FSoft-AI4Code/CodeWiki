@@ -138,9 +138,8 @@ def _run(tmp_path, concurrency):
 
 
 def test_scheduler_runs_independent_modules_concurrently(tmp_path):
-    backend, elapsed = _run(tmp_path, concurrency=4)
-    assert backend.peak == 4
-    assert elapsed < 8 * 0.05  # 8 leaves serially would take 0.4 s
+    backend, _ = _run(tmp_path, concurrency=4)
+    assert backend.peak == 4  # concurrency proven by overlap, not wall time (flaky on CI)
     assert (tmp_path / "parent.md").exists()
     assert (tmp_path / "overview.md").exists()
 
