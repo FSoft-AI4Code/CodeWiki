@@ -22,10 +22,11 @@ from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from codewiki import __version__
 from codewiki.src.be.qa import get_engine, get_index, resolve_docs_dir
+from codewiki.src.be.qa.engine import AskCancelled
 from codewiki.src.be.qa.retrieve import Retriever
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,8 @@ class AskRequest(BaseModel):
     question: str
     session_id: str | None = None
     max_context_tokens: int | None = None
+    # Turns of the session to keep before answering (edit / retry an earlier question).
+    keep_turns: int | None = Field(None, ge=0)
 
 
 class SearchRequest(BaseModel):
@@ -155,9 +158,15 @@ def create_app(
             raise HTTPException(503, str(e)) from e
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
+        stopped = threading.Event()
 
         def emit(event: dict) -> None:
-            loop.call_soon_threadsafe(queue.put_nowait, event)
+            if stopped.is_set():  # the client left; the loop may be gone too
+                return
+            try:
+                loop.call_soon_threadsafe(queue.put_nowait, event)
+            except RuntimeError:  # event loop closed: the server is shutting down
+                pass
 
         def work() -> None:
             try:
@@ -166,9 +175,13 @@ def create_app(
                     session_id=req.session_id,
                     max_context_tokens=req.max_context_tokens,
                     on_event=emit,
+                    keep_turns=req.keep_turns,
+                    should_stop=stopped.is_set,
                 )
                 emit({"type": "answer", **result.to_dict()})
                 logger.info("ask: %s", result.stats.footer())
+            except AskCancelled:
+                logger.info("ask stopped by the client")
             except Exception as e:  # noqa: BLE001 — reported in the stream
                 logger.warning("ask failed: %s", e)
                 emit({"type": "error", "message": str(e)})
@@ -178,11 +191,16 @@ def create_app(
         threading.Thread(target=work, name="codewiki-ask", daemon=True).start()
 
         async def stream():
-            while True:
-                event = await queue.get()
-                if event["type"] == "end":
-                    break
-                yield json.dumps(event, ensure_ascii=False) + "\n"
+            try:
+                while True:
+                    event = await queue.get()
+                    if event["type"] == "end":
+                        break
+                    yield json.dumps(event, ensure_ascii=False) + "\n"
+            finally:
+                # Also runs when the browser disconnects (Stop, closed tab):
+                # the engine then stops before its next LLM call.
+                stopped.set()
 
         return StreamingResponse(stream(), media_type="application/x-ndjson")
 

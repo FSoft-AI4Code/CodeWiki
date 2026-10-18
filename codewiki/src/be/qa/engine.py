@@ -43,6 +43,10 @@ _OUTLINE_CHARS = 9_000
 _SUMMARY_RE = re.compile(r"<SUMMARY>(.*?)</SUMMARY>", re.DOTALL | re.IGNORECASE)
 
 
+class AskCancelled(Exception):
+    """The asker stopped waiting (the chat's Stop button, a closed connection)."""
+
+
 @dataclass
 class AskResult:
     answer: str
@@ -51,6 +55,9 @@ class AskResult:
     session_id: str
     impact: str | None = None
     freshness: str = ""
+    # Turns the session remembers after this answer; the chat sends it back
+    # as ``keep_turns`` to edit or retry a question.
+    turns: int = 0
 
     def to_dict(self) -> dict:
         return {
@@ -60,6 +67,7 @@ class AskResult:
             "session_id": self.session_id,
             "impact": self.impact,
             "freshness": self.freshness,
+            "turns": self.turns,
         }
 
     def render(self) -> str:
@@ -127,6 +135,7 @@ class _Run:
     stats: AskStats
     history: list[dict]
     on_event: Callable[[dict], None]
+    should_stop: Callable[[], bool] = lambda: False
     cands: dict[str, Candidate] = field(default_factory=dict)
     kept: list[str] = field(default_factory=list)
     impact: ImpactReport | None = None
@@ -212,6 +221,10 @@ class QAEngine:
         return min(budget, cap) if cap else budget
 
     def _status(self, run: _Run, message: str) -> None:
+        # Each step starts with a status, so this is where a stop takes effect;
+        # an LLM call already running finishes first.
+        if run.should_stop():
+            raise AskCancelled()
         try:
             run.on_event({"type": "status", "message": message})
         except Exception:  # noqa: BLE001 — a broken listener must not break the answer
@@ -225,12 +238,16 @@ class QAEngine:
         session_id: str | None = None,
         max_context_tokens: int | None = None,
         on_event: Callable[[dict], None] | None = None,
+        keep_turns: int | None = None,
+        should_stop: Callable[[], bool] | None = None,
     ) -> AskResult:
         question = (question or "").strip()
         if not question:
             raise ValueError("question is required")
-        session_id, history = self.sessions.get_or_create(session_id)
+        session_id, history = self.sessions.get_or_create(session_id, keep_turns)
         run = _Run(question, AskStats(), history, on_event or (lambda _e: None))
+        if should_stop is not None:
+            run.should_stop = should_stop
         ix = self.index
         freshness = ix.freshness.summary()
         run.stats.stale_files = len(ix.freshness.touched)
@@ -279,6 +296,11 @@ class QAEngine:
                 [Candidate(cid, top, {"impact"}) for cid in run.impact.all_ids[:25]],
             )
         run.kept = self._valid_ids(run, plan.get("keep"), 30)
+        self._status(
+            run,
+            f"Found {len(run.cands)} candidate section(s) and function(s) "
+            f"for this {intent} question…",
+        )
 
         # 3. refine
         stop = "confident" if confidence >= CONFIDENT and run.kept else ""
@@ -352,6 +374,8 @@ class QAEngine:
             ),
             P.ANSWER_SYSTEM,
         )
+        if run.should_stop():  # stopped while the answer was being written
+            raise AskCancelled()
         summary_match = _SUMMARY_RE.search(reply)
         answer = _SUMMARY_RE.sub("", reply).strip() or "(no answer)"
         if summary_match:
@@ -372,6 +396,7 @@ class QAEngine:
             session_id=session_id,
             impact=run.impact.render() if run.impact else None,
             freshness=freshness,
+            turns=self.sessions.turn_count(session_id),
         )
         log_question(run.stats, question, ix.docs_dir, self.log_questions)
         logger.debug("Q&A: %s", run.stats.footer())

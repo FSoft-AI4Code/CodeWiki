@@ -21,9 +21,10 @@ def client(tmp_path, monkeypatch):
     _, docs_dir = build(tmp_path)
     (docs_dir / "index.html").write_text("<html>docs</html>")
     backend = ScriptedBackend({"keep": [UNSIGN], "confidence": 95})
+    sessions = SessionStore()  # like get_engine, which reuses one engine
 
     def factory():
-        return QAEngine(QAIndex(str(docs_dir)), backend, sessions=SessionStore())
+        return QAEngine(QAIndex(str(docs_dir)), backend, sessions=sessions)
 
     app = create_app(str(docs_dir), {"http://127.0.0.1:8765", PAGES}, engine_factory=factory)
     return TestClient(app), backend
@@ -74,6 +75,71 @@ def test_ask_streams_status_then_answer(client):
     )
     assert events[-1]["session_id"] == answer["session_id"]
     assert c.post("/api/ask", json={"question": "  "}).status_code == 400
+
+
+def test_ask_passes_keep_turns_and_returns_the_turn_count(client):
+    c, backend = client
+    backend.answer = "Answer.\n<SUMMARY>expiry uses MAX_AGE</SUMMARY>"
+    first = _events(c.post("/api/ask", json={"question": "How does expiry work?"}))[-1]
+    assert first["turns"] == 1
+    sid = first["session_id"]
+    second = _events(c.post("/api/ask", json={"question": "And?", "session_id": sid}))[-1]
+    assert second["turns"] == 2
+    # Retrying the first question: the server forgets both earlier turns first.
+    redo = _events(
+        c.post("/api/ask", json={"question": "Again?", "session_id": sid, "keep_turns": 0})
+    )[-1]
+    assert redo["turns"] == 1
+    assert c.post("/api/ask", json={"question": "q", "keep_turns": -1}).status_code == 422
+
+
+def test_closing_the_stream_stops_the_engine(tmp_path, monkeypatch):
+    """The chat's Stop button aborts the fetch; no further LLM call may start."""
+    import socket
+    import threading
+    import time
+
+    import httpx
+    import uvicorn
+
+    monkeypatch.setenv("CODEWIKI_QA_LOG_DIR", str(tmp_path / "logs"))
+    _, docs_dir = build(tmp_path)
+
+    class SlowBackend(ScriptedBackend):
+        def complete(self, prompt, **kw):
+            time.sleep(0.4)
+            return super().complete(prompt, **kw)
+
+    backend = SlowBackend(
+        {"keep": [], "confidence": 10}, rounds=[{"keep": [], "confidence": 20}] * 5
+    )
+    app = create_app(
+        str(docs_dir),
+        set(),
+        engine_factory=lambda: QAEngine(QAIndex(str(docs_dir)), backend, sessions=SessionStore()),
+    )
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    try:
+        for _ in range(100):
+            if server.started:
+                break
+            time.sleep(0.05)
+        with httpx.stream(
+            "POST", f"http://127.0.0.1:{port}/api/ask", json={"question": "How?"}, timeout=10
+        ) as r:
+            first = next(r.iter_lines())
+            assert json.loads(first)["type"] == "status"
+        # The plan call was running when the client left; let it finish.
+        time.sleep(1.5)
+        assert len(backend.calls) == 1
+    finally:
+        server.should_exit = True
+        thread.join(5)
 
 
 def test_ask_errors_are_streamed(tmp_path, monkeypatch):

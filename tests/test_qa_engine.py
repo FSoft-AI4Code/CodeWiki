@@ -171,6 +171,68 @@ def test_follow_up_sees_the_previous_summary(docs):
     assert "Earlier in this conversation" in plan_prompt and "expiry uses MAX_AGE" in plan_prompt
 
 
+def test_keep_turns_forgets_answers_after_an_edited_question(docs):
+    _, docs_dir = docs
+    store = SessionStore()
+    backend = ScriptedBackend(
+        {"keep": [UNSIGN], "confidence": 95},
+        answer="Answer.\n<SUMMARY>expiry uses MAX_AGE</SUMMARY>",
+    )
+    eng = QAEngine(QAIndex(str(docs_dir)), backend, sessions=store)
+    first = eng.ask("How does expiry work?")
+    second = eng.ask("And the default?", session_id=first.session_id)
+    assert (first.turns, second.turns) == (1, 2)
+    assert first.to_dict()["turns"] == 1
+    # The chat edited the first question: nothing it remembered should survive.
+    redo = eng.ask("How does signing work?", session_id=first.session_id, keep_turns=0)
+    assert "Earlier in this conversation" not in backend.prompts(P.PLAN_SYSTEM)[-1]
+    assert redo.turns == 1 and redo.session_id == first.session_id
+
+
+def test_should_stop_cancels_before_the_next_llm_call_and_remembers_nothing(docs):
+    from codewiki.src.be.qa.engine import AskCancelled
+
+    _, docs_dir = docs
+    store = SessionStore()
+    backend = ScriptedBackend(
+        {"keep": [], "confidence": 30},
+        answer="Answer.\n<SUMMARY>s</SUMMARY>",
+    )
+    eng = QAEngine(QAIndex(str(docs_dir)), backend, sessions=store)
+    statuses: list[str] = []
+    with pytest.raises(AskCancelled):
+        eng.ask(
+            "How does expiry work?",
+            session_id="s1",
+            on_event=lambda e: statuses.append(e["message"]),
+            should_stop=lambda: len(backend.calls) >= 1,  # stop once the plan call ran
+        )
+    assert len(backend.calls) == 1 and len(statuses) == 1
+    assert store.turn_count("s1") == 0
+
+    # Stopped while the answer was being written: the reply is dropped too.
+    def stop_during_answer():
+        return any(s == P.ANSWER_SYSTEM for s, _, _ in backend.calls)
+
+    backend.calls.clear()
+    backend.plan = {"keep": [UNSIGN], "confidence": 95}
+    with pytest.raises(AskCancelled):
+        eng.ask("How does expiry work?", session_id="s1", should_stop=stop_during_answer)
+    assert store.turn_count("s1") == 0
+
+
+def test_status_steps_say_what_was_found(docs):
+    _, docs_dir = docs
+    backend = ScriptedBackend({"intent": "explain", "keep": [UNSIGN], "confidence": 95})
+    statuses: list[str] = []
+    engine(docs_dir, backend).ask(
+        "How does expiry work?", on_event=lambda e: statuses.append(e["message"])
+    )
+    assert statuses[0] == "Searching the docs and code…"
+    assert statuses[1].startswith("Found ") and "explain question" in statuses[1]
+    assert statuses[-1].startswith("Reading ")
+
+
 def test_stale_docs_are_flagged_in_the_prompt_and_answer(docs):
     repo, docs_dir = docs
     timed = repo / "pkg" / "timed.py"
