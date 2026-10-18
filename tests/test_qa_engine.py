@@ -389,7 +389,9 @@ def test_caw_plain_completion_runs_claude_without_tools_in_a_neutral_dir(tmp_pat
     argv = call["argv"]
     assert argv[argv.index("--tools") + 1] == "" and "--strict-mcp-config" in argv
     assert argv[argv.index("--system-prompt") + 1] == "sys" and "m1" in argv
-    assert call["stdin"] == "hello" and call["cwd"] == neutral_cwd()
+    assert call["stdin"] == "hello"
+    # macOS: the temp dir is under /var, a symlink to /private/var
+    assert os.path.realpath(call["cwd"]) == os.path.realpath(neutral_cwd())
     s = AskStats()
     s.add_usage(backend.last_usage)
     assert (s.input_tokens, s.cache_read_tokens, s.cost_usd) == (457, 400, 0.01)
