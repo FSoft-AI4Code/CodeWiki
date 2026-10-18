@@ -356,6 +356,11 @@ def _qa_tools() -> list[Tool]:
                         "type": "integer",
                         "description": "Budget for the returned text (default 4000, max 20000)",
                     },
+                    "query": {
+                        "type": "string",
+                        "description": "What you are looking for: a unit over the budget is cut "
+                        "to the lines that match it instead of to its beginning",
+                    },
                     "docs_dir": _DOCS_DIR_PROP,
                 },
                 "required": ["ids"],

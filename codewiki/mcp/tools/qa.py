@@ -88,7 +88,7 @@ def handle_read(args: dict[str, Any]) -> str:
     index = get_index(args.get("docs_dir"))
     budget = max(200, min(int(args.get("max_tokens") or DEFAULT_READ_TOKENS), MAX_READ_TOKENS))
     retriever = Retriever(index)
-    items = retriever.assemble(list(ids), budget)
+    items = retriever.assemble(list(ids), budget, focus=args.get("query") or None)
     read_ids = {item.id for item in items}
     blocks = []
     for item in items:

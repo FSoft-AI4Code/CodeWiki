@@ -262,11 +262,13 @@ class QAEngine:
                     P.PLAN_PROMPT.format(
                         question=question,
                         history=P.render_history(history),
-                        outline=ix.outline[:_OUTLINE_CHARS] or "(no module pages)",
                         candidates=self._candidate_lines(run, 15),
+                    ),
+                    P.PLAN_SYSTEM
+                    + P.PLAN_REFERENCE.format(
+                        outline=ix.outline[:_OUTLINE_CHARS] or "(no module pages)",
                         freshness=freshness,
                     ),
-                    P.PLAN_SYSTEM,
                 )
             )
             or {}
@@ -327,7 +329,7 @@ class QAEngine:
                             round=run.stats.rounds,
                             max_rounds=self.max_rounds,
                         ),
-                        P.ROUND_SYSTEM,
+                        P.ROUND_SYSTEM + P.ROUND_REFERENCE,
                     )
                 )
                 or {}
@@ -355,7 +357,9 @@ class QAEngine:
 
         # 4. answer
         ordered = run.kept or [c.id for c in self.retriever.priority(list(run.cands.values()))]
-        items = self.retriever.assemble(ordered, budget)
+        # Long units are cut to the part that matches, not to their first lines.
+        focus = " ".join([question, *_strings(plan.get("keywords"))])
+        items = self.retriever.assemble(ordered, budget, focus=focus)
         run.stats.context_tokens = sum(i.tokens for i in items)
         run.stats.sources = len(items)
         self._status(run, f"Reading {len(items)} item(s) and writing the answer…")
@@ -370,9 +374,8 @@ class QAEngine:
                 tokens=run.stats.context_tokens,
                 context=self._render_context(items),
                 freshness=freshness,
-                summary_request=P.SUMMARY_REQUEST,
             ),
-            P.ANSWER_SYSTEM,
+            P.ANSWER_SYSTEM + P.SUMMARY_REQUEST,
         )
         if run.should_stop():  # stopped while the answer was being written
             raise AskCancelled()

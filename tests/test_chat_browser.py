@@ -65,9 +65,9 @@ class SlowBackend:
     def complete(self, prompt, *, model=None, system_prompt=None, allow_tools=True):
         self.started += 1
         time.sleep(DELAY)
-        if system_prompt == P.PLAN_SYSTEM:
+        if system_prompt.startswith(P.PLAN_SYSTEM):
             return json.dumps({"intent": "explain", "keep": [UNSIGN], "confidence": 40})
-        if system_prompt == P.ROUND_SYSTEM:
+        if system_prompt.startswith(P.ROUND_SYSTEM):
             return json.dumps({"keep": [UNSIGN], "confidence": 95})
         return ANSWER
 

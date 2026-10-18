@@ -13,6 +13,7 @@ import os
 import re
 from dataclasses import dataclass, field
 
+from codewiki.src.be.qa.bm25 import tokenize
 from codewiki.src.be.qa.index import QAIndex, approx_tokens
 
 STALE_FACTOR = 0.5
@@ -22,6 +23,10 @@ W_REL, W_TOOL, W_DENSITY = 1.0, 0.6, 0.3
 _GREP_MAX_FILES = 40
 _GREP_MAX_HITS = 120
 _GREP_MAX_BYTES = 1_000_000
+# A query that is just a name: `AgentSlots`, `Signer.unsign`, `pkg/mod.py::Signer.unsign`.
+_NAME_QUERY_RE = re.compile(r"^(?:[\w./-]+::)?[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$")
+MAX_PINNED = 5
+_CHARS_PER_TOKEN = 3.6
 _SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__", "dist", "build", ".tox"}
 
 
@@ -110,7 +115,60 @@ class Retriever:
                 cand.score = max(cand.score, score * weight)
                 cand.via.add("bm25")
         ranked = sorted(found.values(), key=lambda c: c.score, reverse=True)
+        if kinds is None or "code" in kinds:
+            ranked = self._pin_exact_names(query, ranked)
         return ranked[:k]
+
+    def _names(self) -> dict[str, list[str]]:
+        """Lowercased qualified name and last segment -> code ids (built once per index)."""
+        names = getattr(self.index, "_qa_names", None)
+        if names is None:
+            names = {}
+            for uid in self.index.code:
+                qual = uid.split("::", 1)[-1].lower()
+                for key in {qual, qual.rsplit(".", 1)[-1]}:
+                    names.setdefault(key, []).append(uid)
+            self.index._qa_names = names
+        return names
+
+    def _pin_exact_names(self, query: str, ranked: list[Candidate]) -> list[Candidate]:
+        """A query that is a name puts its definitions first: keyword scores tie a
+        class with its own methods and can rank callers above the definition."""
+        q = query.strip()
+        if not _NAME_QUERY_RE.match(q):
+            return ranked
+        if "::" in q:
+            exact = [q] if q in self.index.code else []
+        else:
+            q = q.lower()
+            exact = self._names().get(q, [])
+        if not exact:
+            return ranked
+        score = {c.id: c.score for c in ranked}
+
+        def order(uid: str) -> tuple:
+            unit = self.index.code[uid]
+            qual = uid.split("::", 1)[-1]
+            last = qual.rsplit(".", 1)[-1]
+            in_tests = "test" in unit.file.split("/")[0] or "/test" in unit.file
+            return (
+                qual.lower() != q and uid != q,  # the full qualified name first
+                unit.kind not in ("class", "function"),
+                last.startswith("_"),
+                in_tests,
+                -score.get(uid, 0.0),
+            )
+
+        pinned = sorted(exact, key=order)[:MAX_PINNED]
+        top = (ranked[0].score if ranked else 0.0) + 1.0
+        by_id = {c.id: c for c in ranked}
+        head = []
+        for i, uid in enumerate(pinned):
+            cand = by_id.pop(uid, None) or Candidate(uid, 0.0)
+            cand.score = top + (len(pinned) - i)
+            cand.via.add("name")
+            head.append(cand)
+        return head + [c for c in ranked if c.id in by_id]
 
     def grep(self, patterns: list[str], max_files: int = _GREP_MAX_FILES) -> list[Candidate]:
         """Regex (or literal) search over the live checkout, mapped to components."""
@@ -222,7 +280,9 @@ class Retriever:
 
     # -- reading ---------------------------------------------------------
 
-    def read_one(self, uid: str, max_tokens: int | None = None) -> ReadItem | None:
+    def read_one(
+        self, uid: str, max_tokens: int | None = None, focus: str | None = None
+    ) -> ReadItem | None:
         ix = self.index
         if uid in ix.sections:
             sec = ix.sections[uid]
@@ -236,7 +296,7 @@ class Retriever:
             return None
         truncated = False
         if max_tokens is not None and approx_tokens(text) > max_tokens:
-            text = text[: int(max_tokens * 3.6)] + "\n… (truncated)"
+            text = _cut(text, int(max_tokens * _CHARS_PER_TOKEN), focus)
             truncated = True
         return ReadItem(uid, kind, title, location, text, approx_tokens(text), stale, truncated)
 
@@ -261,8 +321,11 @@ class Retriever:
                     break
         return inside
 
-    def assemble(self, ids: list[str], budget_tokens: int) -> list[ReadItem]:
-        """Greedy fill in the given order; a too-big first item is truncated, later ones skipped."""
+    def assemble(
+        self, ids: list[str], budget_tokens: int, focus: str | None = None
+    ) -> list[ReadItem]:
+        """Greedy fill in the given order; a too-big first item is cut to the part
+        that matches ``focus`` (the question), later ones are skipped."""
         out: list[ReadItem] = []
         used = 0
         skip = self._contained(ids)
@@ -275,9 +338,43 @@ class Retriever:
             if used + item.tokens > budget_tokens:
                 if out:
                     continue
-                item = self.read_one(uid, max_tokens=budget_tokens)
+                item = self.read_one(uid, max_tokens=budget_tokens, focus=focus)
             out.append(item)
             used += item.tokens
             if used >= budget_tokens:
                 break
         return out
+
+
+def _cut(text: str, max_chars: int, focus: str | None) -> str:
+    """Shorten ``text`` to about ``max_chars``: its first line (the signature or
+    heading) plus the run of whole lines that mentions the most ``focus`` terms.
+    Without a focus, or when nothing matches, the beginning is kept."""
+    lines = text.splitlines()
+    terms = set(tokenize(focus or ""))
+    hits = [len(terms & set(tokenize(line))) for line in lines] if terms else []
+    if not any(hits[1:]):
+        return text[:max_chars] + "\n… (truncated)"
+    head, body, body_hits = lines[0], lines[1:], hits[1:]
+    room = max(0, max_chars - len(head))
+    best = (0, 0, 0)  # hits, start, end
+    start = used = got = 0
+    for end, line in enumerate(body):
+        used += len(line) + 1
+        got += body_hits[end]
+        while used > room and start <= end:
+            used -= len(body[start]) + 1
+            got -= body_hits[start]
+            start += 1
+        if got > best[0]:
+            best = (got, start, end + 1)
+    _, start, end = best
+    if end == 0:  # a single matching line longer than the budget
+        return text[:max_chars] + "\n… (truncated)"
+    parts = [head]
+    if start > 0:
+        parts.append(f"… ({start} line(s) skipped)")
+    parts.extend(body[start:end])
+    if end < len(body):
+        parts.append(f"… ({len(body) - end} line(s) skipped)")
+    return "\n".join(parts)

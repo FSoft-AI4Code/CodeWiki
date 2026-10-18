@@ -31,15 +31,15 @@ class ScriptedBackend:
     def complete(self, prompt, *, model=None, system_prompt=None, allow_tools=True):
         self.calls.append((system_prompt, prompt, allow_tools))
         self.last_usage = USAGE
-        if system_prompt == P.PLAN_SYSTEM:
+        if system_prompt.startswith(P.PLAN_SYSTEM):
             return self.plan if isinstance(self.plan, str) else json.dumps(self.plan)
-        if system_prompt == P.ROUND_SYSTEM:
+        if system_prompt.startswith(P.ROUND_SYSTEM):
             reply = self.rounds.pop(0) if self.rounds else {"keep": [], "confidence": 50}
             return json.dumps(reply)
         return self.answer
 
     def prompts(self, system):
-        return [p for s, p, _ in self.calls if s == system]
+        return [p for s, p, _ in self.calls if s.startswith(system)]
 
 
 @pytest.fixture
@@ -172,6 +172,30 @@ def test_follow_up_sees_the_previous_summary(docs):
     assert "Earlier in this conversation" in plan_prompt and "expiry uses MAX_AGE" in plan_prompt
 
 
+def test_stable_prompt_parts_sit_in_the_cached_system_prompt(docs):
+    """Outline, freshness and reply formats go in the system prompt (the part the
+    backends mark for prompt caching), identical across questions; the question
+    comes last in the user prompt; the answer is told not to copy code."""
+    _, docs_dir = docs
+    backend = ScriptedBackend({"keep": [], "confidence": 30}, answer="A.\n<SUMMARY>s</SUMMARY>")
+    eng = engine(docs_dir, backend)
+    eng.ask("How does expiry work?")
+    eng.ask("Where is the clock read?")
+    systems = {
+        kind: [s for s, _, _ in backend.calls if s.startswith(kind)]
+        for kind in (P.PLAN_SYSTEM, P.ROUND_SYSTEM, P.ANSWER_SYSTEM)
+    }
+    for kind, seen in systems.items():
+        assert len(seen) >= 2 and len(set(seen)) == 1, kind  # same text for both questions
+    plan_system = systems[P.PLAN_SYSTEM][0]
+    assert "Documentation outline" in plan_system and '"intent"' in plan_system
+    assert "<SUMMARY>" in systems[P.ANSWER_SYSTEM][0]
+    assert "Quote at most a few lines of code" in P.ANSWER_SYSTEM
+    for _, prompt, _ in backend.calls:
+        assert prompt.rstrip().endswith(("How does expiry work?", "Where is the clock read?"))
+        assert "Documentation outline" not in prompt
+
+
 def test_keep_turns_forgets_answers_after_an_edited_question(docs):
     _, docs_dir = docs
     store = SessionStore()
@@ -213,7 +237,7 @@ def test_should_stop_cancels_before_the_next_llm_call_and_remembers_nothing(docs
 
     # Stopped while the answer was being written: the reply is dropped too.
     def stop_during_answer():
-        return any(s == P.ANSWER_SYSTEM for s, _, _ in backend.calls)
+        return any(s.startswith(P.ANSWER_SYSTEM) for s, _, _ in backend.calls)
 
     backend.calls.clear()
     backend.plan = {"keep": [UNSIGN], "confidence": 95}

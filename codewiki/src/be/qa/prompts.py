@@ -2,6 +2,11 @@
 
 Scouting prompts carry metadata only (outline, one line per candidate with
 its token cost), never bodies; only the answer prompt gets content.
+
+Everything that is the same from one question to the next (instructions,
+reply format, the module outline) goes in the system prompt, which the
+backends mark for prompt caching; the per-question parts follow in the user
+prompt, with the question last.
 """
 
 from __future__ import annotations
@@ -12,15 +17,8 @@ PLAN_SYSTEM = (
     "units with their token cost), not their content. Reply with one JSON object and nothing else."
 )
 
-PLAN_PROMPT = """Question: {question}
-{history}
-Documentation outline (module pages, one line each):
-{outline}
-
-Candidate units found by keyword search on the raw question ("id · kind · title/signature · ~tokens · how found — snippet"):
-{candidates}
-
-Repository freshness: {freshness}
+# Appended to PLAN_SYSTEM: fixed for a docs directory, so it is cached across questions.
+PLAN_REFERENCE = """
 
 Reply with JSON:
 {{
@@ -34,34 +32,48 @@ Reply with JSON:
   "keep": ["<ids from the candidates that are clearly needed>"],
   "confidence": <0-100, how sure you are that the kept units are enough to answer>
 }}
-Use "impact" when the question asks what happens if something is changed, renamed or removed."""
+Use "impact" when the question asks what happens if something is changed, renamed or removed.
+
+Documentation outline (module pages, one line each):
+{outline}
+
+Repository freshness: {freshness}"""
+
+PLAN_PROMPT = """{history}
+Candidate units found by keyword search on the raw question ("id · kind · title/signature · ~tokens · how found — snippet"):
+{candidates}
+
+Question: {question}"""
 
 ROUND_SYSTEM = (
     "You choose which parts of a codebase to read to answer a question, within a token budget. "
     "You see metadata only. Reply with one JSON object and nothing else."
 )
 
-ROUND_PROMPT = """Question: {question}
-
-Candidates ("id · kind · title/signature · ~tokens · how found — snippet"; [kept] = currently selected):
-{candidates}
-{impact}
-Budget: {used} of {budget} tokens selected. Round {round} of {max_rounds}.
+ROUND_REFERENCE = """
 
 Reply with JSON:
-{{
+{
   "keep": ["<the full set of ids to read; drop ones that are not needed>"],
   "search": ["<optional: new search queries for things still missing>"],
   "grep": ["<optional: regexes for exact usages still missing>"],
   "confidence": <0-100, how sure you are that the kept units are enough to answer>
-}}"""
+}"""
+
+ROUND_PROMPT = """Candidates ("id · kind · title/signature · ~tokens · how found — snippet"; [kept] = currently selected):
+{candidates}
+{impact}
+Budget: {used} of {budget} tokens selected. Round {round} of {max_rounds}.
+
+Question: {question}"""
 
 ANSWER_SYSTEM = (
     "You answer a developer's question about their codebase using only the documentation "
     "sections and source code provided. Be precise and concise. Cite every claim with the "
     "unit's location in backticks, e.g. `src/pkg/mod.py:L10-L42` or `Module.md#section`. "
     "Prefer the code over documentation marked stale. If the context does not contain the "
-    "answer, say what is missing instead of guessing."
+    "answer, say what is missing instead of guessing. Quote at most a few lines of code; "
+    "cite the location instead of copying code the reader can open."
 )
 
 IMPACT_GUIDE = """This is a change-impact question. Structure the answer as:
@@ -72,17 +84,17 @@ IMPACT_GUIDE = """This is a change-impact question. Structure the answer as:
 5. Safe steps to make the change.
 Mention dynamic access the static analysis cannot see, if listed."""
 
-ANSWER_PROMPT = """Question: {question}
-{history}{impact_guide}
+ANSWER_PROMPT = """{history}{impact_guide}
 {impact}
 Context ({count} units, {tokens} tokens):
 
 {context}
 
 Freshness: {freshness}
-{summary_request}"""
 
-SUMMARY_REQUEST = """After the answer, add a block for follow-up questions:
+Question: {question}"""
+
+SUMMARY_REQUEST = """\n\nAfter the answer, add a block for follow-up questions:
 <SUMMARY>
 files and units read; key facts established; what is still unknown (under 150 words)
 </SUMMARY>"""

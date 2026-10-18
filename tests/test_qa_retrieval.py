@@ -231,3 +231,65 @@ def test_mcp_server_lists_and_routes_qa_tools(docs):
     assert "pkg/signer.py" in out[0].text
     err = asyncio.run(server.call_tool("codewiki_read", {"ids": [], "docs_dir": str(docs_dir)}))
     assert "error" in json.loads(err[0].text)
+
+
+def test_a_name_query_puts_its_definitions_first(docs):
+    _, docs_dir = docs
+    r = Retriever(QAIndex(str(docs_dir)))
+
+    def top(query, k=4):
+        return [c.id.split("::")[-1] for c in r.search(query, k=k)]
+
+    assert top("TimestampSigner")[0] == "TimestampSigner"  # the class before its methods
+    assert top("unsign")[:2] == ["Signer.unsign", "TimestampSigner.unsign"]
+    assert top("Signer.unsign")[0] == "Signer.unsign"  # qualified: only that one is pinned
+    assert top("signer.UNSIGN")[0] == "Signer.unsign"  # names match case-insensitively
+    assert top("pkg/timed.py::TimestampSigner.unsign")[0] == "TimestampSigner.unsign"
+    assert "name" in r.search("unsign", k=1)[0].via
+    # Not a name: plain ranking, nothing pinned.
+    assert all("name" not in c.via for c in r.search("how does expiry work", k=5))
+    # Docs-only search never pins code.
+    assert all(c.id in r.index.sections for c in r.search("unsign", kinds={"section"}))
+
+
+def test_cut_keeps_the_part_that_matches_the_question():
+    from codewiki.src.be.qa.retrieve import _cut
+
+    lines = ["class Big:"] + [f"    def filler_{i}(self): return {i}" for i in range(200)]
+    lines[150] = "    def rotate_segment(self): return self.wal.rotate()"
+    text = "\n".join(lines)
+
+    cut = _cut(text, 400, "how do we rotate the wal segment")
+    assert cut.startswith("class Big:")  # the signature stays
+    assert "def rotate_segment" in cut
+    assert "line(s) skipped" in cut and len(cut) <= 400 + 60
+    # Without a question, or with no matching line, the beginning is kept.
+    assert _cut(text, 400, None).startswith("class Big:\n    def filler_0")
+    assert "def rotate_segment" not in _cut(text, 400, "unrelated words")
+
+
+def test_assemble_cuts_an_oversized_first_unit_around_the_focus(docs):
+    _, docs_dir = docs
+    r = Retriever(QAIndex(str(docs_dir)))
+    uid = "pkg/timed.py::TimestampSigner"
+    full = r.read_one(uid)
+    budget = full.tokens // 3
+    focused = r.assemble([uid], budget, focus="get_timestamp")[0]
+    assert focused.truncated and focused.tokens <= budget + 20
+    assert "def get_timestamp" in focused.text
+
+
+def test_mcp_read_passes_the_query_on_as_the_focus(docs, monkeypatch):
+    _, docs_dir = docs
+    seen = {}
+    real = Retriever.assemble
+
+    def spy(self, ids, budget, focus=None):
+        seen["focus"] = focus
+        return real(self, ids, budget, focus=focus)
+
+    monkeypatch.setattr(Retriever, "assemble", spy)
+    qa_tools.handle_read(
+        {"docs_dir": str(docs_dir), "ids": ["pkg/timed.py::TimestampSigner"], "query": "clock"}
+    )
+    assert seen["focus"] == "clock"
