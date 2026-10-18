@@ -25,7 +25,6 @@ from __future__ import annotations
 import glob
 import json
 import os
-import pty
 import re
 import select
 import signal
@@ -321,6 +320,8 @@ class ClaudePSession(ClaudeCodeSession):
         if self._strip_provider_env:
             for name in _SUBSCRIPTION_ENV_OVERRIDES:
                 env.pop(name, None)
+
+        import pty  # Unix-only; imported here so caw still loads on Windows
 
         master, slave = pty.openpty()
         start = time.time()

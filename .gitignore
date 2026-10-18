@@ -49,6 +49,7 @@ tests/*
 !tests/test_artifact_analyzer.py
 !tests/test_scala_analyzer.py
 !tests/test_agent_limits.py
+!tests/test_compiled_wheel.py
 
 # Jupyter
 *.ipynb

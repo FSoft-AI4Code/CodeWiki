@@ -68,7 +68,7 @@ loguru==0.7.3
 markdown-it-py==3.0.0
 MarkupSafe==3.0.2
 matplotlib-inline==0.1.7
-mcp==1.12.3
+mcp==1.16.0
 mdurl==0.1.2
 mermaid-parser-py==0.0.2
 mermaid-py==0.8.0
@@ -149,12 +149,14 @@ tree-sitter-java==0.23.5
 tree-sitter-javascript==0.21.4
 tree-sitter-kotlin==1.1.0
 tree-sitter-language-pack==0.8.0
+tree-sitter-php==0.23.11
 tree-sitter-python==0.23.6
 tree-sitter-ruby==0.23.1
 tree-sitter-rust==0.23.2
 tree-sitter-scala==0.23.4
 tree-sitter-typescript==0.21.2
 tree-sitter-yaml==0.7.1
+truststore==0.10.5
 types-protobuf==6.30.2.20250822
 types-requests==2.32.4.20250611
 typing-inspection==0.4.1

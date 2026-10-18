@@ -174,7 +174,7 @@ jobs:
           if-no-files-found: error
 
   macos-intel:
-    name: macOS x86_64 smoke test / py${{ matrix.python }}
+    name: macOS x86_64 wheel test / py${{ matrix.python }}
     needs: macos
     runs-on: macos-15-intel
     timeout-minutes: 30
@@ -183,6 +183,10 @@ jobs:
       matrix:
         python: ["3.12", "3.13", "3.14"]
     steps:
+      # Only for tests/ and packaging/build/test_wheel.sh; the wheel comes
+      # from the macOS job.
+      - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
@@ -200,6 +204,7 @@ jobs:
           cd "$RUNNER_TEMP"
           "$RUNNER_TEMP/smoke/bin/python" -m codewiki --help
           "$RUNNER_TEMP/smoke/bin/python" -c "import codewiki.cli.main as m; assert m.__file__.endswith('.so'), m.__file__; print('compiled:', m.__file__)"
+          bash "$GITHUB_WORKSPACE/packaging/build/test_wheel.sh" "$RUNNER_TEMP/smoke/bin/python" "$GITHUB_WORKSPACE"
 
   publish:
     name: Publish to PyPI

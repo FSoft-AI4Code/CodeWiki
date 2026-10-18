@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
-import fcntl
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
 from codewiki._vendor.caw.models import TextBlock, ThinkingBlock, ToolUse, Trajectory, Turn
+
+if sys.platform == "win32":
+    import msvcrt
+else:
+    import fcntl
 
 
 class JsonlWriter:
@@ -25,9 +30,21 @@ class JsonlWriter:
         """Append a single JSON object as one line (file-locked)."""
         if self._subagent:
             entry = {**entry, "subagent": self._subagent}
+        line = json.dumps(entry) + "\n"
         with open(self._path, "a", encoding="utf-8") as f:
-            fcntl.flock(f, fcntl.LOCK_EX)
-            f.write(json.dumps(entry) + "\n")
+            if sys.platform != "win32":
+                fcntl.flock(f, fcntl.LOCK_EX)
+                f.write(line)
+                return
+            # Lock byte 0 as a mutex; O_APPEND still writes at the end.
+            f.seek(0)
+            msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+            try:
+                f.write(line)
+                f.flush()
+            finally:
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
 
     # ------------------------------------------------------------------
     # High-level helpers
