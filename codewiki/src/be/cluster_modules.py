@@ -217,8 +217,9 @@ def _directory_modules(
     groups = partition_leaf_nodes_by_structure(
         batch,
         components,
-        lambda ids: get_clustering_input_token_count(ids, components)
-        <= config.max_token_per_module,
+        lambda ids: (
+            get_clustering_input_token_count(ids, components) <= config.max_token_per_module
+        ),
     )
     modules: dict[str, Any] = {}
     for group in groups:

@@ -63,6 +63,7 @@ def _max_count_fits(limit: int):
 # partition_leaf_nodes_by_structure
 # ---------------------------------------------------------------------------
 
+
 def test_partition_single_batch_when_everything_fits():
     ids = [f"lib/a.py::C{i}" for i in range(5)]
     components = _components(ids)
@@ -80,9 +81,7 @@ def test_partition_drops_unknown_ids():
 
 
 def test_partition_splits_by_top_level_directory():
-    ids = [f"alpha/f{i}.py::A{i}" for i in range(4)] + [
-        f"beta/f{i}.py::B{i}" for i in range(4)
-    ]
+    ids = [f"alpha/f{i}.py::A{i}" for i in range(4)] + [f"beta/f{i}.py::B{i}" for i in range(4)]
     components = _components(ids)
     batches = partition_leaf_nodes_by_structure(ids, components, _max_count_fits(4))
     assert len(batches) == 2
@@ -111,15 +110,10 @@ def test_partition_chunks_unsplittable_single_file():
 
 
 def test_partition_coalesces_root_files_and_is_deterministic():
-    ids = (
-        ["setup.py::Setup", "conftest.py::Conf"]
-        + [f"src/f{i}.py::S{i}" for i in range(3)]
-    )
+    ids = ["setup.py::Setup", "conftest.py::Conf"] + [f"src/f{i}.py::S{i}" for i in range(3)]
     components = _components(ids)
     first = partition_leaf_nodes_by_structure(ids, components, _max_count_fits(4))
-    second = partition_leaf_nodes_by_structure(
-        list(reversed(ids)), components, _max_count_fits(4)
-    )
+    second = partition_leaf_nodes_by_structure(list(reversed(ids)), components, _max_count_fits(4))
     assert first == second
     assert all(len(batch) <= 4 for batch in first)
     # Root-level files must not sit alone in single-node batches.
@@ -142,13 +136,12 @@ def test_cluster_batch_fits_respects_node_count_and_token_budget():
 # None-robustness
 # ---------------------------------------------------------------------------
 
+
 def test_cluster_modules_none_response_returns_empty_tree():
     ids = [f"lib/f{i}.py::C{i}" for i in range(3)]
     components = _components(ids)
     config = _config(max_token_per_module=1)
-    result = cluster_modules(
-        ids, components, config, {}, None, [], completer=lambda prompt: None
-    )
+    result = cluster_modules(ids, components, config, {}, None, [], completer=lambda prompt: None)
     assert result == {}
 
 
@@ -159,10 +152,7 @@ def test_parse_super_group_response_handles_none_and_garbage():
 
 
 def test_super_group_modules_none_response_keeps_tree():
-    tree = {
-        f"Module{i}": {"path": f"m{i}", "components": [f"m{i}/f.py::C"]}
-        for i in range(5)
-    }
+    tree = {f"Module{i}": {"path": f"m{i}", "components": [f"m{i}/f.py::C"]} for i in range(5)}
     config = _config()
     assert super_group_modules(tree, config, completer=lambda prompt: None) == tree
 
@@ -188,17 +178,11 @@ def test_super_group_modules_maps_component_ids_to_their_module():
 
 def test_extract_content_returns_none_on_truncated_empty_response():
     response = SimpleNamespace(
-        choices=[
-            SimpleNamespace(
-                message=SimpleNamespace(content=None), finish_reason="length"
-            )
-        ]
+        choices=[SimpleNamespace(message=SimpleNamespace(content=None), finish_reason="length")]
     )
     assert _extract_content(response, "test-model") is None
     ok = SimpleNamespace(
-        choices=[
-            SimpleNamespace(message=SimpleNamespace(content="hi"), finish_reason="stop")
-        ]
+        choices=[SimpleNamespace(message=SimpleNamespace(content="hi"), finish_reason="stop")]
     )
     assert _extract_content(ok, "test-model") == "hi"
 
@@ -206,6 +190,7 @@ def test_extract_content_returns_none_on_truncated_empty_response():
 # ---------------------------------------------------------------------------
 # Batched clustering end-to-end (scripted completer)
 # ---------------------------------------------------------------------------
+
 
 def _grouped(tree: dict) -> str:
     return f"<GROUPED_COMPONENTS>{tree!r}</GROUPED_COMPONENTS>"
@@ -223,20 +208,22 @@ def test_batched_clustering_merges_batches_and_collisions():
         in_alpha = alpha[0] in prompt
         in_beta = beta[0] in prompt
         if in_alpha and not in_beta:
-            return _grouped({
-                "Alpha": {"path": "alpha", "components": alpha[:2]},
-                "Shared": {"path": "alpha", "components": [alpha[2]]},
-            })
+            return _grouped(
+                {
+                    "Alpha": {"path": "alpha", "components": alpha[:2]},
+                    "Shared": {"path": "alpha", "components": [alpha[2]]},
+                }
+            )
         if in_beta and not in_alpha:
-            return _grouped({
-                "Beta": {"path": "beta", "components": beta[:2]},
-                "Shared": {"path": "beta", "components": [beta[2]]},
-            })
+            return _grouped(
+                {
+                    "Beta": {"path": "beta", "components": beta[:2]},
+                    "Shared": {"path": "beta", "components": [beta[2]]},
+                }
+            )
         return None
 
-    tree = cluster_modules(
-        alpha + beta, components, config, {}, None, [], completer=completer
-    )
+    tree = cluster_modules(alpha + beta, components, config, {}, None, [], completer=completer)
     assert set(tree) == {"Alpha", "Shared", "Beta"}
     # Name collision across batches merges components and generalizes the path.
     assert tree["Shared"]["components"] == [alpha[2], beta[2]]
@@ -256,15 +243,15 @@ def test_batched_clustering_failed_batch_becomes_fallback_module():
         if beta[0] in prompt and alpha[0] not in prompt:
             return None  # this batch's call "truncates"
         if alpha[0] in prompt and beta[0] not in prompt:
-            return _grouped({
-                "Alpha": {"path": "alpha", "components": alpha[:2]},
-                "AlphaExtra": {"path": "alpha", "components": [alpha[2]]},
-            })
+            return _grouped(
+                {
+                    "Alpha": {"path": "alpha", "components": alpha[:2]},
+                    "AlphaExtra": {"path": "alpha", "components": [alpha[2]]},
+                }
+            )
         return None
 
-    tree = cluster_modules(
-        alpha + beta, components, config, {}, None, [], completer=completer
-    )
+    tree = cluster_modules(alpha + beta, components, config, {}, None, [], completer=completer)
     assert "Alpha" in tree and "AlphaExtra" in tree
     fallback = tree["beta"]
     assert fallback["components"] == beta
