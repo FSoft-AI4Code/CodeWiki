@@ -14,7 +14,7 @@ import re
 from collections import Counter
 from collections.abc import Iterable
 
-_WORD_RE = re.compile(r"[A-Za-z0-9_]+")
+_WORD_RE = re.compile(r"\w+")  # Unicode: pages may be written in any output language
 _CAMEL_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|\d+")
 
 STOPWORDS = frozenset(
@@ -30,15 +30,25 @@ MAX_PREFIX_EXPANSIONS = 6
 
 
 def stem(term: str) -> str:
-    """Light suffix stripping so "timestamps"/"signing"/"signed" meet their roots."""
+    """Light suffix stripping so "timestamps"/"signing"/"signed" meet their roots.
+
+    Words also lose a final "e" and a doubled final consonant, roots and
+    inflections alike, so "merge"/"merging"/"merged" and "stem"/"stemming" meet.
+    """
     if len(term) > 4 and term.endswith("ies"):
         return term[:-3] + "y"
-    if len(term) > 5 and term.endswith("ing"):
-        return term[:-3]
-    if len(term) > 4 and term.endswith("ed") and not term.endswith("eed"):
-        return term[:-2]
     if len(term) > 3 and term.endswith("s") and not term.endswith(("ss", "us", "is")):
-        return term[:-1]
+        term = term[:-1]
+    if len(term) > 5 and term.endswith("ing"):
+        term = term[:-3]
+    elif len(term) > 4 and term.endswith("ed") and not term.endswith("eed"):
+        term = term[:-2]
+    if not (term.isascii() and term.isalpha()) or len(term) <= 3:
+        return term  # identifiers, numbers and non-English words keep their spelling
+    if term.endswith("e") and not term.endswith("ee"):
+        term = term[:-1]
+    if term[-1] == term[-2] and term[-1] not in "aeioulsfz":
+        term = term[:-1]
     return term
 
 
@@ -47,10 +57,14 @@ def tokenize(text: str) -> list[str]:
     terms: list[str] = []
     for word in _WORD_RE.findall(text or ""):
         lower = word.lower()
-        parts = [p.lower() for chunk in word.split("_") for p in _CAMEL_RE.findall(chunk)]
+        parts = [
+            p.lower()
+            for chunk in word.split("_")
+            for p in (_CAMEL_RE.findall(chunk) if chunk.isascii() else [chunk])
+        ]
         if lower not in STOPWORDS and len(lower) > 1:
             terms.append(stem(lower))
-        if len(parts) > 1:
+        if parts != [lower]:  # also "_evict" -> "evict"
             terms.extend(stem(p) for p in parts if p not in STOPWORDS and len(p) > 1)
     return terms
 
@@ -129,7 +143,7 @@ class BM25F:
         return total
 
     def search(
-        self, query: str | Iterable[str], k: int = 20, allowed: set[int] | None = None
+        self, query: str | Iterable[str], k: int | None = 20, allowed: set[int] | None = None
     ) -> list[tuple[int, float]]:
         terms = self.query_terms(query)
         if not terms:

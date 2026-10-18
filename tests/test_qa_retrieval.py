@@ -7,7 +7,7 @@ import pytest
 
 from codewiki.mcp.tools import qa as qa_tools
 from codewiki.src.be.qa import DocsNotFoundError, get_index, resolve_docs_dir
-from codewiki.src.be.qa.bm25 import BM25F, tokenize
+from codewiki.src.be.qa.bm25 import BM25F, stem, tokenize
 from codewiki.src.be.qa.index import QAIndex
 from codewiki.src.be.qa.retrieve import Retriever
 from qa_fixture import build, git
@@ -33,6 +33,52 @@ def test_bm25f_prefers_title_matches_and_expands_prefixes():
     bm.finalize()
     assert bm.search("unsign")[0][0] == 0
     assert bm.search("signa")  # prefix of "signature"
+
+
+def test_stem_meets_roots_ending_in_e_or_doubled_consonants():
+    for family in (
+        "merge merging merged merges",
+        "save saved saving saves",
+        "stop stopped stopping stops",
+        "stem stemming stemmed stems",
+        "call called calling calls",
+        "add added adding",
+        "class classes",
+        "set setting settings",
+    ):
+        assert len(set(tokenize(family))) == 1, family
+    assert stem("max_age") == "max_age" and stem("100") == "100"  # identifiers, numbers
+
+
+def test_tokenize_keeps_the_word_of_private_names():
+    assert "evict" in tokenize("SessionStore._evict")
+    bm = BM25F({"title": 1.0})
+    bm.add({"title": "_evict"})
+    bm.finalize()
+    assert bm.search("evicted")
+
+
+def test_tokenize_keeps_non_ascii_words():
+    assert "génération" in tokenize("Génération des pages")
+    bm = BM25F({"content": 1.0})
+    bm.add({"content": "Модуль конфигурации"})
+    bm.add({"content": "другой текст"})
+    bm.finalize()
+    assert [doc for doc, _ in bm.search("конфигурации")] == [0]
+
+
+def test_search_applies_the_stale_discount_before_cutting_to_k(docs):
+    _, docs_dir = docs
+    ix = QAIndex(str(docs_dir))
+    stale = [sid for sid in ix.sections if sid.startswith("Timed.md#")][:2]
+    for sid in stale:
+        ix.sections[sid].stale = True
+    code = "pkg/timed.py::TimestampSigner.unsign"
+    doc_of = {uid: n for n, uid in enumerate(ix._unit_ids)}
+    raw = [(doc_of[stale[0]], 10.0), (doc_of[stale[1]], 9.0), (doc_of[code], 8.0)]
+    ix.bm25.search = lambda text, k=20, allowed=None: raw[:k]
+    # halved, the stale sections (5.0, 4.5) rank below the code (8.0) at any k
+    assert [c.id for c in Retriever(ix).search("q", k=1)] == [code]
 
 
 def test_index_builds_sections_code_and_edges(docs):

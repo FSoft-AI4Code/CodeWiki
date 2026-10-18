@@ -101,7 +101,8 @@ class Retriever:
         for text, weight in ((query, 1.0), (" ".join(keywords or []), 0.8)):
             if not text.strip():
                 continue
-            for doc, score in ix.bm25.search(text, k=k * 2, allowed=allowed):
+            # Rank everything: the stale discount below can reorder past any cut.
+            for doc, score in ix.bm25.search(text, k=None, allowed=allowed):
                 uid = ix.unit_id(doc)
                 if uid in ix.sections and ix.sections[uid].stale:
                     score *= STALE_FACTOR
