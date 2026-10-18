@@ -123,8 +123,13 @@ class GenerationProgress:
         remaining = max(0, self.total - self.done - self.failed)
         if remaining == 0:
             return 0.0
-        average = sum(s for _, s in self._timings) / len(self._timings)
-        eta = remaining * average / min(self.concurrency, remaining)
+        if len(self._timings) >= self.concurrency:
+            # Observed throughput: a parent's own time spans its whole subtree
+            # and includes waits for a slot, so per-module averages overshoot.
+            eta = remaining * (self._clock() - self._started) / len(self._timings)
+        else:
+            average = sum(s for _, s in self._timings) / len(self._timings)
+            eta = remaining * average / min(self.concurrency, remaining)
         if self._paused_until is not None:
             eta += max(0.0, self._paused_until - self._clock())
         return eta

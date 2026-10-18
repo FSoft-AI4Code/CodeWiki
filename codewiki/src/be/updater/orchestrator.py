@@ -11,6 +11,7 @@ from typing import Any
 from codewiki.src.be.backend import LLMBackend
 from codewiki.src.be.cluster_modules import cluster_modules, get_clustering_input_token_count
 from codewiki.src.be.dependency_analyzer.models.core import Node
+from codewiki.src.be.generation_progress import GenerationProgress
 from codewiki.src.be.updater import pages as P
 from codewiki.src.be.updater import tree as T
 from codewiki.src.be.updater.change_report import (
@@ -397,31 +398,46 @@ class IncrementalUpdater:
         runner = LeafAgentRunner(
             self.config, self.backend, self.docs_dir, new_graph, new_tree, diff, self.opts, rec
         )
-        for path in order:
-            report = reports[path]
-            roles = self._write_roles(report, new_tree, dep, inv)
-            info = T.node_at(new_tree, path) or {}
-            component_ids = [c for c in T.components_of(info) if c in new_graph]
-            if self.whole_repo:
-                component_ids = [c for c in leaf_nodes if c in new_graph]
-            report.leaf_path = tuple(path)
-            try:
-                logger.info(
-                    "Updating leaf %s (mode=%s, write set=%s)",
-                    "/".join(path),
-                    report.mode,
-                    sorted(roles),
-                )
+        # Status line (done / total / ETA) after every leaf, as in a full run.
+        # Leaves run one at a time: every write set shares overview.md.
+        emit = getattr(self.doc_generator, "progress_emit", None) or logger.info
+        progress = GenerationProgress(1, emit=emit)
+        progress.add(len(order))
+        if len(order) > 1:
+            emit(
+                f"Updating {len(order)} leaves one at a time (they share overview.md); "
+                "--concurrency applies to pages generated afterwards"
+            )
+        self.backend.progress = progress
+        with progress.activate():
+            for path in order:
+                report = reports[path]
+                roles = self._write_roles(report, new_tree, dep, inv)
+                info = T.node_at(new_tree, path) or {}
+                component_ids = [c for c in T.components_of(info) if c in new_graph]
                 if self.whole_repo:
-                    # The virtual leaf is the overview page with an empty module path.
-                    await runner.run(
-                        _WholeRepoReport(report, P.OVERVIEW_STEM), roles, component_ids
+                    component_ids = [c for c in leaf_nodes if c in new_graph]
+                report.leaf_path = tuple(path)
+                try:
+                    with progress.track("/".join(path)):
+                        logger.info(
+                            "Updating leaf %s (mode=%s, write set=%s)",
+                            "/".join(path),
+                            report.mode,
+                            sorted(roles),
+                        )
+                        if self.whole_repo:
+                            # The virtual leaf is the overview page with an empty module path.
+                            await runner.run(
+                                _WholeRepoReport(report, P.OVERVIEW_STEM), roles, component_ids
+                            )
+                        else:
+                            await runner.run(report, roles, component_ids)
+                except Exception as e:  # noqa: BLE001 — one failed leaf must not abort the update
+                    rec.errors.append(f"leaf {'/'.join(path)}: {type(e).__name__}: {e}")
+                    logger.error(
+                        "Leaf %s failed: %s\n%s", "/".join(path), e, traceback.format_exc()
                     )
-                else:
-                    await runner.run(report, roles, component_ids)
-            except Exception as e:  # noqa: BLE001 — one failed leaf must not abort the update
-                rec.errors.append(f"leaf {'/'.join(path)}: {type(e).__name__}: {e}")
-                logger.error("Leaf %s failed: %s\n%s", "/".join(path), e, traceback.format_exc())
 
         # ---- Step 6.1: generate any page still missing (new parents, re-clustered subtrees, root)
         before = P.page_hashes(self.docs_dir)

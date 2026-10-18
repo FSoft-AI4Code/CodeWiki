@@ -168,9 +168,11 @@ async def generate_sub_module_documentation(
             *(run_one(name, ids) for name, ids in final_specs.items()),
             return_exceptions=True,
         )
-    errors = [r for r in results if isinstance(r, BaseException)]
-    if errors:
-        raise errors[0]
+    # A failed sub-module must not fail this agent too: the report below lists
+    # its page as missing, and the next run regenerates it from module_tree.json.
+    for name, result in zip(final_specs, results):
+        if isinstance(result, BaseException):
+            logger.error(f"Sub-module {name} failed: {result!s}")
 
     return sub_module_report(
         name_map,

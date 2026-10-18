@@ -361,20 +361,26 @@ class CawToolKit(
         # at once as there are free slots.
         with backend.slots.lend():
             workers = min(len(final_specs), backend.slots.size)
+            errors: dict[str, BaseException] = {}
             if workers <= 1:
                 for sub_name, core_ids in final_specs.items():
-                    run_one(sub_name, core_ids)
+                    try:
+                        run_one(sub_name, core_ids)
+                    except Exception as e:  # noqa: BLE001 — reported below
+                        errors[sub_name] = e
             else:
                 with ThreadPoolExecutor(
                     max_workers=workers, thread_name_prefix="codewiki-sub"
                 ) as pool:
-                    futures = [
-                        pool.submit(run_one, sub_name, core_ids)
+                    futures = {
+                        sub_name: pool.submit(run_one, sub_name, core_ids)
                         for sub_name, core_ids in final_specs.items()
-                    ]
-                    errors = [f.exception() for f in futures if f.exception() is not None]
-                if errors:
-                    raise errors[0]
+                    }
+                    errors = {n: f.exception() for n, f in futures.items() if f.exception()}
+            # A failed sub-module must not fail this agent too: the report below
+            # lists its page as missing, and the next run regenerates it.
+            for sub_name, e in errors.items():
+                logger.error("Sub-module %s failed: %s", sub_name, e)
 
         with tree_lock:
             return sub_module_report(

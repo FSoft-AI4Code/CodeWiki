@@ -300,8 +300,8 @@ def test_progress_status_line_and_eta():
     p.add(3)  # an agent split a module into three sub-modules
     with p.track("b"):
         clock.now += 60
-    # average 90 s, 6 left, 2 at a time
-    assert messages[-1] == "✓ b (1m 00s) · 2/8 done (25%) · ETA ~4m 30s"
+    # 2 finished (= concurrency): throughput, 2 in 180 s, 6 left
+    assert messages[-1] == "✓ b (1m 00s) · 2/8 done (25%) · ETA ~9m 00s"
 
 
 def test_progress_reports_failures_and_already_documented_pages():
@@ -399,3 +399,54 @@ def test_running_count_comes_from_held_slots():
         with slots.lend():  # a parent waiting on its sub-modules
             assert "running" not in p.status()
     assert slots.active == 0
+
+
+def test_pydantic_failed_sub_module_does_not_fail_its_parent(tmp_path, monkeypatch):
+    from codewiki.src.be.agent_tools import generate_sub_module_documentations as tool_mod
+    from codewiki.src.be.agent_tools.deps import CodeWikiDeps
+    from codewiki.src.be.generation_progress import GenerationProgress
+
+    class FakeAgent:
+        def __init__(self, *args, name=None, **kwargs):
+            pass
+
+        async def run(self, prompt, deps, usage_limits=None):
+            if deps.current_module_name == "bad":
+                raise RuntimeError("Request timed out")
+            Path(deps.absolute_docs_path, f"{deps.current_module_name}.md").write_text("# page\n")
+
+    monkeypatch.setattr(tool_mod, "Agent", FakeAgent)
+    monkeypatch.setattr(tool_mod, "create_fallback_models", lambda config: None)
+
+    progress = GenerationProgress(concurrency=2, emit=lambda _m: None)
+    deps = CodeWikiDeps(
+        absolute_docs_path=str(tmp_path),
+        absolute_repo_path=str(tmp_path),
+        registry={},
+        components={},
+        path_to_current_module=["parent"],
+        current_module_name="parent",
+        module_tree={"parent": {"components": [], "children": {}}},
+        max_depth=2,
+        current_depth=1,
+        config=SimpleNamespace(
+            layout="flat", max_token_per_leaf_module=4000, agent_retries=1, request_limit=5
+        ),
+        slots=AgentSlots(2),
+        progress=progress,
+    )
+    specs = {"good": ["a.py::X"], "bad": ["b.py::Y"]}
+
+    async def run():
+        async with deps.slots.hold_async():
+            return await tool_mod.generate_sub_module_documentation(
+                SimpleNamespace(deps=deps), specs
+            )
+
+    report = asyncio.run(run())  # no exception: the parent agent carries on
+
+    assert (tmp_path / "good.md").exists() and not (tmp_path / "bad.md").exists()
+    assert "bad" in report  # listed as missing for the parent agent
+    # Still in the tree, so the next run regenerates it.
+    assert "bad" in deps.module_tree["parent"]["children"]
+    assert progress.done == 1 and progress.failed == 1

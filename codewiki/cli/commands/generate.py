@@ -330,7 +330,10 @@ def _invalidate_affected_modules(output_dir: Path, changed_files: list[str], log
     "--concurrency",
     type=click.IntRange(min=1),
     default=None,
-    help=f"Module agents to run at the same time (overrides config; default {DEFAULT_CONCURRENCY})",
+    help=(
+        f"Module agents to run at the same time (overrides config; default {DEFAULT_CONCURRENCY}). "
+        "With --update, changed leaves still run one at a time; only missing pages run in parallel."
+    ),
 )
 @click.option(
     "--agent-retries",
