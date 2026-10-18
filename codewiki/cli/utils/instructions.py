@@ -45,6 +45,52 @@ def get_pr_creation_url(repo_url: str, branch_name: str) -> str:
     return f"{base_url}/compare/{branch_name}"
 
 
+def _compact(n: float) -> str:
+    """1234567 -> '1.2M', 8900 -> '8.9k'."""
+    for div, suffix in ((1_000_000, "M"), (1_000, "k")):
+        if n >= div:
+            return f"{n / div:.1f}{suffix}"
+    return f"{int(n)}"
+
+
+def _echo_usage(statistics: dict) -> None:
+    """Print the run's token usage and estimated cost, if any was recorded."""
+    tokens = statistics.get("total_tokens_used") or 0
+    if not tokens:
+        return
+    totals = statistics.get("usage_totals") or {}
+    parts = [
+        f"{label} {_compact(totals[key])}"
+        for label, key in (
+            ("in", "input_tokens"),
+            ("out", "output_tokens"),
+            ("cache-read", "cache_read_tokens"),
+            ("cache-write", "cache_write_tokens"),
+        )
+        if totals.get(key)
+    ]
+    detail = f" ({' / '.join(parts)})" if parts else ""
+    click.echo(f"  Tokens used:       {tokens:,}{detail}")
+
+    cost = statistics.get("total_cost_usd")
+    provider = statistics.get("provider") or ""
+    if cost:
+        note = (
+            " (API-equivalent; billed to your subscription)"
+            if provider in ("claude-code", "codex")
+            else ""
+        )
+        click.echo(f"  Est. cost:         ${cost:,.2f}{note}")
+    unpriced = statistics.get("unpriced_models") or []
+    if unpriced:
+        click.secho(f"  Cost unknown for:  {', '.join(unpriced)}", fg="yellow")
+        if provider == "codex":
+            # Claude Code reports its own cost; codex cost comes from caw's table
+            click.echo(
+                "    set a price: caw pricing set codex <model> --input <usd/1M> --output <usd/1M>"
+            )
+
+
 def display_post_generation_instructions(
     output_dir: Path,
     repo_name: str,
@@ -95,9 +141,7 @@ def display_post_generation_instructions(
             minutes = int(statistics["generation_time"] // 60)
             seconds = int(statistics["generation_time"] % 60)
             click.echo(f"  Generation time:   {minutes} minutes {seconds} seconds")
-        # if 'total_tokens_used' in statistics:
-        #     tokens = statistics['total_tokens_used']
-        #     click.echo(f"  Tokens used:       ~{tokens:,}")
+        _echo_usage(statistics)
         click.echo()
 
     # Next steps

@@ -34,7 +34,7 @@ from codewiki._vendor.caw import Agent as CawAgent
 from codewiki._vendor.caw import ToolGroup
 
 from codewiki.src.be.agent_tools.deps import CodeWikiDeps
-from codewiki.src.be.backend import AgentReply, LLMBackend, usage_to_dict
+from codewiki.src.be.backend import AgentReply, LLMBackend
 from codewiki.src.be.cluster_modules import format_potential_core_components
 from codewiki.src.be.dependency_analyzer.models.core import Node
 from codewiki.src.be.prompt_template import (
@@ -316,11 +316,18 @@ class CawBackend(LLMBackend):
             tools=ToolGroup.READER if allow_tools else ToolGroup.INTERACTION,
             system_prompt=system_prompt,
         )
+        started = time.time()
         if allow_tools:
             traj = agent.completion(prompt)
         else:
             traj = agent.completion(prompt, cwd=neutral_cwd())
-        self.last_usage = usage_to_dict(getattr(traj, "total_usage", None))
+        self._record_usage(
+            "complete",
+            "",
+            getattr(traj, "total_usage", None),
+            seconds=time.time() - started,
+            model=getattr(traj, "model", None) or effective_model,
+        )
         return traj.result
 
     def _plain_claude_completion(
@@ -333,6 +340,7 @@ class CawBackend(LLMBackend):
         prompt tokens of overhead against ~500 (measured), plus the
         project memory of whatever directory the shell is in.
         """
+        started = time.time()
         cmd = [
             "claude",
             "-p",
@@ -374,13 +382,19 @@ class CawBackend(LLMBackend):
             tail = (proc.stderr or proc.stdout or "").strip()[-500:]
             raise RuntimeError(f"claude returned no result (exit {proc.returncode}): {tail}")
         usage = data.get("usage") or {}
-        self.last_usage = {
-            "input_tokens": usage.get("input_tokens") or 0,
-            "output_tokens": usage.get("output_tokens") or 0,
-            "cache_read_tokens": usage.get("cache_read_input_tokens") or 0,
-            "cache_write_tokens": usage.get("cache_creation_input_tokens") or 0,
-            "cost_usd": data.get("total_cost_usd") or 0.0,
-        }
+        self._record_usage(
+            "complete",
+            "",
+            {
+                "input_tokens": usage.get("input_tokens") or 0,
+                "output_tokens": usage.get("output_tokens") or 0,
+                "cache_read_tokens": usage.get("cache_read_input_tokens") or 0,
+                "cache_write_tokens": usage.get("cache_creation_input_tokens") or 0,
+                "cost_usd": data.get("total_cost_usd") or 0.0,
+            },
+            seconds=time.time() - started,
+            model=model,
+        )
         result = data.get("result") or ""
         if data.get("is_error"):
             raise RuntimeError(f"claude: {result or data.get('subtype') or 'error'}")
@@ -422,12 +436,18 @@ class CawBackend(LLMBackend):
         except Exception as e:
             logger.error("Update agent for %s failed via caw: %s", deps.current_module_name, e)
             raise
-        usage = usage_to_dict(getattr(traj, "total_usage", None))
-        self.last_usage = usage
+        seconds = time.time() - started
+        usage = self._record_usage(
+            "update_agent",
+            deps.current_module_name,
+            getattr(traj, "total_usage", None),
+            seconds=seconds,
+            model=getattr(traj, "model", None) or self._model,
+        )
         return AgentReply(
             text=traj.result or "",
             usage=usage,
-            seconds=time.time() - started,
+            seconds=seconds,
             meta={"turns": traj.num_turns, "tool_calls": traj.total_tool_calls},
         )
 
@@ -583,16 +603,26 @@ class CawBackend(LLMBackend):
         # (https://code.claude.com/docs/en/permission-modes).
         run_cwd = working_dir if self._caw_provider == "codex" else self._repo_root
         slot = self.slots.hold() if hold_slot else contextlib.nullcontext()
+        started = time.time()
         try:
             with slot:
                 traj = agent.completion(user_prompt, cwd=run_cwd)
+            # Nested sub-module agents are separate CLI processes that record
+            # their own usage, so this covers only this module's own run.
+            usage = self._record_usage(
+                "module_agent",
+                module_name,
+                getattr(traj, "total_usage", None),
+                seconds=time.time() - started,
+                model=getattr(traj, "model", None) or self._model,
+            )
             logger.info(
-                "Module %s completed via caw (turns=%d, tool_calls=%d)",
+                "Module %s completed via caw (turns=%d, tool_calls=%d, cost=$%.4f)",
                 module_name,
                 traj.num_turns,
                 traj.total_tool_calls,
+                (usage or {}).get("cost_usd", 0.0),
             )
-            self.last_usage = usage_to_dict(getattr(traj, "total_usage", None))
             save_unwritten_doc(
                 os.path.join(
                     working_dir,

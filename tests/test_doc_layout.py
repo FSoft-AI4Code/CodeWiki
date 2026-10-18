@@ -8,9 +8,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from codewiki.src.be import doc_layout as L
+from codewiki.src.be.dependency_analyzer.models.core import Node
 from codewiki.src.be.documentation_generator import DocumentationGenerator
 from codewiki.src.be.module_naming import find_missing_module_docs, sub_module_report
 from codewiki.src.be.prompt_template import (
+    DART_FLUTTER_NOTE,
     format_leaf_system_prompt,
     format_system_prompt,
     format_user_prompt,
@@ -358,3 +360,31 @@ def test_module_names_drop_ampersand():
     assert sanitize_module_name("Data_Model_&_Persistence") == "Data_Model___Persistence"
     tree = dedupe_module_tree_names({"A & B": {"components": [], "children": {}}})
     assert list(tree) == ["A___B"]
+
+
+def _component(tmp_path, relpath: str, cid: str) -> Node:
+    path = tmp_path / relpath
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("// code\n", encoding="utf-8")
+    return Node(
+        id=cid,
+        name=cid.split("::")[-1],
+        component_type="class",
+        file_path=str(path),
+        relative_path=relpath,
+    )
+
+
+def test_dart_modules_get_flutter_note(tmp_path):
+    components = {
+        "lib/home.dart::HomePage": _component(tmp_path, "lib/home.dart", "lib/home.dart::HomePage")
+    }
+    prompt = format_user_prompt("auth", list(components), components, TREE, ["auth"], "flat")
+    assert DART_FLUTTER_NOTE in prompt
+    assert "```dart" in prompt
+
+
+def test_non_dart_modules_have_no_flutter_note(tmp_path):
+    components = {"a.py::A": _component(tmp_path, "a.py", "a.py::A")}
+    prompt = format_user_prompt("auth", list(components), components, TREE, ["auth"], "flat")
+    assert DART_FLUTTER_NOTE not in prompt

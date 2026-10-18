@@ -355,6 +355,21 @@ def _invalidate_affected_modules(output_dir: Path, changed_files: list[str], log
     "normal calls if the provider rejects them (default: enabled)",
 )
 @click.option(
+    "--main-model",
+    default=None,
+    help="Model for documentation agents (overrides config)",
+)
+@click.option(
+    "--cluster-model",
+    default=None,
+    help="Model for module clustering (overrides config)",
+)
+@click.option(
+    "--fallback-model",
+    default=None,
+    help="Model used when the main model fails (overrides config)",
+)
+@click.option(
     "--artifacts/--no-artifacts",
     default=True,
     help="Document build, CI, container, packaging, manifest, config, schema and "
@@ -478,6 +493,9 @@ def generate_command(
     concurrency: int | None,
     max_context_tokens: int | None,
     prompt_caching: bool | None,
+    main_model: str | None = None,
+    cluster_model: str | None = None,
+    fallback_model: str | None = None,
     artifacts: bool = True,
     crosslinks: bool = True,
     artifact_token_budget: int = 200_000,
@@ -543,6 +561,10 @@ def generate_command(
     \b
     # Override max depth for hierarchical decomposition
     $ codewiki generate --max-depth 3
+
+    \b
+    # Use other models for this generation
+    $ codewiki generate --main-model claude-haiku-5-5 --cluster-model claude-haiku-5-5
     """
     print_banner()
     logger = create_logger(verbose=verbose)
@@ -749,6 +771,8 @@ def generate_command(
             effective_prompt_caching = (
                 prompt_caching if prompt_caching is not None else config.prompt_caching
             )
+            logger.debug(f"Main model: {main_model or config.main_model}")
+            logger.debug(f"Cluster model: {cluster_model or config.cluster_model}")
             logger.debug(f"Max tokens: {effective_max_tokens}")
             logger.debug(f"Max token/module: {effective_max_token_per_module}")
             logger.debug(f"Max token/leaf module: {effective_max_token_per_leaf}")
@@ -789,9 +813,10 @@ def generate_command(
             repo_path=repo_path,
             output_dir=output_dir,
             config={
-                "main_model": config.main_model,
-                "cluster_model": config.cluster_model,
-                "fallback_model": config.fallback_model,
+                # Models (runtime overrides take precedence)
+                "main_model": main_model or config.main_model,
+                "cluster_model": cluster_model or config.cluster_model,
+                "fallback_model": fallback_model or config.fallback_model,
                 "base_url": config.base_url,
                 "api_key": api_key,
                 "provider": getattr(config, "provider", "openai-compatible"),
@@ -886,6 +911,10 @@ def generate_command(
                 "total_files_analyzed": job.statistics.total_files_analyzed,
                 "generation_time": generation_time,
                 "total_tokens_used": job.statistics.total_tokens_used,
+                "usage_totals": job.statistics.usage_totals,
+                "total_cost_usd": job.statistics.total_cost_usd,
+                "unpriced_models": job.statistics.unpriced_models,
+                "provider": getattr(config, "provider", "openai-compatible"),
             },
         )
 

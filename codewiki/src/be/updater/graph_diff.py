@@ -37,8 +37,21 @@ def normalize_body(text: str | None) -> str:
     return _WS.sub(" ", (text or "").strip())
 
 
+def documented_source(node: Node) -> str:
+    """The component's code with its doc comment in front, when the code does not already hold it.
+
+    Languages like Rust keep doc comments (`///`) above the item, outside ``source_code``. Without
+    them, a change that only documents behaviour would be invisible to the updater.
+    """
+    code = node.source_code or ""
+    doc = (node.docstring or "").strip()
+    if doc and doc not in code:
+        return f"{doc}\n{code}"
+    return code
+
+
 def body_hash(node: Node) -> str:
-    return hashlib.sha1(normalize_body(node.source_code).encode("utf-8")).hexdigest()
+    return hashlib.sha1(normalize_body(documented_source(node)).encode("utf-8")).hexdigest()
 
 
 def signature(node: Node) -> dict[str, Any]:
@@ -78,8 +91,8 @@ def truncate_to_tokens(text: str, max_tokens: int) -> str:
 
 
 def unified_body_diff(old: Node | None, new: Node | None, label: str) -> str:
-    old_lines = (old.source_code or "").splitlines(keepends=True) if old else []
-    new_lines = (new.source_code or "").splitlines(keepends=True) if new else []
+    old_lines = documented_source(old).splitlines(keepends=True) if old else []
+    new_lines = documented_source(new).splitlines(keepends=True) if new else []
     diff = difflib.unified_diff(
         old_lines, new_lines, fromfile=f"a/{label}", tofile=f"b/{label}", n=2
     )
