@@ -916,7 +916,7 @@
             display: none;
             position: fixed;
             inset: 0;
-            z-index: 400;
+            z-index: 700; /* above the chat panel, whose answers open diagrams too */
             background: var(--lightbox-bg);
         }
 
@@ -1247,6 +1247,7 @@
         }
 
         .chat-panel {
+            --chat-gutter: 20px; /* one side margin for header, messages and input */
             position: fixed;
             top: 0;
             right: 0;
@@ -1259,18 +1260,22 @@
             border-left: 1px solid var(--border-color);
             box-shadow: -12px 0 40px rgba(0, 0, 0, 0.18);
             transform: translateX(100%);
-            transition: transform 0.2s ease;
+            /* Hidden once slid away: no shadow on the page edge, no Tab stops. */
+            visibility: hidden;
+            transition: transform 0.2s ease, visibility 0s linear 0.2s;
         }
 
         .chat-panel.open {
             transform: none;
+            visibility: visible;
+            transition: transform 0.2s ease;
         }
 
         .chat-header {
             display: flex;
             align-items: center;
             gap: 8px;
-            padding: 12px 14px;
+            padding: 12px var(--chat-gutter);
             border-bottom: 1px solid var(--border-color);
         }
 
@@ -1299,24 +1304,92 @@
             cursor: pointer;
         }
 
+        .chat-close {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 6px;
+        }
+
+        .chat-close svg,
+        .chat-action svg,
+        .chat-send svg {
+            width: 14px;
+            height: 14px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .chat-close:hover,
+        .chat-new:hover {
+            color: var(--text-color);
+            border-color: var(--primary-color);
+        }
+
         .chat-messages {
             flex: 1;
             overflow-y: auto;
-            padding: 14px;
+            scrollbar-gutter: stable;
+            padding: 16px var(--chat-gutter);
             display: flex;
             flex-direction: column;
-            gap: 14px;
+            gap: 18px;
+        }
+
+        .chat-turn {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .chat-turn.user {
+            align-items: flex-end;
         }
 
         .chat-msg {
+            min-width: 0;
+            max-width: 100%;
             font-size: 14px;
-            line-height: 1.55;
+            line-height: 1.6;
             color: var(--body-color);
+            overflow-wrap: break-word;
+        }
+
+        .chat-msg > :first-child {
+            margin-top: 0;
+        }
+
+        .chat-msg > :last-child {
+            margin-bottom: 0;
+        }
+
+        .chat-msg p,
+        .chat-msg ul,
+        .chat-msg ol {
+            margin: 0 0 10px;
+        }
+
+        .chat-msg ul,
+        .chat-msg ol {
+            padding-left: 22px;
+        }
+
+        .chat-msg h1,
+        .chat-msg h2,
+        .chat-msg h3,
+        .chat-msg h4 {
+            margin: 14px 0 8px;
+            font-size: 15px;
+            color: var(--heading-color);
+        }
+
+        .chat-msg :not(pre) > code {
             overflow-wrap: anywhere;
         }
 
         .chat-msg.user {
-            align-self: flex-end;
             max-width: 85%;
             padding: 8px 12px;
             border-radius: 12px 12px 2px 12px;
@@ -1327,8 +1400,196 @@
 
         .chat-msg.assistant pre {
             max-width: 100%;
+            margin: 10px 0;
+            padding: 10px 12px;
             overflow-x: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--code-bg);
             font-size: 12px;
+        }
+
+        .chat-msg.assistant pre code {
+            padding: 0;
+            background: none;
+        }
+
+        .chat-msg table {
+            display: block;
+            max-width: 100%;
+            margin: 10px 0;
+            overflow-x: auto;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .chat-msg th,
+        .chat-msg td {
+            padding: 6px 10px;
+            border: 1px solid var(--border-color);
+            text-align: left;
+            vertical-align: top;
+        }
+
+        .chat-msg th {
+            background: var(--secondary-color);
+        }
+
+        /* Names stay whole in table cells; a wide table scrolls instead. */
+        .chat-msg td code,
+        .chat-msg th code {
+            white-space: nowrap;
+            overflow-wrap: normal;
+        }
+
+        .chat-msg .mermaid {
+            margin: 10px 0;
+            overflow-x: auto;
+        }
+
+        .chat-msg.notice {
+            font-size: 13px;
+            font-style: italic;
+            color: var(--muted-color);
+        }
+
+        .chat-actions {
+            display: flex;
+            gap: 2px;
+            margin: 4px -6px 0; /* icons line up with the text above */
+            opacity: 0.7;
+            transition: opacity 0.15s;
+        }
+
+        .chat-turn:hover .chat-actions,
+        .chat-actions:focus-within {
+            opacity: 1;
+        }
+
+        .chat-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 6px;
+            border: none;
+            border-radius: 6px;
+            background: transparent;
+            color: var(--muted-color);
+            font: inherit;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .chat-action:hover,
+        .chat-action:focus-visible {
+            background: var(--secondary-color);
+            color: var(--text-color);
+            outline: none;
+        }
+
+        .chat-edit {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            width: 85%;
+        }
+
+        .chat-edit .chat-input {
+            resize: vertical;
+        }
+
+        .chat-edit-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 6px;
+        }
+
+        .chat-edit-actions .chat-send {
+            padding: 4px 12px;
+        }
+
+        .chat-progress {
+            padding: 10px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            font-size: 13px;
+            color: var(--body-color);
+        }
+
+        .chat-progress-head {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .chat-progress-time {
+            margin-left: auto;
+            font-variant-numeric: tabular-nums;
+            color: var(--muted-color);
+        }
+
+        .chat-steps {
+            margin: 8px 0 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .chat-steps li {
+            display: flex;
+            gap: 8px;
+            padding: 2px 0;
+        }
+
+        .chat-steps li.done {
+            color: var(--muted-color);
+        }
+
+        .chat-step-mark {
+            width: 12px;
+            flex-shrink: 0;
+            text-align: center;
+        }
+
+        .chat-steps li.current .chat-step-mark {
+            color: var(--primary-color);
+        }
+
+        .chat-step-text {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .chat-step-time {
+            font-variant-numeric: tabular-nums;
+            color: var(--muted-color);
+        }
+
+        .chat-progress-hint {
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--muted-color);
+        }
+
+        .chat-spinner {
+            width: 12px;
+            height: 12px;
+            flex-shrink: 0;
+            border: 2px solid var(--border-color);
+            border-top-color: var(--primary-color);
+            border-radius: 50%;
+            animation: chat-spin 0.8s linear infinite;
+        }
+
+        @keyframes chat-spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .chat-spinner {
+                animation: none;
+            }
         }
 
         .chat-msg.error {
@@ -1377,7 +1638,7 @@
 
         .chat-status {
             min-height: 18px;
-            padding: 0 14px 6px;
+            padding: 0 var(--chat-gutter) 6px;
             font-size: 12px;
             color: var(--muted-color);
         }
@@ -1385,7 +1646,7 @@
         .chat-form {
             display: flex;
             gap: 8px;
-            padding: 10px 14px 14px;
+            padding: 12px var(--chat-gutter) 16px;
             border-top: 1px solid var(--border-color);
         }
 
@@ -1409,13 +1670,60 @@
         }
 
         .chat-send {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
             padding: 0 14px;
-            border: none;
+            border: 1px solid var(--primary-color);
             border-radius: 8px;
             background: var(--primary-color);
             color: #fff;
+            font: inherit;
             font-weight: 600;
             cursor: pointer;
+        }
+
+        .chat-send.stop {
+            border-color: var(--border-color);
+            background: var(--panel-bg);
+            color: var(--text-color);
+        }
+
+        .chat-send.stop svg {
+            fill: currentColor;
+        }
+
+        .chat-trigger {
+            position: relative;
+        }
+
+        .chat-trigger.busy .chat-trigger-icon {
+            animation: chat-pulse 1.2s ease-in-out infinite;
+        }
+
+        .chat-trigger.unread::after {
+            content: '';
+            position: absolute;
+            top: -3px;
+            right: -3px;
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            border: 2px solid var(--page-bg);
+        }
+
+        @keyframes chat-pulse {
+            50% {
+                opacity: 0.35;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .chat-trigger.busy .chat-trigger-icon {
+                animation: none;
+            }
         }
 
         .chat-send:disabled {
@@ -1475,7 +1783,9 @@
             <span class="chat-title">Ask AI</span>
             <span class="chat-freshness" id="chat-freshness"></span>
             <button class="chat-new" id="chat-new" type="button" title="Start a new conversation">New</button>
-            <button class="chat-close" id="chat-close" type="button" aria-label="Close chat">Esc</button>
+            <button class="chat-close" id="chat-close" type="button" aria-label="Minimize chat" title="Minimize (Esc)">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>
+            </button>
         </div>
         <div class="chat-messages" id="chat-messages"></div>
         <div class="chat-status" id="chat-status" aria-live="polite"></div>
@@ -1522,7 +1832,7 @@
                             <span class="search-trigger-kbd">Ctrl K</span>
                         </button>
                         <button class="chat-trigger" id="chat-trigger" type="button" aria-label="Ask AI about this codebase">
-                            <span>💬</span>
+                            <span class="chat-trigger-icon">💬</span>
                             <span class="chat-trigger-label">Ask AI</span>
                         </button>
                     </div>
@@ -2650,8 +2960,11 @@
             });
         }
 
-        async function renderMermaidDiagrams() {
-            const mermaidElements = document.querySelectorAll('#content .mermaid');
+        let mermaidRenderSeq = 0;
+
+        // `root`: the page (default) or the chat, whose answers can hold diagrams too.
+        async function renderMermaidDiagrams(root) {
+            const mermaidElements = (root || document.getElementById('content')).querySelectorAll('.mermaid');
 
             for (let i = 0; i < mermaidElements.length; i++) {
                 const element = mermaidElements[i];
@@ -2661,7 +2974,7 @@
                 }
 
                 try {
-                    const renderId = 'mermaid-svg-' + Date.now() + '-' + i;
+                    const renderId = 'mermaid-svg-' + (++mermaidRenderSeq);
                     const { svg } = await mermaid.render(renderId, element.dataset.src);
                     element.innerHTML = svg;
                     makeMermaidZoomable(element);
@@ -2987,10 +3300,11 @@
                 closeMermaidLightbox();
 
                 // Re-render diagrams from their stored source in the new theme
-                document.querySelectorAll('#content .mermaid').forEach(el => {
+                document.querySelectorAll('.mermaid').forEach(el => {
                     if (el.dataset.src) el.innerHTML = '';
                 });
                 await renderMermaidDiagrams();
+                await renderMermaidDiagrams(document.getElementById('chat-messages'));
             });
         }
 
@@ -3029,7 +3343,19 @@
         const CHAT_SESSION_KEY = 'codewiki-chat:' + (CONFIG.repository_url || document.title);
         let chatServer = null;      // {base, health} once found
         let chatBusy = false;
+        let chatAbort = null;       // AbortController of the question being answered
+        let chatProgress = null;    // {start, steps: [{text, start, end}]} while busy
+        let chatTimer = null;
+        let chatEditing = null;     // index of the question being edited
         let chatState = { sessionId: null, messages: [] };
+
+        const CHAT_ICONS = {
+            copy: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>',
+            check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>',
+            retry: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v5h5"/></svg>',
+            edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13 7l4 4"/></svg>',
+            stop: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>'
+        };
 
         function chatLoadState() {
             try {
@@ -3151,18 +3477,152 @@
             });
         }
 
-        function renderChatMessage(msg) {
+        function copyText(text) {
+            if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+            // Plain-http pages (another machine on the LAN) have no clipboard API.
+            const area = document.createElement('textarea');
+            area.value = text;
+            area.setAttribute('readonly', '');
+            area.style.position = 'fixed';
+            area.style.opacity = '0';
+            document.body.appendChild(area);
+            area.select();
+            try { document.execCommand('copy'); } finally { area.remove(); }
+            return Promise.resolve();
+        }
+
+        function chatActionButton(icon, label, onClick) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'chat-action';
+            btn.title = label;
+            btn.setAttribute('aria-label', label);
+            btn.innerHTML = CHAT_ICONS[icon] + '<span>' + escapeHtml(label) + '</span>';
+            btn.addEventListener('click', onClick);
+            return btn;
+        }
+
+        function chatCopyButton(text) {
+            const btn = chatActionButton('copy', 'Copy', function() {
+                copyText(text).then(function() {
+                    btn.innerHTML = CHAT_ICONS.check + '<span>Copied</span>';
+                    setTimeout(function() { btn.innerHTML = CHAT_ICONS.copy + '<span>Copy</span>'; }, 1500);
+                });
+            });
+            return btn;
+        }
+
+        // The question an answer, error or "stopped" note belongs to.
+        function chatQuestionIndex(index) {
+            for (let i = index; i >= 0; i--) {
+                if (chatState.messages[i].role === 'user') return i;
+            }
+            return -1;
+        }
+
+        // Turns the server remembers before message `index` (sent as keep_turns, so
+        // an edited or retried question forgets the answers that came after it).
+        function chatTurnsBefore(index) {
+            for (let i = index - 1; i >= 0; i--) {
+                const m = chatState.messages[i];
+                if (m.role === 'assistant' && typeof m.turns === 'number') return m.turns;
+            }
+            return 0;
+        }
+
+        function retryChat(index) {
+            const q = chatQuestionIndex(index);
+            if (q >= 0) askChat(chatState.messages[q].text, q);
+        }
+
+        function renderChatEditor(index) {
+            const msg = chatState.messages[index];
+            const box = document.createElement('div');
+            box.className = 'chat-edit';
+            const area = document.createElement('textarea');
+            area.className = 'chat-input';
+            area.value = msg.text;
+            area.rows = 3;
+            area.setAttribute('aria-label', 'Edit your question');
+            const row = document.createElement('div');
+            row.className = 'chat-edit-actions';
+            const cancel = document.createElement('button');
+            cancel.type = 'button';
+            cancel.className = 'chat-new';
+            cancel.textContent = 'Cancel';
+            cancel.addEventListener('click', cancelChatEdit);
+            const send = document.createElement('button');
+            send.type = 'button';
+            send.className = 'chat-send';
+            send.textContent = 'Send';
+            send.addEventListener('click', function() {
+                if (!area.value.trim()) return;
+                chatEditing = null;
+                askChat(area.value, index);
+            });
+            area.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    send.click();
+                }
+            });
+            row.appendChild(cancel);
+            row.appendChild(send);
+            box.appendChild(area);
+            box.appendChild(row);
+            return box;
+        }
+
+        function cancelChatEdit() {
+            chatEditing = null;
+            renderChat();
+            document.getElementById('chat-input').focus();
+        }
+
+        function renderChatMessage(msg, index) {
+            const turn = document.createElement('div');
+            turn.className = 'chat-turn ' + msg.role;
+            if (msg.role === 'user' && chatEditing === index) {
+                turn.appendChild(renderChatEditor(index));
+                return turn;
+            }
             const el = document.createElement('div');
             el.className = 'chat-msg ' + msg.role;
-            if (msg.role === 'user' || msg.role === 'error') {
+            turn.appendChild(el);
+            const actions = document.createElement('div');
+            actions.className = 'chat-actions';
+            if (msg.role === 'user' || msg.role === 'error' || msg.role === 'notice') {
                 el.textContent = msg.text;
-                return el;
+            } else {
+                el.innerHTML = renderMarkdown(msg.text || '');
+                decorateCitations(el);
+                if (typeof hljs !== 'undefined') {
+                    el.querySelectorAll('pre code[class*="language-"]').forEach(function(block) {
+                        hljs.highlightElement(block);
+                    });
+                }
+                renderChatSources(el, msg);
             }
-            el.innerHTML = sanitizeHtml(marked.parse(msg.text || ''));
-            decorateCitations(el);
-            if (typeof hljs !== 'undefined') {
-                el.querySelectorAll('pre code').forEach(function(block) { hljs.highlightElement(block); });
+            if (msg.role !== 'notice' && msg.role !== 'error') actions.appendChild(chatCopyButton(msg.text || ''));
+            if (!chatBusy) {
+                if (msg.role === 'user') {
+                    actions.appendChild(chatActionButton('edit', 'Edit', function() {
+                        chatEditing = index;
+                        renderChat();
+                        const area = document.querySelector('#chat-messages .chat-edit textarea');
+                        if (area) {
+                            area.focus();
+                            area.setSelectionRange(area.value.length, area.value.length);
+                        }
+                    }));
+                }
+                actions.appendChild(chatActionButton('retry', 'Retry', function() { retryChat(index); }));
             }
+            if (actions.children.length) turn.appendChild(actions);
+            return turn;
+        }
+
+        function renderChatSources(el, msg) {
             if (msg.sources && msg.sources.length) {
                 const box = document.createElement('div');
                 box.className = 'chat-sources';
@@ -3193,7 +3653,58 @@
                 stats.textContent = msg.stats;
                 el.appendChild(stats);
             }
+        }
+
+        function formatSeconds(ms) {
+            const s = Math.max(0, Math.round(ms / 1000));
+            return s < 60 ? s + 's' : Math.floor(s / 60) + 'm ' + String(s % 60).padStart(2, '0') + 's';
+        }
+
+        function renderChatProgress() {
+            const now = Date.now();
+            const el = document.createElement('div');
+            el.className = 'chat-progress';
+            el.id = 'chat-progress';
+            const head = document.createElement('div');
+            head.className = 'chat-progress-head';
+            head.innerHTML = '<span class="chat-spinner" aria-hidden="true"></span><strong>Working on your answer</strong>' +
+                '<span class="chat-progress-time">' + formatSeconds(now - chatProgress.start) + '</span>';
+            el.appendChild(head);
+            const list = document.createElement('ol');
+            list.className = 'chat-steps';
+            list.setAttribute('aria-live', 'polite');
+            const steps = chatProgress.steps.length ? chatProgress.steps
+                : [{ text: 'Sending your question…', start: chatProgress.start }];
+            steps.forEach(function(step) {
+                const li = document.createElement('li');
+                const done = step.end !== undefined;
+                li.className = done ? 'done' : 'current';
+                const text = done ? step.text.replace(/…$/, '') : step.text;
+                li.innerHTML = '<span class="chat-step-mark" aria-hidden="true">' + (done ? '✓' : '•') + '</span>' +
+                    '<span class="chat-step-text">' + escapeHtml(text) + '</span>' +
+                    '<span class="chat-step-time">' + formatSeconds((done ? step.end : now) - step.start) + '</span>';
+                list.appendChild(li);
+            });
+            el.appendChild(list);
+            const hint = document.createElement('div');
+            hint.className = 'chat-progress-hint';
+            hint.textContent = 'Each step asks the model, so a step can take a while. ' +
+                'Press Esc to minimize: the answer keeps coming. Stop cancels it.';
+            el.appendChild(hint);
             return el;
+        }
+
+        function updateChatProgress() {
+            const old = document.getElementById('chat-progress');
+            if (!chatProgress) {
+                if (old) old.remove();
+                return;
+            }
+            const box = document.getElementById('chat-messages');
+            const pinned = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+            const el = renderChatProgress();
+            if (old) old.replaceWith(el); else box.appendChild(el);
+            if (pinned) box.scrollTop = box.scrollHeight;
         }
 
         function renderChat() {
@@ -3206,8 +3717,12 @@
                     'lives, or what breaks if you change it. Answers cite the code and pages they use.</p>';
                 box.appendChild(hint);
             }
-            chatState.messages.forEach(function(m) { box.appendChild(renderChatMessage(m)); });
-            box.scrollTop = box.scrollHeight;
+            chatState.messages.forEach(function(m, i) { box.appendChild(renderChatMessage(m, i)); });
+            if (chatProgress) box.appendChild(renderChatProgress());
+            if (chatEditing === null) box.scrollTop = box.scrollHeight;
+            renderMermaidDiagrams(box).then(function() {
+                if (chatEditing === null) box.scrollTop = box.scrollHeight;
+            });
         }
 
         function renderChatOffline() {
@@ -3229,14 +3744,14 @@
                     : '') +
                 '</div>';
             const pre = box.querySelector('pre');
-            if (pre && navigator.clipboard) {
+            if (pre) {
                 const btn = document.createElement('button');
                 btn.type = 'button';
                 btn.className = 'chat-new';
                 btn.textContent = 'Copy';
                 btn.style.marginTop = '6px';
                 btn.addEventListener('click', function() {
-                    navigator.clipboard.writeText(cmd).then(function() { btn.textContent = 'Copied'; });
+                    copyText(cmd).then(function() { btn.textContent = 'Copied'; });
                 });
                 pre.after(btn);
             }
@@ -3246,10 +3761,26 @@
             document.getElementById('chat-status').textContent = text || '';
         }
 
+        function isChatOpen() {
+            return document.getElementById('chat-panel').classList.contains('open');
+        }
+
+        // The send button doubles as Stop; the trigger shows a question still running.
+        function updateChatControls() {
+            const send = document.getElementById('chat-send');
+            send.classList.toggle('stop', chatBusy);
+            send.innerHTML = chatBusy ? CHAT_ICONS.stop + '<span>Stop</span>' : 'Ask';
+            send.setAttribute('aria-label', chatBusy ? 'Stop answering' : 'Ask');
+            const trigger = document.getElementById('chat-trigger');
+            trigger.classList.toggle('busy', chatBusy);
+            trigger.querySelector('.chat-trigger-label').textContent = chatBusy ? 'Thinking…' : 'Ask AI';
+        }
+
         async function openChat() {
             const panel = document.getElementById('chat-panel');
             panel.classList.add('open');
             panel.setAttribute('aria-hidden', 'false');
+            document.getElementById('chat-trigger').classList.remove('unread');
             setChatStatus(chatServer ? '' : 'Looking for codewiki serve…');
             const server = await findChatServer(false);
             setChatStatus('');
@@ -3261,29 +3792,50 @@
             document.getElementById('chat-input').focus();
         }
 
+        // Minimizes: a question being answered keeps going and is shown on reopening.
         function closeChat() {
             const panel = document.getElementById('chat-panel');
+            if (panel.contains(document.activeElement)) document.getElementById('chat-trigger').focus();
             panel.classList.remove('open');
             panel.setAttribute('aria-hidden', 'true');
         }
 
-        async function sendChat(question) {
+        function stopChat() {
+            if (chatAbort) chatAbort.abort();
+        }
+
+        // Ask `question` in place of the messages from `cutAt` on (an edit or a
+        // retry); a new question is asked at the end of the conversation.
+        async function askChat(question, cutAt) {
             if (chatBusy || !question.trim()) return;
             const server = await findChatServer(false);
             if (!server) {
                 renderChatOffline();
                 return;
             }
-            chatBusy = true;
-            document.getElementById('chat-send').disabled = true;
+            if (cutAt === undefined) cutAt = chatState.messages.length;
+            const keepTurns = chatTurnsBefore(cutAt);
+            chatState.messages = chatState.messages.slice(0, cutAt);
             chatState.messages.push({ role: 'user', text: question });
+            // "New" replaces chatState; what this question returns then goes nowhere.
+            const convo = chatState;
+            chatEditing = null;
+            chatBusy = true;
+            chatAbort = new AbortController();
+            chatProgress = { start: Date.now(), steps: [] };
+            chatTimer = setInterval(updateChatProgress, 1000);
+            updateChatControls();
             renderChat();
-            setChatStatus('Thinking…');
             try {
                 const response = await fetch(server.base + '/api/ask', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ question: question, session_id: chatState.sessionId })
+                    body: JSON.stringify({
+                        question: question,
+                        session_id: chatState.sessionId,
+                        keep_turns: keepTurns
+                    }),
+                    signal: chatAbort.signal
                 });
                 if (!response.ok) {
                     let detail = response.statusText;
@@ -3305,14 +3857,19 @@
                         if (!line) continue;
                         const event = JSON.parse(line);
                         if (event.type === 'status') {
-                            setChatStatus(event.message);
+                            const now = Date.now();
+                            const steps = chatProgress.steps;
+                            if (steps.length) steps[steps.length - 1].end = now;
+                            steps.push({ text: event.message, start: now });
+                            updateChatProgress();
                         } else if (event.type === 'answer') {
-                            chatState.sessionId = event.session_id;
-                            chatState.messages.push({
+                            convo.sessionId = event.session_id;
+                            convo.messages.push({
                                 role: 'assistant',
                                 text: event.answer,
                                 sources: event.sources,
-                                stats: event.stats.footer
+                                stats: event.stats.footer,
+                                turns: event.turns
                             });
                             finished = true;
                         } else if (event.type === 'error') {
@@ -3320,14 +3877,25 @@
                         }
                     }
                 }
+                if (!finished) throw new Error('the server closed the connection without an answer');
             } catch (e) {
-                chatState.messages.push({ role: 'error', text: 'Could not answer: ' + e.message });
+                if (e.name === 'AbortError') {
+                    convo.messages.push({ role: 'notice', text: 'Stopped. Edit or retry the question to ask again.' });
+                } else {
+                    convo.messages.push({ role: 'error', text: 'Could not answer: ' + e.message });
+                }
             } finally {
+                clearInterval(chatTimer);
+                chatTimer = null;
                 chatBusy = false;
-                document.getElementById('chat-send').disabled = false;
-                setChatStatus('');
+                chatAbort = null;
+                chatProgress = null;
+                updateChatControls();
                 chatSaveState();
                 renderChat();
+                if (!isChatOpen() && chatState === convo) {
+                    document.getElementById('chat-trigger').classList.add('unread');
+                }
             }
         }
 
@@ -3336,6 +3904,8 @@
             document.getElementById('chat-trigger').addEventListener('click', openChat);
             document.getElementById('chat-close').addEventListener('click', closeChat);
             document.getElementById('chat-new').addEventListener('click', function() {
+                stopChat();
+                chatEditing = null;
                 chatState = { sessionId: null, messages: [] };
                 chatSaveState();
                 if (chatServer) renderChat();
@@ -3343,21 +3913,31 @@
             const input = document.getElementById('chat-input');
             document.getElementById('chat-form').addEventListener('submit', function(e) {
                 e.preventDefault();
+                if (chatBusy) {
+                    stopChat();
+                    return;
+                }
                 const q = input.value;
+                if (!q.trim()) return;
                 input.value = '';
-                sendChat(q);
+                askChat(q);
             });
             input.addEventListener('keydown', function(e) {
+                // Enter never stops a running answer: only the Stop button does.
                 if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
-                    document.getElementById('chat-form').requestSubmit();
+                    if (!chatBusy) document.getElementById('chat-form').requestSubmit();
                 }
             });
+            // Capture phase: Esc minimizes from anywhere in the panel, whatever has focus,
+            // unless a diagram or the search box is open on top of it.
             document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape' && document.getElementById('chat-panel').classList.contains('open')) {
-                    closeChat();
-                }
-            });
+                if (e.key !== 'Escape' || !isChatOpen()) return;
+                if (lightboxEl && lightboxEl.classList.contains('open')) return;
+                if (document.getElementById('search-modal-backdrop').classList.contains('open')) return;
+                e.preventDefault();
+                if (chatEditing !== null) cancelChatEdit(); else closeChat();
+            }, true);
             // Only same-origin is probed up front (served by `codewiki serve`): a page on
             // GitHub Pages reaches for localhost only once the reader opens the chat.
             findChatServer(true).then(function(server) {
