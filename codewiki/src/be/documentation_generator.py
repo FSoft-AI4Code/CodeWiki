@@ -7,7 +7,7 @@ from copy import deepcopy
 from typing import Any
 
 from codewiki import __version__
-from codewiki.src.be.backend import LLMBackend, get_backend
+from codewiki.src.be.backend import LLMBackend, UsageLedger, get_backend
 from codewiki.src.be.cluster_modules import (
     cluster_modules,
     ensure_artifact_module,
@@ -71,6 +71,14 @@ class DocumentationGenerator:
         self.graph_builder = DependencyGraphBuilder(config)
         self.backend: LLMBackend = backend or get_backend(config)
 
+    @property
+    def usage_ledger(self) -> UsageLedger:
+        """The backend's usage ledger (a throwaway one for backends without it)."""
+        ledger = getattr(getattr(self, "backend", None), "usage_ledger", None)
+        if not isinstance(ledger, UsageLedger):
+            ledger = self.__dict__.setdefault("_fallback_ledger", UsageLedger())
+        return ledger
+
     def create_documentation_metadata(
         self, working_dir: str, components: dict[str, Any], num_leaf_nodes: int
     ):
@@ -80,6 +88,7 @@ class DocumentationGenerator:
         metadata = {
             "generation_info": {
                 "timestamp": datetime.now(UTC).isoformat(),
+                "provider": getattr(self.config, "provider", None),
                 "main_model": self.config.main_model,
                 "generator_version": __version__,
                 "repo_path": self.config.repo_path,
@@ -95,6 +104,8 @@ class DocumentationGenerator:
                 "max_depth": self.config.max_depth,
             },
             "files_generated": ["overview.md", "module_tree.json", "first_module_tree.json"],
+            # Tokens and cost of every LLM call in this run (see UsageLedger)
+            "usage": self.usage_ledger.summary(),
         }
 
         # Add generated markdown files (docs-relative paths) to the metadata
@@ -265,6 +276,16 @@ class DocumentationGenerator:
         # calls. In whole-repository mode a regenerated overview.md is rebuilt
         # from the module docs via generate_parent_module_docs([]) rather than
         # by the whole-repo agent.
+        with self.usage_ledger.in_phase("modules"):
+            return await self._generate_modules(components, leaf_nodes, working_dir, module_tree)
+
+    async def _generate_modules(
+        self,
+        components: dict[str, Any],
+        leaf_nodes: list[str],
+        working_dir: str,
+        module_tree: dict[str, Any],
+    ) -> str:
         final_module_tree = module_tree
 
         # Status line after every page; agents' sub-modules add to the total
@@ -444,11 +465,13 @@ class DocumentationGenerator:
                 )
         logger.debug(f"Overview prompt for {module_name}: {len(prompt)} chars")
 
+        phase = "overview" if not module_path else "parent_modules"
         try:
-            parent_docs = await self._complete(
-                prompt,
-                system_prompt=format_overview_system_prompt(self.config.get_prompt_addition()),
-            )
+            with self.usage_ledger.in_phase(phase, target=module_name):
+                parent_docs = await self._complete(
+                    prompt,
+                    system_prompt=format_overview_system_prompt(self.config.get_prompt_addition()),
+                )
             if not parent_docs:
                 raise RuntimeError(
                     f"LLM returned empty content for {module_name} overview "
@@ -527,18 +550,19 @@ class DocumentationGenerator:
                 # one is set.  Caw mode's cluster_model is typically empty —
                 # complete() falls back to its own _model in that case.
                 cluster_model = self.config.cluster_model or None
-                module_tree = cluster_modules(
-                    leaf_nodes,
-                    components,
-                    self.config,
-                    completer=lambda p: self.backend.complete(p, model=cluster_model),
-                )
-                if module_tree:
-                    module_tree = super_group_modules(
-                        module_tree,
+                with self.usage_ledger.in_phase("clustering"):
+                    module_tree = cluster_modules(
+                        leaf_nodes,
+                        components,
                         self.config,
                         completer=lambda p: self.backend.complete(p, model=cluster_model),
                     )
+                    if module_tree:
+                        module_tree = super_group_modules(
+                            module_tree,
+                            self.config,
+                            completer=lambda p: self.backend.complete(p, model=cluster_model),
+                        )
                 # Artifact nodes the clustering LLM dropped get a fixed module
                 # so build/CI/config coverage does not depend on the LLM.
                 if getattr(self.config, "artifacts_enabled", True):

@@ -106,6 +106,27 @@ Things to know:
 - Large repositories can push a module prompt past the CLI's input limit.
   CodeWiki trims the module tree in that case and retries.
 
+### Cost tracking
+
+At the end of `codewiki generate`, CodeWiki prints the tokens used and an
+estimated cost for the run. `metadata.json` gets a `usage` block with totals,
+a per-phase breakdown (`clustering`, `modules`, `parent_modules`, `overview`,
+`update`) and one entry per LLM call. Each nested sub-module agent is counted
+once. Modules resumed from an earlier run cost nothing and don't appear.
+
+The cost is what the same tokens would cost on the API. Your subscription
+is billed as usual.
+
+- **Claude Code** reports the cost itself.
+- **Codex** is priced from caw's rate table using the model Codex actually
+  runs (`--main-model`, or `model` in `~/.codex/config.toml`). When a model
+  has no rate, CodeWiki lists it as "cost unknown" instead of showing $0. Add
+  a rate with:
+
+  ```bash
+  caw pricing set codex <model> --input <usd/1M> --cached <usd/1M> --output <usd/1M>
+  ```
+
 ## Which model to use
 
 - The **main model** writes the pages. It needs strong code understanding

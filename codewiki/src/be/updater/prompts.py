@@ -13,7 +13,7 @@ from typing import Any
 from codewiki.src.be.dependency_analyzer.models.core import Node
 from codewiki.src.be.prompt_template import _fence_language, _format_module_tree_str
 from codewiki.src.be.updater.change_report import LeafReport
-from codewiki.src.be.updater.graph_diff import GraphDiff
+from codewiki.src.be.updater.graph_diff import GraphDiff, documented_source
 
 VERDICT_VALUES = ("no-op", "patch", "rewrite")
 
@@ -292,7 +292,7 @@ def render_leaf_components(
         node = graph.get(cid)
         if node is None or cid not in changed or not node.source_code:
             continue
-        code = node.source_code
+        code = documented_source(node)
         if budget <= 0:
             lines.append(f"\n(code of {cid} omitted for length; use read_code_components)")
             continue

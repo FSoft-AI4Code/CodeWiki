@@ -37,6 +37,11 @@ class JobStatistics:
     leaf_nodes: int = 0
     max_depth: int = 0
     total_tokens_used: int = 0
+    # Summed provider usage of this run (input/output/cache tokens, cost_usd)
+    usage_totals: Dict[str, float] = field(default_factory=dict)
+    total_cost_usd: Optional[float] = None
+    # Models whose calls reported tokens but no price
+    unpriced_models: List[str] = field(default_factory=list)
 
 
 @dataclass
