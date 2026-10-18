@@ -357,8 +357,14 @@ def _cut(text: str, max_chars: int, focus: str | None) -> str:
         return text[:max_chars] + "\n… (truncated)"
     head, body, body_hits = lines[0], lines[1:], hits[1:]
     room = max(0, max_chars - len(head))
-    best = (0, 0, 0)  # hits, start, end
-    start = used = got = 0
+    # Plain assignments: Cython 3.3 compiled a chained `a = b = c = 0` (and a
+    # tuple of ints), later re-bound together, into code that segfaulted.
+    best_hits = 0
+    best_start = 0
+    best_end = 0
+    start = 0
+    used = 0
+    got = 0
     for end, line in enumerate(body):
         used += len(line) + 1
         got += body_hits[end]
@@ -366,9 +372,9 @@ def _cut(text: str, max_chars: int, focus: str | None) -> str:
             used -= len(body[start]) + 1
             got -= body_hits[start]
             start += 1
-        if got > best[0]:
-            best = (got, start, end + 1)
-    _, start, end = best
+        if got > best_hits:
+            best_hits, best_start, best_end = got, start, end + 1
+    start, end = best_start, best_end
     if end == 0:  # a single matching line longer than the budget
         return text[:max_chars] + "\n… (truncated)"
     parts = [head]
