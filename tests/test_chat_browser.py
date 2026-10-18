@@ -26,7 +26,7 @@ from codewiki.src.be.qa.engine import QAEngine  # noqa: E402
 from codewiki.src.be.qa.index import QAIndex  # noqa: E402
 from codewiki.src.be.qa.server import create_app  # noqa: E402
 from codewiki.src.be.qa.sessions import SessionStore  # noqa: E402
-from tests.qa_fixture import build  # noqa: E402
+from qa_fixture import build  # noqa: E402
 
 UNSIGN = "pkg/timed.py::TimestampSigner.unsign"
 DELAY = 0.8  # seconds per LLM call; an answer takes three

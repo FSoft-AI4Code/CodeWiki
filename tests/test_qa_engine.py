@@ -1,6 +1,7 @@
 """The ask pipeline, change-impact analysis, stats and logging."""
 
 import json
+import sys
 
 import pytest
 
@@ -11,7 +12,7 @@ from codewiki.src.be.qa.impact import find_references
 from codewiki.src.be.qa.index import QAIndex
 from codewiki.src.be.qa.sessions import SessionStore
 from codewiki.src.be.qa.stats import AskStats
-from tests.qa_fixture import build
+from qa_fixture import build
 
 UNSIGN = "pkg/timed.py::TimestampSigner.unsign"
 USAGE = {"input_tokens": 100, "output_tokens": 20, "cache_read_tokens": 5, "cost_usd": 0.001}
@@ -358,6 +359,7 @@ def test_a_method_inside_a_selected_class_is_not_read_twice(docs):
     assert [i.id for i in items] == ["pkg/timed.py::TimestampSigner"]
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="the fake claude is a shebang script")
 def test_caw_plain_completion_runs_claude_without_tools_in_a_neutral_dir(tmp_path, monkeypatch):
     import os
     import stat

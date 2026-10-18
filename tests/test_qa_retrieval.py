@@ -10,7 +10,7 @@ from codewiki.src.be.qa import DocsNotFoundError, get_index, resolve_docs_dir
 from codewiki.src.be.qa.bm25 import BM25F, tokenize
 from codewiki.src.be.qa.index import QAIndex
 from codewiki.src.be.qa.retrieve import Retriever
-from tests.qa_fixture import build, git
+from qa_fixture import build, git
 
 
 @pytest.fixture

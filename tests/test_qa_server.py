@@ -9,8 +9,8 @@ from codewiki.src.be.qa.engine import QAEngine
 from codewiki.src.be.qa.index import QAIndex
 from codewiki.src.be.qa.server import create_app, origin_of
 from codewiki.src.be.qa.sessions import SessionStore
-from tests.qa_fixture import build
-from tests.test_qa_engine import UNSIGN, ScriptedBackend
+from qa_fixture import build
+from test_qa_engine import UNSIGN, ScriptedBackend
 
 PAGES = "https://acme.github.io"
 
@@ -200,7 +200,7 @@ def test_generated_site_has_the_chat_window(tmp_path):
         repository_url="https://github.com/acme/repo",
         metadata={"generation_info": {"commit_id": "abc123"}},
     )
-    html = out.read_text()
+    html = out.read_text(encoding="utf-8")  # Windows defaults to cp1252
     assert 'id="chat-trigger"' in html and 'id="chat-panel"' in html
     assert "dompurify@3.2.4" in html and "DOMPurify.sanitize" in html
     config = html.split("const CONFIG = ", 1)[1].split(";\n", 1)[0]
