@@ -618,19 +618,36 @@
 
         .nav-toggle {
             flex-shrink: 0;
-            width: 22px;
-            height: 22px;
+            width: 32px;
+            height: 32px;
             display: flex;
             align-items: center;
             justify-content: center;
             background: none;
             border: none;
+            border-radius: 6px;
             padding: 0;
             color: var(--muted-color);
-            font-size: 11px;
             cursor: pointer;
-            transition: transform 0.15s ease;
+            transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
             transform: rotate(90deg);
+        }
+
+        .nav-toggle svg {
+            width: 16px;
+            height: 16px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .nav-toggle:hover,
+        .nav-toggle:focus-visible {
+            background: var(--border-color);
+            color: var(--text-color);
+            outline: none;
         }
 
         .nav-group.collapsed > .nav-row .nav-toggle {
@@ -930,10 +947,18 @@
             overflow: hidden;
             cursor: grab;
             touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
         }
 
         .lightbox-canvas.dragging {
             cursor: grabbing;
+        }
+
+        /* Own GPU layer while panning, so the SVG is not repainted on every move;
+           dropped on release so the diagram re-renders sharp at its zoom. */
+        .lightbox-canvas.dragging .lightbox-stage {
+            will-change: transform;
         }
 
         .lightbox-stage {
@@ -2099,7 +2124,8 @@
             const collapsed = depth >= 1 ? ' collapsed' : '';
             return '<div class="nav-group' + collapsed + '">' +
                 '<div class="nav-row">' + inner +
-                '<button class="nav-toggle" type="button" aria-label="Toggle section">▸</button></div>' +
+                '<button class="nav-toggle" type="button" aria-label="Toggle section">' +
+                '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5L10.5 8 6 12.5"/></svg></button></div>' +
                 '<div class="nav-children">' + childrenHtml + '</div></div>';
         }
 
@@ -2182,6 +2208,11 @@
                         node.classList.toggle('filter-open', anyMatch);
                     }
                 });
+                // The full list is back: scroll to the current page, as a cross-link does.
+                // Next frame: the browser's own keep-the-caret-visible scroll after an
+                // edit would cancel a scroll started now.
+                const active = nav.querySelector('.nav-item.active');
+                if (!query && active) requestAnimationFrame(function() { revealInSidebar(active); });
             });
         }
 
@@ -3055,6 +3086,10 @@
             let lastPinchDist = 0;
 
             canvas.addEventListener('pointerdown', function(e) {
+                if (e.pointerType === 'mouse' && e.button !== 0) return;
+                // Without this the drag also selects the diagram's text, which
+                // makes panning stutter.
+                e.preventDefault();
                 canvas.setPointerCapture(e.pointerId);
                 pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
                 if (pointers.size === 1) canvas.classList.add('dragging');
@@ -3164,9 +3199,16 @@
             applyLightboxTransform();
         }
 
+        let lightboxFrame = 0;
+
+        // At most one transform per frame: a fast mouse sends several moves per frame.
         function applyLightboxTransform() {
-            const stage = lightboxEl.querySelector('.lightbox-stage');
-            stage.style.transform = 'translate(' + lightboxState.tx + 'px, ' + lightboxState.ty + 'px) scale(' + lightboxState.scale + ')';
+            if (lightboxFrame) return;
+            lightboxFrame = requestAnimationFrame(function() {
+                lightboxFrame = 0;
+                const stage = lightboxEl.querySelector('.lightbox-stage');
+                stage.style.transform = 'translate(' + lightboxState.tx + 'px, ' + lightboxState.ty + 'px) scale(' + lightboxState.scale + ')';
+            });
         }
 
         function closeMermaidLightbox() {

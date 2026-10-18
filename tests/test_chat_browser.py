@@ -251,9 +251,23 @@ def test_answer_renders_mermaid_tables_and_keeps_margins(chat):
         """() => document.querySelector('.mermaid-lightbox.open')
             .contains(document.elementFromPoint(innerWidth - 100, innerHeight / 2))"""
     )
+    # Same viewer as the docs: zoom with the wheel, drag to pan.
+    chat.wait_for_timeout(300)  # the transform lands on the next frame
+    stage = """() => +document.querySelector('.lightbox-stage').style.transform
+        .match(/scale\\(([-\\d.]+)\\)/)[1]"""
+    scale = chat.evaluate(stage)
+    chat.mouse.move(600, 400)
+    chat.mouse.wheel(0, -300)
+    chat.wait_for_timeout(200)
+    assert chat.evaluate(stage) > scale
+    chat.mouse.down()
+    chat.mouse.move(700, 450, steps=10)
+    chat.mouse.up()
+    assert chat.evaluate("String(getSelection())") == ""
     chat.keyboard.press("Escape")
     chat.wait_for_timeout(300)
     assert chat.locator(".mermaid-lightbox.open").count() == 0 and is_open(chat)
+    assert chat.locator("#chat-messages .mermaid .mermaid-expand").count() == 1
 
     # Dark theme re-renders the diagram; a phone-width window keeps the margins.
     chat.click("#chat-close")
