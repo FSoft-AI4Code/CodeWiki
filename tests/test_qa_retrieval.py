@@ -1,6 +1,7 @@
 """Q&A index, freshness, retrieval and the no-LLM MCP tools."""
 
 import os
+import sys
 import time
 
 import pytest
@@ -302,16 +303,27 @@ def test_repo_walk_survives_windows_device_names(docs, monkeypatch):
     from codewiki.src.be.qa.impact import _repo_files, find_references
 
     repo, docs_dir = docs
-    (repo / "nul").write_text("")  # what `> nul` in Git Bash leaves behind
-    real = os.path.relpath
+    # What `> nul` in Git Bash leaves behind. Windows needs \\?\ to create it
+    # (a plain path writes to the NUL device) and then fails for real;
+    # elsewhere relpath's Windows error is simulated.
+    nul = os.path.join(os.path.abspath(repo), "nul")
+    if sys.platform == "win32":
+        nul = "\\\\?\\" + nul
+    else:
+        real = os.path.relpath
 
-    def windows_relpath(path, start=os.curdir):
-        if os.path.basename(path).lower() == "nul":
-            raise ValueError("path is on mount '\\\\.\\nul', start on mount 'C:'")
-        return real(path, start)
+        def windows_relpath(path, start=os.curdir):
+            if os.path.basename(path).lower() == "nul":
+                raise ValueError("path is on mount '\\\\.\\nul', start on mount 'C:'")
+            return real(path, start)
 
-    monkeypatch.setattr(os.path, "relpath", windows_relpath)
-    index = QAIndex(str(docs_dir))
-    assert "nul" in set(_repo_files(index))
-    assert Retriever(index).grep([r"\bmax_age\b"])
-    assert find_references(index, "MAX_AGE").all_ids
+        monkeypatch.setattr(os.path, "relpath", windows_relpath)
+    with open(nul, "w"):
+        pass
+    try:
+        index = QAIndex(str(docs_dir))
+        assert "nul" in set(_repo_files(index))
+        assert Retriever(index).grep([r"\bmax_age\b"])
+        assert find_references(index, "MAX_AGE").all_ids
+    finally:
+        os.remove(nul)  # pytest's own cleanup cannot delete it on Windows
