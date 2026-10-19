@@ -293,3 +293,25 @@ def test_mcp_read_passes_the_query_on_as_the_focus(docs, monkeypatch):
         {"docs_dir": str(docs_dir), "ids": ["pkg/timed.py::TimestampSigner"], "query": "clock"}
     )
     assert seen["focus"] == "clock"
+
+
+def test_repo_walk_survives_windows_device_names(docs, monkeypatch):
+    """On Windows a stray file named NUL resolves to \\\\.\\nul and relpath raises
+    "path is on mount '\\\\.\\nul', start on mount 'C:'"; grep and impact walk the
+    repo for every Ask AI question."""
+    from codewiki.src.be.qa.impact import _repo_files, find_references
+
+    repo, docs_dir = docs
+    (repo / "nul").write_text("")  # what `> nul` in Git Bash leaves behind
+    real = os.path.relpath
+
+    def windows_relpath(path, start=os.curdir):
+        if os.path.basename(path).lower() == "nul":
+            raise ValueError("path is on mount '\\\\.\\nul', start on mount 'C:'")
+        return real(path, start)
+
+    monkeypatch.setattr(os.path, "relpath", windows_relpath)
+    index = QAIndex(str(docs_dir))
+    assert "nul" in set(_repo_files(index))
+    assert Retriever(index).grep([r"\bmax_age\b"])
+    assert find_references(index, "MAX_AGE").all_ids

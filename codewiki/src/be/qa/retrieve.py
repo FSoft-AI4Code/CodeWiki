@@ -14,6 +14,7 @@ import re
 from dataclasses import dataclass, field
 
 from codewiki.src.be.qa.bm25 import tokenize
+from codewiki.src.be.qa.impact import _repo_files
 from codewiki.src.be.qa.index import QAIndex, approx_tokens
 
 STALE_FACTOR = 0.5
@@ -27,7 +28,6 @@ _GREP_MAX_BYTES = 1_000_000
 _NAME_QUERY_RE = re.compile(r"^(?:[\w./-]+::)?[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$")
 MAX_PINNED = 5
 _CHARS_PER_TOKEN = 3.6
-_SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__", "dist", "build", ".tox"}
 
 
 @dataclass
@@ -216,23 +216,10 @@ class Retriever:
         return sorted(found.values(), key=lambda c: c.score, reverse=True)
 
     def _repo_files(self):
-        repo = self.index.repo_path
-        docs = os.path.abspath(self.index.docs_dir)
         known = sorted({u.file for u in self.index.code.values()})
         seen = set(known)
         yield from known
-        for root, dirs, files in os.walk(repo):
-            dirs[:] = sorted(
-                d
-                for d in dirs
-                if d not in _SKIP_DIRS
-                and not d.startswith(".")
-                and os.path.abspath(os.path.join(root, d)) != docs
-            )
-            for name in sorted(files):
-                rel = os.path.relpath(os.path.join(root, name), repo).replace(os.sep, "/")
-                if rel not in seen:
-                    yield rel
+        yield from (rel for rel in _repo_files(self.index) if rel not in seen)
 
     def expand(self, cands: list[Candidate], hops: int = 1, limit: int = 30) -> list[Candidate]:
         """Add graph neighbours (calls, callers, page<->component) at a discount."""

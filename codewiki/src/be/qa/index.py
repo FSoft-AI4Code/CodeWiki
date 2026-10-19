@@ -190,10 +190,12 @@ class QAIndex:
         self.repo_path = _resolve_repo(
             self.docs_dir, repo_path, {n.relative_path for n in graph.values() if n.relative_path}
         )
+        logger.info("Checking what changed since the docs were generated…")
         self.freshness: Freshness = detect(
             self.docs_dir, self.repo_path, {n.relative_path for n in graph.values()}
         )
         self._build_code(graph)
+        logger.info("Indexing doc pages and %d code component(s)…", len(self.code))
         self._build_pages()
         self._build_index()
         self.stamp = self.compute_stamp(self.docs_dir)
@@ -222,6 +224,7 @@ class QAIndex:
             if self.repo_path and os.path.isfile(os.path.join(self.repo_path, f))
         )
         if to_parse and len(to_parse) <= MAX_OVERLAY_FILES:
+            logger.info("Re-reading %d file(s) changed since the docs…", len(to_parse))
             try:
                 live = _overlay(self.repo_path, to_parse)
                 replaced |= set(to_parse)

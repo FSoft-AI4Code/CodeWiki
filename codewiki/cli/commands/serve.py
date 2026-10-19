@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import sys
+import time
 
 import click
 
@@ -54,18 +55,34 @@ def serve_command(docs_dir, port, host, allow_origins, model, no_log_questions):
             fg="yellow",
             err=True,
         )
-    index = get_index(docs)
-    origins = sorted(default_origins(host, port, docs) | {origin_of(o) or o for o in allow_origins})
+    from rich.console import Console
+
+    qa_logger = logging.getLogger("codewiki.src.be.qa")
+    qa_logger.setLevel(logging.INFO)
+    click.echo(f"Loading {docs} …")
+    started = time.monotonic()
+    # Indexing can take a while (re-reading code changed since the docs): show
+    # each step the index logs as it starts it.
+    with Console(stderr=True).status("Reading the docs…") as status:
+        step = _StatusHandler(status)
+        qa_logger.addHandler(step)
+        try:
+            index = get_index(docs)
+            status.update("Starting the server…")
+            origins = sorted(
+                default_origins(host, port, docs) | {origin_of(o) or o for o in allow_origins}
+            )
+        finally:
+            qa_logger.removeHandler(step)
     handler = logging.StreamHandler(sys.stderr)
     handler.setFormatter(logging.Formatter("[%(asctime)s] %(message)s", "%H:%M:%S"))
-    qa_logger = logging.getLogger("codewiki.src.be.qa")
     qa_logger.addHandler(handler)
-    qa_logger.setLevel(logging.INFO)
 
     click.secho(f"CodeWiki docs + chat: http://{host}:{port}/", fg="green", bold=True)
     click.echo(f"  Docs:      {docs}")
     click.echo(
-        f"  Indexed:   {len(index.sections)} doc sections, {len(index.code)} code components"
+        f"  Indexed:   {len(index.sections)} doc sections, {len(index.code)} code components "
+        f"in {time.monotonic() - started:.1f}s"
     )
     click.echo(f"  Freshness: {index.freshness.summary()}")
     if index.stale_pages:
@@ -77,3 +94,14 @@ def serve_command(docs_dir, port, host, allow_origins, model, no_log_questions):
     click.echo(f"  Chat allowed from: {', '.join(origins)}")
     click.echo("  Ctrl+C to stop.")
     serve(docs, host, port, allow_origins, model=model, log_questions=not no_log_questions)
+
+
+class _StatusHandler(logging.Handler):
+    """Shows each log message as the spinner's text."""
+
+    def __init__(self, status) -> None:
+        super().__init__(logging.INFO)
+        self.status = status
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.status.update(record.getMessage())

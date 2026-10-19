@@ -253,8 +253,12 @@ def _repo_files(index: QAIndex):
             and not d.startswith(".")
             and os.path.abspath(os.path.join(root, d)) != docs
         )
+        # relpath of the directory, never of the file: Windows resolves a file
+        # named NUL / CON / ... to \\.\NUL, which relpath rejects ("path is on
+        # mount '\\.\nul', start on mount 'C:'").
+        folder = os.path.relpath(root, repo).replace(os.sep, "/")
         for name in sorted(files):
-            yield os.path.relpath(os.path.join(root, name), repo).replace(os.sep, "/")
+            yield name if folder == "." else f"{folder}/{name}"
 
 
 def _parameters(source: str) -> set[str]:
