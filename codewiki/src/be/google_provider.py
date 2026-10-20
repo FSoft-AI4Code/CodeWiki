@@ -82,9 +82,8 @@ def check_access(
     provider: str, api_key: str | None, model: str, project: str = "", location: str = ""
 ) -> None:
     """Raise if the credentials cannot see *model* (auth, project, location or name wrong)."""
-    create_client(provider, api_key, project, location).models.get(
-        model=normalise_model_name(model)
-    )
+    client = create_client(provider, api_key, project, location)
+    client.models.get(model=normalise_model_name(model))
 
 
 def _client_for(config) -> genai.Client:
