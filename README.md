@@ -73,8 +73,8 @@ codewiki config set --provider claude-code \
   --main-model claude-sonnet-4-6 --cluster-model claude-sonnet-4-6
 ```
 
-Anthropic, Azure OpenAI, AWS Bedrock, Atlas Cloud, and Codex are also
-supported. See [Providers and models](./guides/providers.md).
+Anthropic, Azure OpenAI, AWS Bedrock, Google (Gemini API and Vertex AI),
+Atlas Cloud, and Codex are also supported. See [Providers and models](./guides/providers.md).
 
 **3. Generate**
 

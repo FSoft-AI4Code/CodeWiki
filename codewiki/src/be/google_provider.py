@@ -78,6 +78,15 @@ def create_client(
     return genai.Client(vertexai=False, api_key=api_key, http_options=_http_options())
 
 
+def check_access(
+    provider: str, api_key: str | None, model: str, project: str = "", location: str = ""
+) -> None:
+    """Raise if the credentials cannot see *model* (auth, project, location or name wrong)."""
+    create_client(provider, api_key, project, location).models.get(
+        model=normalise_model_name(model)
+    )
+
+
 def _client_for(config) -> genai.Client:
     return create_client(
         config.provider,

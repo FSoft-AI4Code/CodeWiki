@@ -51,6 +51,7 @@ codewiki/
 │   │   ├── agent_tools/        # read_code_components, str_replace_editor, sub-module delegation
 │   │   ├── backend.py          # LLMBackend abstraction + factory
 │   │   ├── pydantic_ai_backend.py       # API-key providers
+│   │   ├── google_provider.py  # google / google-vertex (Gemini API, Vertex AI)
 │   │   ├── caw_backend.py, caw_toolkit.py   # claude-code / codex subscription providers
 │   │   ├── prompt_template.py, llm_services.py, module_naming.py
 │   └── fe/                     # FastAPI web app (used by the Docker image)

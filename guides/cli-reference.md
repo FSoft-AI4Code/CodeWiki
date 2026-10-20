@@ -166,7 +166,7 @@ keys you pass are changed. Provider examples are in [Providers](providers.md).
 
 | Flag | Meaning |
 | --- | --- |
-| `--provider NAME` | One of `openai-compatible` (default), `atlas-cloud`, `anthropic`, `bedrock`, `azure-openai`, `claude-code`, `codex` |
+| `--provider NAME` | One of `openai-compatible` (default), `atlas-cloud`, `anthropic`, `bedrock`, `azure-openai`, `claude-code`, `codex`, `google`, `google-vertex` |
 | `--api-key KEY` | API key. Stored in the system keychain when one is available |
 | `--base-url URL` | Provider endpoint. Set automatically for `atlas-cloud` |
 | `--main-model NAME` | Model for module documentation |
@@ -175,6 +175,8 @@ keys you pass are changed. Provider examples are in [Providers](providers.md).
 | `--aws-region REGION` | Bedrock only |
 | `--api-version VERSION` | Azure OpenAI only |
 | `--azure-deployment NAME` | Azure OpenAI only |
+| `--google-project ID` | `google-vertex` only. Defaults to `GOOGLE_CLOUD_PROJECT` |
+| `--google-location LOC` | `google-vertex` only, e.g. `global`, `eu`, `us`. Defaults to `GOOGLE_CLOUD_LOCATION`, then `global` |
 | `--max-tokens N`, `--max-token-per-module N`, `--max-token-per-leaf-module N`, `--max-depth N` | Stored token limits, see the table above |
 | `--use-gitignore` / `--no-gitignore` | Stored default for Git ignore handling |
 | `--prompt-caching` / `--no-prompt-caching` | Stored default for prompt caching |

@@ -1,8 +1,8 @@
 # Providers and models
 
 CodeWiki calls an LLM for module clustering and for writing each page. You
-pick where those calls go with `codewiki config set --provider ...`. Seven
-providers are supported. Two of them need no API key at all.
+pick where those calls go with `codewiki config set --provider ...`. Nine
+providers are supported. Three of them need no API key at all.
 
 | Provider | Needs | Good for |
 | --- | --- | --- |
@@ -11,6 +11,8 @@ providers are supported. Two of them need no API key at all.
 | `anthropic` | API key | Direct Anthropic API |
 | `azure-openai` | API key + resource URL + deployment | Azure-hosted OpenAI models |
 | `bedrock` | AWS credentials + region | Anthropic and other models on AWS Bedrock |
+| `google` | Gemini API key | Gemini models through the Gemini API (AI Studio) |
+| `google-vertex` | Google credentials + project | Gemini models on Vertex AI, billed to a Google Cloud project, no API key |
 | `claude-code` | Claude Code CLI logged in | Run on a Claude Pro or Max subscription, no per-token billing |
 | `codex` | Codex CLI logged in | Run on a Codex subscription, no per-token billing |
 
@@ -53,6 +55,46 @@ codewiki config set \
   --main-model anthropic.claude-sonnet-4-v2:0 \
   --cluster-model anthropic.claude-sonnet-4-v2:0
 ```
+
+### Google (Gemini API and Vertex AI)
+
+Both Google providers talk to Gemini natively, so Gemini 3 thought signatures
+survive tool-call turns. No base URL is needed.
+
+```bash
+# Vertex AI: Google credentials (gcloud auth application-default login, or
+# Workload Identity Federation in CI), no API key
+codewiki config set \
+  --provider google-vertex \
+  --google-project YOUR_PROJECT \
+  --google-location eu \
+  --main-model gemini-3.8-flash \
+  --cluster-model gemini-3.8-flash
+
+# Gemini API: the key is read from GEMINI_API_KEY (or GOOGLE_API_KEY) when
+# --api-key is omitted
+codewiki config set \
+  --provider google \
+  --main-model gemini-3.8-flash \
+  --cluster-model gemini-3.8-flash
+```
+
+Notes:
+
+- **Location.** `--google-location` accepts `global`, `us` or `eu`; it defaults
+  to `GOOGLE_CLOUD_LOCATION`, then `global`. `eu` and `us` need google-genai
+  2.x. `us-central1` does not serve Gemini 3.x.
+- **Project.** `--google-project` defaults to `GOOGLE_CLOUD_PROJECT`. With
+  neither set, a run fails at startup.
+- **Fallback model.** It defaults to the main model, because the usual default
+  (`glm-4p5`) does not exist on Google endpoints.
+- **Output budget.** Thinking tokens share the `--max-tokens` budget. If pages
+  come back empty with `finish_reason=MAX_TOKENS`, raise `--max-tokens` to
+  65536.
+- **Privacy.** Google may use prompts sent with a free-tier AI Studio key for
+  product improvement. Use a paid key, or Vertex AI, for private code.
+- **Cost.** The cost summary prices Gemini runs from the installed
+  `genai-prices` data. A model it does not know is reported as unpriced.
 
 ### Atlas Cloud
 

@@ -241,6 +241,7 @@ def is_top_tier_model(model: str) -> bool:
         "gpt-4",
         "gpt-5",
         "gemini-2.5",
+        "gemini-3",
     ]
 
     model_lower = model.lower()
