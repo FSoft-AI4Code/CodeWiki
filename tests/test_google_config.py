@@ -62,13 +62,13 @@ def test_vertex_is_configured_without_api_key_and_fallback_follows_main(tmp_conf
 
 
 def test_config_set_google_reads_gemini_api_key_env(tmp_config, monkeypatch):
-    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
     result = CliRunner().invoke(
         config_set,
         ["--provider", "google", "--main-model", MODEL, "--cluster-model", MODEL],
     )
     assert result.exit_code == 0, result.output
-    assert _loaded_manager().get_api_key() == "test-key"
+    assert _loaded_manager().get_api_key() == "test-gemini-key"
 
 
 def test_config_set_google_refuses_foreign_key(tmp_config):

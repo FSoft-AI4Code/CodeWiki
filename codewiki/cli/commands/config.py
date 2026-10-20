@@ -69,12 +69,16 @@ def config_group():
             "azure-openai",
             "claude-code",
             "codex",
+            "google",
+            "google-vertex",
         ],
         case_sensitive=False,
     ),
     help=(
         "LLM provider type (default: openai-compatible). "
         "Use 'atlas-cloud' for Atlas Cloud (base URL auto-set; reads ATLASCLOUD_API_KEY). "
+        "Use 'google' for the Gemini API (reads GEMINI_API_KEY / GOOGLE_API_KEY) or "
+        "'google-vertex' for Vertex AI with Google credentials (no API key). "
         "Use 'claude-code' or 'codex' to run on a CLI subscription instead of an API key."
     ),
 )
@@ -83,6 +87,17 @@ def config_group():
     "--api-version", type=str, help="Azure OpenAI API version (default: 2024-12-01-preview)"
 )
 @click.option("--azure-deployment", type=str, help="Azure OpenAI deployment name")
+@click.option(
+    "--google-project",
+    type=str,
+    help="Google Cloud project for google-vertex (default: GOOGLE_CLOUD_PROJECT)",
+)
+@click.option(
+    "--google-location",
+    type=str,
+    help="Vertex AI location for google-vertex, e.g. global, eu, us "
+    "(default: GOOGLE_CLOUD_LOCATION, else global)",
+)
 @click.option(
     "--use-gitignore/--no-gitignore",
     default=None,
@@ -110,6 +125,8 @@ def config_set(
     aws_region: Optional[str] = None,
     api_version: Optional[str] = None,
     azure_deployment: Optional[str] = None,
+    google_project: Optional[str] = None,
+    google_location: Optional[str] = None,
     use_gitignore: Optional[bool] = None,
     prompt_caching: Optional[bool] = None,
 ):
@@ -141,6 +158,16 @@ def config_set(
     \b
     # Subscription mode (Codex)
     $ codewiki config set --provider codex --main-model gpt-5.2-codex
+
+    \b
+    # Vertex AI (Google credentials, no API key or base URL)
+    $ codewiki config set --provider google-vertex --google-project my-proj \\
+        --google-location eu --main-model gemini-3.8-flash --cluster-model gemini-3.8-flash
+
+    \b
+    # Gemini API (key read from GEMINI_API_KEY if --api-key is omitted)
+    $ codewiki config set --provider google --main-model gemini-3.8-flash \\
+        --cluster-model gemini-3.8-flash
 
     \b
     # Update only API key
@@ -181,6 +208,8 @@ def config_set(
                 aws_region,
                 api_version,
                 azure_deployment,
+                google_project,
+                google_location,
                 use_gitignore is not None,
                 prompt_caching is not None,
             ]
@@ -198,6 +227,20 @@ def config_set(
                 base_url = ATLAS_CLOUD_BASE_URL
             if not api_key:
                 api_key = os.getenv("ATLASCLOUD_API_KEY")
+
+        manager = ConfigManager()
+        manager.load()  # Load existing config if present
+
+        if provider and provider.lower() == "google" and not api_key:
+            api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+            previous = manager.get_config()
+            if not api_key and not (previous and previous.provider == "google"):
+                # The keyring has one key slot: reusing it would send another
+                # provider's key to Google.
+                raise ConfigurationError(
+                    "--provider google needs a Gemini API key: pass --api-key or set "
+                    "GEMINI_API_KEY (or GOOGLE_API_KEY)."
+                )
 
         # Validate inputs before saving
         validated_data = {}
@@ -265,9 +308,11 @@ def config_set(
         if prompt_caching is not None:
             validated_data["prompt_caching"] = prompt_caching
 
-        # Create config manager and save
-        manager = ConfigManager()
-        manager.load()  # Load existing config if present
+        if google_project is not None:
+            validated_data["google_project"] = google_project
+
+        if google_location is not None:
+            validated_data["google_location"] = google_location
 
         manager.save(
             api_key=validated_data.get("api_key"),
@@ -285,6 +330,8 @@ def config_set(
             aws_region=validated_data.get("aws_region"),
             api_version=validated_data.get("api_version"),
             azure_deployment=validated_data.get("azure_deployment"),
+            google_project=validated_data.get("google_project"),
+            google_location=validated_data.get("google_location"),
             use_gitignore=validated_data.get("use_gitignore"),
             prompt_caching=validated_data.get("prompt_caching"),
         )
@@ -351,6 +398,12 @@ def config_set(
 
         if azure_deployment:
             click.secho(f"✓ Azure Deployment: {azure_deployment}", fg="green")
+
+        if google_project:
+            click.secho(f"✓ Google project: {google_project}", fg="green")
+
+        if google_location:
+            click.secho(f"✓ Google location: {google_location}", fg="green")
 
         if use_gitignore is not None:
             click.secho(f"✓ Use gitignore: {use_gitignore}", fg="green")

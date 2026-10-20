@@ -505,10 +505,9 @@ async def _legacy_generate_docs(arguments: dict[str, Any]) -> list[TextContent]:
     config = manager.get_config()
     api_key = manager.get_api_key()
 
-    from codewiki.src.be.backend import is_caw_provider
+    from codewiki.src.be.backend import needs_api_key
 
-    caw_mode = bool(config) and is_caw_provider(getattr(config, "provider", ""))
-    if not api_key and not caw_mode:
+    if not api_key and needs_api_key(getattr(config, "provider", "")):
         return [
             _text(
                 json.dumps(
@@ -547,6 +546,8 @@ async def _legacy_generate_docs(arguments: dict[str, Any]) -> list[TextContent]:
         fallback_model=config.fallback_model,
         provider=getattr(config, "provider", "openai-compatible"),
         aws_region=getattr(config, "aws_region", "us-east-1"),
+        google_project=getattr(config, "google_project", ""),
+        google_location=getattr(config, "google_location", ""),
         max_tokens=config.max_tokens,
         agent_instructions=agent_instructions or None,
         use_gitignore=arguments.get("use_gitignore", True),
