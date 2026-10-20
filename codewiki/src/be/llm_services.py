@@ -4,7 +4,8 @@ LLM service factory for creating configured LLM clients.
 Includes a compatibility layer for OpenAI-compatible API proxies that may
 return slightly non-standard responses (e.g. choices[].index = None).
 
-Supports multiple providers: openai-compatible, anthropic, bedrock, azure-openai.
+Supports multiple providers: openai-compatible, anthropic, bedrock, azure-openai,
+google (Gemini API) and google-vertex (Vertex AI).
 """
 
 import inspect
@@ -19,11 +20,13 @@ try:  # pydantic-ai >= 1.x adds ModelAPIError as the parent of ModelHTTPError
     from pydantic_ai.exceptions import ModelAPIError
 except ImportError:  # older releases (e.g. the pinned 1.0.6) only have ModelHTTPError
     ModelAPIError = ModelHTTPError
+from pydantic_ai.models import Model
 from pydantic_ai.models.openai import OpenAIChatModel, OpenAIChatModelSettings
 from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from openai import OpenAI, BadRequestError
 
+from codewiki.src.be.backend import is_google_provider
 from codewiki.src.config import Config
 
 logger = logging.getLogger(__name__)
@@ -233,8 +236,12 @@ def _create_litellm_openai_client(config: Config) -> OpenAI:
     )
 
 
-def create_main_model(config: Config) -> CachingOpenAIModel:
+def create_main_model(config: Config) -> Model:
     """Create the main LLM model from configuration."""
+    if is_google_provider(getattr(config, "provider", "")):
+        from codewiki.src.be.google_provider import create_google_model
+
+        return create_google_model(config, config.main_model)
     return CachingOpenAIModel(
         model_name=config.main_model,
         prompt_caching=config.prompt_caching,
@@ -244,8 +251,12 @@ def create_main_model(config: Config) -> CachingOpenAIModel:
     )
 
 
-def create_fallback_model(config: Config) -> CachingOpenAIModel:
+def create_fallback_model(config: Config) -> Model:
     """Create the fallback LLM model from configuration."""
+    if is_google_provider(getattr(config, "provider", "")):
+        from codewiki.src.be.google_provider import create_google_model
+
+        return create_google_model(config, config.fallback_model)
     return CachingOpenAIModel(
         model_name=config.fallback_model,
         prompt_caching=config.prompt_caching,
@@ -329,8 +340,9 @@ def call_llm(
     """
     Call LLM with the given prompt.
 
-    Supports openai-compatible, anthropic, and bedrock providers.
-    For bedrock/anthropic, uses litellm to translate the API call.
+    Supports openai-compatible, anthropic, bedrock, azure-openai and google /
+    google-vertex providers. For bedrock/anthropic, uses litellm to translate
+    the API call; Google providers use the google-genai client.
 
     No temperature is sent; requests rely on the provider default (some
     models reject explicit values).
@@ -349,6 +361,12 @@ def call_llm(
         model = config.main_model
 
     provider = getattr(config, "provider", "openai-compatible")
+
+    if is_google_provider(provider):
+        from codewiki.src.be.google_provider import call_google
+
+        text, _LAST_USAGE["usage"] = call_google(prompt, config, model, system_prompt)
+        return text
 
     if provider in ("bedrock", "anthropic"):
         return _call_llm_via_litellm(prompt, config, model, system_prompt)
