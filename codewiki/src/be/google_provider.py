@@ -159,7 +159,8 @@ def call_google(
     output is logged and returned as None, never raised.
     """
     name = normalise_model_name(model)
-    response = _client_for(config).models.generate_content(
+    client = _client_for(config)
+    response = client.models.generate_content(
         model=name,
         contents=prompt,
         config=genai_types.GenerateContentConfig(
