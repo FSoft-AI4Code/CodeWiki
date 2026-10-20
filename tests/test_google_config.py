@@ -7,8 +7,9 @@ from click.testing import CliRunner
 
 import codewiki.cli.commands.generate as gen
 import codewiki.cli.config_manager as cm
-from codewiki.cli.commands.config import config_set
+from codewiki.cli.commands.config import config_set, config_show, config_validate
 from codewiki.cli.models.config import Configuration
+from codewiki.cli.utils.validation import is_top_tier_model
 from codewiki.src.config import Config
 
 MODEL = "gemini-3.8-flash"
@@ -148,3 +149,87 @@ def test_google_settings_reach_backend_config(tmp_path, monkeypatch):
         google_location="eu",
     )
     assert (backend.google_project, backend.google_location) == ("test-proj", "eu")
+
+
+@pytest.fixture
+def access_checks(monkeypatch):
+    """Record (provider, model) of every connectivity probe instead of calling Google."""
+    from codewiki.src.be import google_provider
+
+    calls = []
+
+    def fake(provider, api_key, model, project="", location=""):
+        calls.append((provider, model))
+
+    monkeypatch.setattr(google_provider, "check_access", fake)
+    return calls
+
+
+def _save_vertex():
+    cm.ConfigManager().save(
+        provider="google-vertex",
+        main_model=MODEL,
+        cluster_model=MODEL,
+        google_project="test-proj",
+        google_location="eu",
+    )
+
+
+def test_validate_vertex_without_key_or_url(tmp_config, access_checks):
+    _save_vertex()
+    result = CliRunner().invoke(config_validate, [])
+    assert result.exit_code == 0, result.output
+    assert "API key not required" in result.output
+    assert "Configuration is valid" in result.output
+    assert access_checks == [("google-vertex", MODEL)]
+
+
+def test_validate_google_does_not_use_openai_client(tmp_config, access_checks, monkeypatch):
+    import openai
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("a Gemini key must not reach an OpenAI client")
+
+    monkeypatch.setattr(openai, "OpenAI", forbidden)
+    cm.ConfigManager().save(
+        api_key="test-gemini-key",
+        base_url="https://api.openai.com/v1",
+        provider="google",
+        main_model=MODEL,
+        cluster_model=MODEL,
+    )
+    result = CliRunner().invoke(config_validate, [])
+    assert result.exit_code == 0, result.output
+    assert access_checks == [("google", MODEL)]
+
+
+def test_validate_reports_google_access_failure(tmp_config, monkeypatch):
+    from codewiki.src.be import google_provider
+
+    def failing(*args, **kwargs):
+        raise RuntimeError("404 model not found")
+
+    monkeypatch.setattr(google_provider, "check_access", failing)
+    _save_vertex()
+    result = CliRunner().invoke(config_validate, [])
+    assert result.exit_code != 0
+    assert "API connectivity test failed" in result.output
+
+
+def test_show_vertex_lists_project_and_location(tmp_config):
+    import json
+
+    _save_vertex()
+    result = CliRunner().invoke(config_show, [])
+    assert result.exit_code == 0, result.output
+    assert "Google ADC" in result.output
+    assert "test-proj" in result.output
+    assert "eu" in result.output
+    assert "Base URL" not in result.output
+
+    as_json = CliRunner().invoke(config_show, ["--json"])
+    assert json.loads(as_json.output)["google_project"] == "test-proj"
+
+
+def test_gemini_3_is_top_tier():
+    assert is_top_tier_model(MODEL) is True
