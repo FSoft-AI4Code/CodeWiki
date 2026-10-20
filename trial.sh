@@ -69,7 +69,7 @@ for repo in "${REPOS[@]}"; do
   echo "  Generating docs..."
   start_ts=$(date +%s)
 
-  if codewiki generate --no-prompt-caching -o "$repo_dir/docs" -r "$repo_dir" 2>&1 | tee "$WORK_DIR/${name}.log"; then
+  if (cd "$repo_dir" && codewiki generate --no-prompt-caching -o "$repo_dir/docs") 2>&1 | tee "$WORK_DIR/${name}.log"; then
     end_ts=$(date +%s)
     elapsed=$((end_ts - start_ts))
 
