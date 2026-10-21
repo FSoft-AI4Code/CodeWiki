@@ -104,3 +104,6 @@ _wheel/
 dist-linux/
 wheelhouse/
 *.pyd
+
+# Release check (packaging/release_check)
+release-check-*/
