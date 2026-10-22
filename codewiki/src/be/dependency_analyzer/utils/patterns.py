@@ -63,6 +63,13 @@ DEFAULT_IGNORE_PATTERNS = {
     "*.pbjson.dart",
     "*.pbgrpc.dart",
     "*.chopper.dart",
+    # Zig: build cache and install prefix
+    ".zig-cache",
+    ".zig-cache/",
+    "zig-cache",
+    "zig-cache/",
+    "zig-out",
+    "zig-out/",
     # IDEs and editors / Java
     ".project",
     # C/C++
@@ -176,6 +183,8 @@ DEFAULT_INCLUDE_PATTERNS = [
     "*.scala",
     "*.sc",
     "*.dart",
+    "*.zig",
+    "*.vue",
     "*.clj",
     "*.hs",
     "*.ml",
@@ -204,6 +213,11 @@ DEFAULT_INCLUDE_PATTERNS = [
     "GNUmakefile",
     "makefile",
     "*.mk",
+    "Makefile.am",
+    "*.am",
+    "configure.ac",
+    "configure.in",
+    "*.m4",
     "CMakeLists.txt",
     "*.cmake",
     "*.gradle",
@@ -235,6 +249,7 @@ DEFAULT_INCLUDE_PATTERNS = [
     "*.tf",
     "Procfile",
     "go.mod",
+    "build.zig.zon",
     ".editorconfig",
     ".pre-commit-config.yaml",
     ".eslintrc*",
@@ -305,6 +320,8 @@ CODE_EXTENSIONS = {
     ".sc": "scala",
     ".dart": "dart",
     ".cs": "csharp",
+    ".zig": "zig",
+    ".vue": "vue",
 }
 
 # Entry point file patterns for all supported languages
@@ -531,6 +548,13 @@ FUNCTION_DEFINITION_PATTERNS = {
         "struct {name}",
         "enum {name}",
         "trait {name}",
+    ],
+    "zig": [
+        "fn {name}",
+        "pub fn {name}",
+        "const {name} = struct",
+        "const {name} = enum",
+        "const {name} = union",
     ],
     "c": ["void {name}", "int {name}", "{name}("],
     "cpp": ["void {name}", "int {name}", "{name}("],

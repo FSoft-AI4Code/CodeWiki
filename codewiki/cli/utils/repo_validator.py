@@ -36,6 +36,8 @@ SUPPORTED_EXTENSIONS = {
     ".rs",  # Rust
     ".dart",  # Dart
     ".go",  # Go
+    ".zig",  # Zig
+    ".vue",  # Vue single-file components
 }
 
 
@@ -67,7 +69,7 @@ def validate_repository(repo_path: Path) -> tuple[Path, list[tuple[str, int]]]:
         raise RepositoryError(
             f"No supported code files found in {repo_path}\n\n"
             "CodeWiki supports: Python, Java, JavaScript, TypeScript, C, C++, C#, Kotlin, PHP, "
-            "Ruby, Scala, Rust, Dart, Go\n\n"
+            "Ruby, Scala, Rust, Dart, Go, Zig, Vue\n\n"
             "Please navigate to a code repository or specify a custom directory:\n"
             "  cd /path/to/your/project\n"
             "  codewiki generate"

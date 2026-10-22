@@ -44,6 +44,34 @@ uses [Semantic Versioning](https://semver.org/).
   to directories through the module path in `go.mod` (and local `replace`
   directives), and standard-library or third-party calls are dropped.
   `_test.go` files and `vendor/` are skipped.
+- **Zig analyzer.** Functions, containers (`struct`, `enum`, `union`,
+  `opaque`), their member functions (`Point.add`), and generic type functions
+  (`fn List(comptime T: type) type { return struct {...}; }`) become
+  components. Edges cover calls (plain, `alias.fn()`, and method calls on
+  `Self`, parameters, and locals whose type can be inferred), `T{...}`
+  literals, and types named in parameters, return types, fields, and
+  annotated locals. `@import("x.zig")` aliases and re-exports
+  (`const T = @import("x.zig").T;`) resolve to the file that declares the
+  name, as do module names that the root `build.zig` registers with
+  `addModule`; `std`, `builtin`, and third-party packages are dropped. `test`
+  blocks and `zig-cache/`, `.zig-cache/`, `zig-out/` are skipped, `build.zig`
+  is also a build artifact, and `build.zig.zon` is a manifest.
+- **Vue single-file components.** Each `.vue` file becomes a component
+  (`ArticleList.vue::ArticleList`), and its options-API members (`methods`,
+  `computed`, `watch`, lifecycle hooks such as `mounted` or `setup`) become
+  its methods. `<script>` and `<script setup>` blocks go through the
+  JavaScript or TypeScript analyzer (`lang="ts"`), keeping the `.vue` file's
+  line numbers. Edges link a component to the `.vue` files and modules it
+  imports (relative paths and the `@/` alias), to the components its template
+  uses (`<article-preview>` or `<ArticlePreview>`), and to the members and
+  script functions its template expressions call or bind.
+- **Autotools build files.** `configure.ac`, `Makefile.am` (and other `*.am`),
+  `acinclude.m4`, and macros under `m4/` are build artifacts. A `Makefile.am`
+  gets a unit per library or program it builds (`libfoo.la`), linked to the
+  sources in its `_SOURCES` lists, and `SUBDIRS` links to the sub-directory
+  `Makefile.am`s. A `configure.ac` gets a unit per `AC_ARG_ENABLE` /
+  `AC_ARG_WITH` option and links to the `Makefile.am`s that `AC_CONFIG_FILES`
+  generates.
 
 ### Changed
 

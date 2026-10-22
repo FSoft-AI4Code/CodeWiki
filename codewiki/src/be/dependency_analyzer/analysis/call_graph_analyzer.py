@@ -287,6 +287,10 @@ class CallGraphAnalyzer:
                     self._analyze_dart_file(file_path, content, repo_dir)
                 elif language == "go":
                     self._analyze_go_file(file_path, content, repo_dir)
+                elif language == "zig":
+                    self._analyze_zig_file(file_path, content, repo_dir)
+                elif language == "vue":
+                    self._analyze_vue_file(file_path, content, repo_dir)
                 # else:
                 #     logger.warning(
                 #         f"Unsupported language for call graph analysis: {language} for file {file_path}"
@@ -611,6 +615,54 @@ class CallGraphAnalyzer:
             self._dart_directives[analyzer.relative_path] = analyzer.directives
         except Exception:
             logger.exception(f"Failed to analyze Dart file {file_path}")
+
+    def _analyze_zig_file(self, file_path: str, content: str, repo_dir: str):
+        """
+        Analyze Zig file using tree-sitter based analyzer.
+
+        Args:
+            file_path: Path to the Zig file
+            content: File content string
+            repo_dir: Repository base directory
+        """
+        from codewiki.src.be.dependency_analyzer.analyzers.zig import analyze_zig_file
+
+        try:
+            functions, relationships = analyze_zig_file(str(file_path), content, repo_path=repo_dir)
+
+            for func in functions:
+                func_id = func.id if func.id else f"{file_path}:{func.name}"
+                self.functions[func_id] = func
+
+            self.call_relationships.extend(relationships)
+        except Exception:
+            logger.exception(f"Failed to analyze Zig file {file_path}")
+
+    def _analyze_vue_file(self, file_path: str, content: str, repo_dir: str):
+        """
+        Analyze a Vue single-file component.
+
+        The <script> blocks go through the JavaScript/TypeScript analyzers; the
+        component itself, its options-API members, and its template usage are
+        added by the Vue analyzer.
+
+        Args:
+            file_path: Path to the .vue file
+            content: File content string
+            repo_dir: Repository base directory
+        """
+        from codewiki.src.be.dependency_analyzer.analyzers.vue import analyze_vue_file
+
+        try:
+            functions, relationships = analyze_vue_file(str(file_path), content, repo_path=repo_dir)
+
+            for func in functions:
+                func_id = func.id if func.id else f"{file_path}:{func.name}"
+                self.functions[func_id] = func
+
+            self.call_relationships.extend(relationships)
+        except Exception:
+            logger.exception(f"Failed to analyze Vue file {file_path}")
 
     def _analyze_go_file(self, file_path: str, content: str, repo_dir: str):
         """
@@ -1094,6 +1146,10 @@ class CallGraphAnalyzer:
                 node_classes.append("lang-dart")
             elif file_ext == ".go":
                 node_classes.append("lang-go")
+            elif file_ext == ".zig":
+                node_classes.append("lang-zig")
+            elif file_ext == ".vue":
+                node_classes.append("lang-vue")
 
             cytoscape_elements.append(
                 {

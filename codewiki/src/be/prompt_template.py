@@ -387,6 +387,8 @@ EXTENSION_TO_LANGUAGE = {
     ".rs": "rust",
     ".dart": "dart",
     ".go": "go",
+    ".zig": "zig",
+    ".vue": "vue",
     ".php": "php",
     ".phtml": "php",
     ".inc": "php",

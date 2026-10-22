@@ -20,8 +20,8 @@ Files are classified by name, extension, and directory. Nine classes:
 
 | Class | Examples |
 | --- | --- |
-| `manifest` | `package.json`, `pyproject.toml`, `setup.py`, `setup.cfg`, `Cargo.toml`, `go.mod`, `Gemfile`, `pnpm-workspace.yaml` |
-| `build` | `Makefile`, `CMakeLists.txt`, `*.gradle`, `BUILD.gn`, `*.gni`, `DEPS`, `Rakefile`, `rakelib/*.rake`, `build/` |
+| `manifest` | `package.json`, `pyproject.toml`, `setup.py`, `setup.cfg`, `Cargo.toml`, `go.mod`, `build.zig.zon`, `Gemfile`, `pnpm-workspace.yaml` |
+| `build` | `Makefile`, `CMakeLists.txt`, `configure.ac`, `Makefile.am`, `m4/*.m4`, `build.zig`, `*.gradle`, `BUILD.gn`, `*.gni`, `DEPS`, `Rakefile`, `rakelib/*.rake`, `build/` |
 | `container` | `Dockerfile*`, `Containerfile`, `docker-compose*.yml`, files under `docker/` |
 | `ci` | `.github/workflows/*.yml`, `.github/actions/*/action.yml`, `.gitlab-ci.yml`, `Jenkinsfile`, `ci/`, `.circleci/` |
 | `packaging` | `debian/`, `rpm/`, `pkg/`, `packages/`, `*.spec`, `*.service`, install and lifecycle scripts |
@@ -46,11 +46,14 @@ CONTRIBUTING, and `docs/*.md`.
 1. **One node per file**, with type `artifact`, id `<path>::<file name>`,
    and the file content as its source. Where a cheap parser exists, one child
    node per unit as well: a CI job, a Dockerfile stage, a Makefile target, a
+   library or program a `Makefile.am` builds, a `configure.ac` option, a
    `package.json` script, a `pyproject` entry point.
 2. **Edges to the code they reference**, from per-format heuristics that need
    no language runtime: a Dockerfile `COPY` or `ENTRYPOINT` path, a CI
-   `run:` line, a Makefile recipe calling a script, a `[project.scripts]`
-   target, a `package.json` `main` or `bin` path, a compose `build.context`.
+   `run:` line, a Makefile recipe calling a script, a `Makefile.am`
+   `_SOURCES` list, a `configure.ac` `AC_CONFIG_FILES` entry, a
+   `[project.scripts]` target, a `package.json` `main` or `bin` path, a
+   compose `build.context`.
    These edges are shallow. They connect artifacts to code well enough for
    clustering and cross-links. They are not a call graph.
 3. **Clustering sees them** with one added instruction: artifact components

@@ -243,6 +243,7 @@ _MANIFEST_NAMES = {
     "settings.gradle.kts",
     "build.sbt",
     "Package.swift",
+    "build.zig.zon",
     "pubspec.yaml",
     "Pipfile",
     "environment.yml",
@@ -294,8 +295,26 @@ _BUILD_NAMES = {
     "gulpfile.js",
     "Gruntfile.js",
     "Herebyfile.mjs",
+    "build.zig",
+    # Autotools inputs; the generated configure, Makefile.in and aclocal.m4
+    # are not build sources.
+    "configure.ac",
+    "configure.in",
+    "Makefile.am",
+    "acinclude.m4",
 }
-_BUILD_EXTS = {".gn", ".gni", ".gradle", ".rake", ".mk", ".cmake", ".bzl", ".ninja", ".sbt"}
+_BUILD_EXTS = {
+    ".gn",
+    ".gni",
+    ".gradle",
+    ".rake",
+    ".mk",
+    ".cmake",
+    ".bzl",
+    ".ninja",
+    ".sbt",
+    ".am",
+}
 _BUILD_CONFIG_RE = re.compile(r"^(webpack|rollup|vite|esbuild|tsup|babel)\.config\.[cm]?[jt]s$")
 _BUILD_TOPS = {"build", "rakelib", "cmake"}
 _TEST_INFRA_NAMES = {
@@ -431,6 +450,8 @@ def classify_artifact(
         ".kt",
         ".scala",
         ".sc",
+        ".zig",
+        ".vue",
     }:
         if name in _TEST_INFRA_NAMES:
             return "test_infra"
@@ -457,6 +478,8 @@ def classify_artifact(
     ):
         return "build"
     if top in _BUILD_TOPS and ext in _BUILD_EXTS:
+        return "build"
+    if ext == ".m4" and name != "aclocal.m4" and (depth == 0 or top == "m4"):
         return "build"
 
     # ---- test infrastructure ---------------------------------------------------
@@ -583,6 +606,81 @@ def _makefile_units(text: str) -> list[tuple[str, int, int]]:
             seen.add(name)
             units.append((name, offsets[i], end))
         i = j
+    return units
+
+
+_AUTOMAKE_PRODUCT_RE = re.compile(
+    r"^[ \t]*\w+_(?:LTLIBRARIES|LIBRARIES|PROGRAMS)[ \t]*\+?=(?P<value>(?:[^\n]*\\\n)*[^\n]*)",
+    re.MULTILINE,
+)
+_AUTOMAKE_LIST_RE = re.compile(
+    r"^[ \t]*(?P<var>\w+)[ \t]*\+?=(?P<value>(?:[^\n]*\\\n)*[^\n]*)", re.MULTILINE
+)
+_AC_ARG_RE = re.compile(r"\bAC_ARG_(ENABLE|WITH)\(\s*\[?([\w.-]+)")
+_AC_CONFIG_FILES_RE = re.compile(r"\bAC_CONFIG_FILES\(\s*\[?([^\])]*)")
+_M4_PATH_CALL_RE = re.compile(r"\b(?:m4_include|m4_sinclude|AC_CONFIG_SRCDIR)\(\s*\[?([^\])\s]+)")
+
+
+def _automake_words(value: str) -> list[str]:
+    return value.replace("\\\n", " ").split()
+
+
+def _automake_canonical(name: str) -> str:
+    """Automake's canonical variable prefix for a product (`libfoo.la` ->
+    `libfoo_la`)."""
+    return re.sub(r"[^A-Za-z0-9@]", "_", name)
+
+
+def _automake_units(text: str) -> list[tuple[str, int, int]]:
+    """``(product, start, end)`` for the programs and libraries a
+    ``Makefile.am`` builds, each spanning its primary assignment, followed by
+    the explicit targets of hand-written rules."""
+    units: list[tuple[str, int, int]] = []
+    seen: set[str] = set()
+    for m in _AUTOMAKE_PRODUCT_RE.finditer(text):
+        for product in _automake_words(m.group("value")):
+            if "$" in product or product in seen:
+                continue
+            seen.add(product)
+            units.append((product, m.start(), m.end()))
+    for name, start, end in _makefile_units(text):
+        if name not in seen:
+            seen.add(name)
+            units.append((name, start, end))
+    return units
+
+
+def _automake_lists(text: str) -> dict[str, list[str]]:
+    """Every ``VAR = words`` / ``VAR += words`` list, joined across lines."""
+    lists: dict[str, list[str]] = {}
+    for m in _AUTOMAKE_LIST_RE.finditer(text):
+        lists.setdefault(m.group("var"), []).extend(_automake_words(m.group("value")))
+    return lists
+
+
+def _m4_call_end(text: str, start: int) -> int:
+    """Offset just past the call whose ``(`` follows ``start``."""
+    depth = 0
+    for i in range(text.find("(", start), len(text)):
+        if text[i] == "(":
+            depth += 1
+        elif text[i] == ")":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+    return len(text)
+
+
+def _configure_ac_units(text: str) -> list[tuple[str, int, int]]:
+    """``(--enable-x | --with-x, start, end)`` for the options a
+    ``configure.ac`` declares."""
+    units: list[tuple[str, int, int]] = []
+    seen: set[str] = set()
+    for m in _AC_ARG_RE.finditer(text):
+        name = f"--{m.group(1).lower()}-{m.group(2)}"
+        if name not in seen:
+            seen.add(name)
+            units.append((name, m.start(), _m4_call_end(text, m.start())))
     return units
 
 
@@ -935,6 +1033,11 @@ def analyze_artifacts(
         elif lower in {"makefile", "gnumakefile"} or lower.endswith(".mk"):
             units = _makefile_units(text)
             extra["makefile"] = True
+        elif lower.endswith(".am"):
+            units = _automake_units(text)
+            extra["makefile"] = True
+        elif lower in {"configure.ac", "configure.in"}:
+            units = _configure_ac_units(text)
         elif name == "package.json":
             pj_units, data = _package_json_units(text)
             extra["package_json"] = data
@@ -1008,6 +1111,21 @@ def analyze_artifacts(
             if callee and callee != caller and resolver.known(callee):
                 edges.add((caller, callee))
 
+    def _add_rule_edges(rel: str, text: str, base_dir: str, file_id: str) -> None:
+        """Edges of each explicit make rule: its recipe and its prerequisites."""
+        for uname, start, end in _makefile_units(text):
+            recipe = text[start:end]
+            refs = _refs_from_shell_text(recipe, resolver, base_dir, artifact_units)
+            # prerequisites on the header line
+            header = recipe.split("\n", 1)[0]
+            if ":" in header:
+                for prereq in header.split(":", 1)[1].split():
+                    if prereq in artifact_units.get(rel, set()):
+                        refs.add(f"{rel}::{prereq}")
+                    else:
+                        refs.update(resolver.resolve_path(prereq, base_dir))
+            _add_edges(f"{rel}::{uname}" if resolver.known(f"{rel}::{uname}") else file_id, refs)
+
     # Second pass: edges.
     for cls, info, text, _ in loaded:
         rel, name = info["path"], info["name"]
@@ -1078,20 +1196,39 @@ def analyze_artifacts(
         elif lower in {"makefile", "gnumakefile"} or lower.endswith(".mk"):
             for m in re.finditer(r"^(?:-?include|sinclude)\s+(\S+)", text, re.MULTILINE):
                 _add_edges(file_id, resolver.resolve_path(m.group(1), base_dir))
-            for uname, start, end in _makefile_units(text):
-                recipe = text[start:end]
-                refs = _refs_from_shell_text(recipe, resolver, base_dir, artifact_units)
-                # prerequisites on the header line
-                header = recipe.split("\n", 1)[0]
-                if ":" in header:
-                    for prereq in header.split(":", 1)[1].split():
-                        if prereq in artifact_units.get(rel, set()):
-                            refs.add(f"{rel}::{prereq}")
-                        else:
-                            refs.update(resolver.resolve_path(prereq, base_dir))
-                _add_edges(
-                    f"{rel}::{uname}" if resolver.known(f"{rel}::{uname}") else file_id, refs
-                )
+            _add_rule_edges(rel, text, base_dir, file_id)
+        elif lower.endswith(".am"):
+            lists = _automake_lists(text)
+            for m in re.finditer(r"^include\s+(\S+)", text, re.MULTILINE):
+                _add_edges(file_id, resolver.resolve_path(m.group(1), base_dir))
+            for sub in lists.get("SUBDIRS", []) + lists.get("DIST_SUBDIRS", []):
+                if sub != ".":
+                    _add_edges(file_id, resolver.resolve_path(f"{sub}/Makefile.am", base_dir))
+            products = {
+                _automake_canonical(u): u
+                for u in artifact_units.get(rel, set())
+                if resolver.known(f"{rel}::{u}")
+            }
+            for var, words in lists.items():
+                prefix, _, primary = var.rpartition("_")
+                if primary not in {"SOURCES", "HEADERS"}:
+                    continue
+                product = products.get(prefix.removeprefix("nodist_").removeprefix("dist_"))
+                caller = f"{rel}::{product}" if product else file_id
+                for word in words:
+                    _add_edges(caller, resolver.resolve_path(word, base_dir))
+            _add_rule_edges(rel, text, base_dir, file_id)
+        elif lower in {"configure.ac", "configure.in"}:
+            for m in _AC_CONFIG_FILES_RE.finditer(text):
+                for output in m.group(1).split():
+                    output = output.split(":", 1)[0]
+                    for candidate in (f"{output}.am", f"{output}.in", output):
+                        refs = resolver.resolve_path(candidate, base_dir)
+                        if refs:
+                            _add_edges(file_id, refs)
+                            break
+            for m in _M4_PATH_CALL_RE.finditer(text):
+                _add_edges(file_id, resolver.resolve_path(m.group(1), base_dir))
         elif name == "package.json":
             _, data = _package_json_units(text)
             if isinstance(data, dict):
