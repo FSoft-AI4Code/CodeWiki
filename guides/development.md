@@ -119,7 +119,9 @@ Analyzers are standalone classes, one file per language. Follow
 `analyzers/scala.py` (the newest one) as a template.
 
 1. **Grammar.** Add the `tree-sitter-<lang>` package to `pyproject.toml`
-   and `requirements.txt`.
+   and `requirements.txt`, or take the grammar from
+   `tree-sitter-language-pack` (already a dependency) with
+   `get_parser("<lang>")`, as `analyzers/dart.py` and `analyzers/go.py` do.
 2. **Analyzer.** Create `analyzers/<lang>.py` with a
    `TreeSitter<Lang>Analyzer` class that extracts components and
    relationships, plus a module-level `analyze_<lang>_file(...)` function.
@@ -134,7 +136,8 @@ Analyzers are standalone classes, one file per language. Follow
 5. **Tests.** Add `tests/test_<lang>_analyzer.py` with small source
    snippets that check component and edge extraction. See
    `tests/test_scala_analyzer.py`, `tests/test_ruby_analyzer.py`,
-   `tests/test_rust_analyzer.py`, and `tests/test_dart_analyzer.py`.
+   `tests/test_rust_analyzer.py`, `tests/test_dart_analyzer.py`, and
+   `tests/test_go_analyzer.py`.
 6. **Docs.** Add the language to the README list.
 
 ## Tests and lint

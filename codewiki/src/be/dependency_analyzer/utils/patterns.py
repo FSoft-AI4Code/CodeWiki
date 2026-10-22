@@ -516,7 +516,12 @@ FUNCTION_DEFINITION_PATTERNS = {
     "python": ["def {name}"],
     "javascript": ["function {name}", "const {name}", "export {name}"],
     "typescript": ["function {name}", "const {name}", "export {name}"],
-    "go": ["func {name}"],
+    "go": [
+        "func {name}",
+        "type {name} struct",
+        "type {name} interface",
+        "type {name}",
+    ],
     "rust": [
         "fn {name}",
         "pub fn {name}",

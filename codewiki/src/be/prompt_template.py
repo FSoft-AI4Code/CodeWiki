@@ -386,6 +386,7 @@ EXTENSION_TO_LANGUAGE = {
     ".sc": "scala",
     ".rs": "rust",
     ".dart": "dart",
+    ".go": "go",
     ".php": "php",
     ".phtml": "php",
     ".inc": "php",

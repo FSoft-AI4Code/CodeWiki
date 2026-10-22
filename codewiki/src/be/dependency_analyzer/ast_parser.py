@@ -191,6 +191,7 @@ class DependencyParser:
             ".sc",
             ".rs",
             ".dart",
+            ".go",
         ]
         for ext in extensions:
             if path.endswith(ext):
