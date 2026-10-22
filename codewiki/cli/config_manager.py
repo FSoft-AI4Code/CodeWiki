@@ -194,6 +194,10 @@ class ConfigManager:
                     agent_instructions=AgentInstructions(),
                 )
 
+        from codewiki.src.be.backend import is_caw_provider, is_google_provider, needs_base_url
+
+        was_google = is_google_provider(self._config.provider)
+
         # Update fields if provided
         if base_url is not None:
             self._config.base_url = base_url
@@ -238,7 +242,6 @@ class ConfigManager:
         # Caw providers only need main_model; API providers need base_url +
         # cluster_model on top of that.  The validate() method itself routes
         # by provider, so we only gate on whether enough is set to validate.
-        from codewiki.src.be.backend import is_caw_provider, is_google_provider, needs_base_url
 
         # The glm-4p5 default fallback does not exist on Google endpoints; a
         # fallback that 404s only after the main model failed hides the real error.
@@ -248,6 +251,11 @@ class ConfigManager:
             and self._config.fallback_model in ("", "glm-4p5")
         ):
             self._config.fallback_model = self._config.main_model
+        # Leaving Google: the Gemini fallback set above would 404 on the new endpoint.
+        elif (
+            was_google and not is_google_provider(self._config.provider) and fallback_model is None
+        ):
+            self._config.fallback_model = "glm-4p5"
 
         if is_caw_provider(self._config.provider):
             if self._config.main_model:

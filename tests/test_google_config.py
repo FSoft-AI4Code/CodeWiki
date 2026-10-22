@@ -233,3 +233,19 @@ def test_show_vertex_lists_project_and_location(tmp_config):
 
 def test_gemini_3_is_top_tier():
     assert is_top_tier_model(MODEL) is True
+
+
+def test_leaving_google_resets_gemini_fallback(tmp_config):
+    manager = cm.ConfigManager()
+    manager.save(provider="google-vertex", main_model=MODEL, cluster_model=MODEL)
+    assert manager.get_config().fallback_model == MODEL
+
+    manager.save(provider="openai-compatible", base_url="https://api.example.com/v1")
+    assert manager.get_config().fallback_model == "glm-4p5"
+
+
+def test_leaving_google_keeps_explicit_fallback(tmp_config):
+    manager = cm.ConfigManager()
+    manager.save(provider="google-vertex", main_model=MODEL, cluster_model=MODEL)
+    manager.save(provider="openai-compatible", fallback_model="gpt-5-mini")
+    assert manager.get_config().fallback_model == "gpt-5-mini"

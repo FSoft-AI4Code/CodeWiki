@@ -95,6 +95,24 @@ def _client_for(config) -> genai.Client:
     )
 
 
+# One-shot calls reuse a sync client per credential set. Agent-loop models get a
+# fresh client (_client_for): their async transport is bound to the event loop.
+_SYNC_CLIENTS: dict[tuple[str, str | None, str, str], genai.Client] = {}
+
+
+def _sync_client_for(config) -> genai.Client:
+    key = (
+        config.provider,
+        config.llm_api_key,
+        getattr(config, "google_project", ""),
+        getattr(config, "google_location", ""),
+    )
+    client = _SYNC_CLIENTS.get(key)
+    if client is None:
+        client = _SYNC_CLIENTS[key] = _client_for(config)
+    return client
+
+
 def create_google_model(config, model_name: str) -> GoogleModel:
     """GoogleModel for the agent loop. No temperature and no thinking config:
     the model defaults apply (Google advises temperature 1.0 for Gemini 3)."""
@@ -159,7 +177,7 @@ def call_google(
     output is logged and returned as None, never raised.
     """
     name = normalise_model_name(model)
-    client = _client_for(config)
+    client = _sync_client_for(config)
     response = client.models.generate_content(
         model=name,
         contents=prompt,

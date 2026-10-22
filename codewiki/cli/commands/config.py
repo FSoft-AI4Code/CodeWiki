@@ -733,7 +733,7 @@ def config_validate(quick: bool, verbose: bool):
             # Warn about non-top-tier cluster model
             if not is_top_tier_model(config.cluster_model):
                 click.secho(
-                    "⚠️  Cluster model is not top-tier. Consider using claude-sonnet-4 or gpt-4.",
+                    "⚠️  Cluster model is not top-tier. Consider a Claude Sonnet/Opus, GPT-5 or Gemini 3 model.",
                     fg="yellow",
                 )
 

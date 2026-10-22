@@ -139,6 +139,7 @@ class FakeModels:
 def fake_models(monkeypatch):
     def install(response):
         models = FakeModels(response)
+        monkeypatch.setattr(google_provider, "_SYNC_CLIENTS", {})
         monkeypatch.setattr(
             google_provider, "_client_for", lambda config: SimpleNamespace(models=models)
         )
@@ -214,3 +215,15 @@ def test_cost_unknown_model_is_omitted(fake_models, monkeypatch):
     )
     messages = [priced, ModelRequest(parts=[UserPromptPart("x")]), priced]
     assert google_provider.messages_cost(messages) == 1.0
+
+
+def test_call_google_reuses_sync_client(monkeypatch):
+    built = []
+    monkeypatch.setattr(google_provider, "_SYNC_CLIENTS", {})
+    monkeypatch.setattr(google_provider, "_client_for", lambda config: built.append(1) or object())
+    config = SimpleNamespace(
+        provider="google-vertex", llm_api_key=None, google_project="p", google_location="eu"
+    )
+    first = google_provider._sync_client_for(config)
+    assert google_provider._sync_client_for(config) is first
+    assert len(built) == 1
