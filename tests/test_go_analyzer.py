@@ -298,11 +298,11 @@ def test_dependency_parser_end_to_end(tmp_path: Path) -> None:
         "cart/line.go",
         "package cart\n\ntype Line struct{ Qty int }\n\nfunc describe() string { return total() }\n",
     )
-    _write(tmp_path, "cart/total.go", "package cart\n\nfunc total() string { return \"\" }\n")
+    _write(tmp_path, "cart/total.go", 'package cart\n\nfunc total() string { return "" }\n')
     _write(
         tmp_path,
         "cart/cart_test.go",
-        "package cart\n\nimport \"testing\"\n\nfunc TestNew(t *testing.T) { New() }\n",
+        'package cart\n\nimport "testing"\n\nfunc TestNew(t *testing.T) { New() }\n',
     )
 
     components = DependencyParser(str(tmp_path)).parse_repository()
@@ -410,7 +410,9 @@ def test_local_replace_directive_maps_another_module(tmp_path: Path) -> None:
         "replace (\n\texample.com/lib v0.0.0 => ./lib // local copy\n)\n",
     )
     _write(tmp_path, "lib/go.mod", "module example.com/lib\n")
-    _write(tmp_path, "lib/util/util.go", "package util\n\nfunc Trim(s string) string { return s }\n")
+    _write(
+        tmp_path, "lib/util/util.go", "package util\n\nfunc Trim(s string) string { return s }\n"
+    )
     _write(
         tmp_path,
         "main.go",
