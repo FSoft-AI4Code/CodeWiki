@@ -192,6 +192,8 @@ class DependencyParser:
             ".rs",
             ".dart",
             ".go",
+            ".zig",
+            ".vue",
         ]
         for ext in extensions:
             if path.endswith(ext):

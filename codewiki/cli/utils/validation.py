@@ -170,6 +170,8 @@ def detect_supported_languages(directory: Path) -> list[tuple[str, int]]:
         "Rust": [".rs"],
         "Dart": [".dart"],
         "Go": [".go"],
+        "Zig": [".zig"],
+        "Vue": [".vue"],
     }
 
     # Directories to exclude from counting
