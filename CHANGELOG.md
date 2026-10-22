@@ -32,6 +32,18 @@ uses [Semantic Versioning](https://semver.org/).
   providers (including `@riverpod` codegen), and GoRouter routes link to their
   screens. Generated `*.g.dart`/`*.freezed.dart` files and `.dart_tool/` are
   ignored, and Dart modules get Flutter-specific documentation guidance.
+- **Go analyzer.** Functions, methods, structs, interfaces (and their method
+  signatures), and other defined types (`type Kind int`) become components.
+  Methods are keyed by their receiver type (`Buffer.Push`, pointer or value
+  receiver alike), whichever file of the package declares them. Edges cover
+  calls (plain, `pkg.F()`, and method calls on receivers, parameters and
+  locals whose type can be inferred), struct field and embedded types,
+  composite literals, types named in signatures and local `var`s, and types
+  that implement an interface of their own package. Names resolve inside the
+  package (directory) they name; imports of the repository's own packages map
+  to directories through the module path in `go.mod` (and local `replace`
+  directives), and standard-library or third-party calls are dropped.
+  `_test.go` files and `vendor/` are skipped.
 
 ### Changed
 

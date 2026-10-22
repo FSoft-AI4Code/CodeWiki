@@ -73,6 +73,8 @@ class CallGraphAnalyzer:
         self._dart_visible: dict[str, set[str]] = {}
         self._dart_library_members: dict[str, set[str]] = {}
         self._dart_unscoped = False
+        self._go_visible: dict[str, set[str]] = {}
+        self._go_index = None
         self.call_relationships: list[CallRelationship] = []
         self._python_project_modules: set = set()
         self._python_external_import_roots: set = set()
@@ -100,6 +102,8 @@ class CallGraphAnalyzer:
         self._dart_visible = {}
         self._dart_library_members = {}
         self._dart_unscoped = False
+        self._go_visible = {}
+        self._go_index = None
 
         files_analyzed = 0
         files_failed = 0
@@ -281,6 +285,8 @@ class CallGraphAnalyzer:
                     self._analyze_rust_file(file_path, content, repo_dir)
                 elif language == "dart":
                     self._analyze_dart_file(file_path, content, repo_dir)
+                elif language == "go":
+                    self._analyze_go_file(file_path, content, repo_dir)
                 # else:
                 #     logger.warning(
                 #         f"Unsupported language for call graph analysis: {language} for file {file_path}"
@@ -606,6 +612,47 @@ class CallGraphAnalyzer:
         except Exception:
             logger.exception(f"Failed to analyze Dart file {file_path}")
 
+    def _analyze_go_file(self, file_path: str, content: str, repo_dir: str):
+        """
+        Analyze Go file using tree-sitter based analyzer.
+
+        Besides components and relationships, records the package directories
+        the file can see (its own and the repository packages it imports) for
+        Go package-scoped resolution.
+
+        Args:
+            file_path: Path to the Go file
+            content: File content string
+            repo_dir: Repository base directory
+        """
+        from codewiki.src.be.dependency_analyzer.analyzers.go import TreeSitterGoAnalyzer
+
+        try:
+            analyzer = TreeSitterGoAnalyzer(str(file_path), content, repo_path=repo_dir)
+
+            for func in analyzer.nodes:
+                func_id = func.id if func.id else f"{file_path}:{func.name}"
+                self.functions[func_id] = func
+
+            self.call_relationships.extend(analyzer.call_relationships)
+            self._go_visible[analyzer.relative_path] = analyzer.visible_dirs
+        except Exception:
+            logger.exception(f"Failed to analyze Go file {file_path}")
+
+    def _resolve_go_callee(self, callee: str, caller: Node) -> str | None:
+        """Go names resolve inside the package they name (a directory), or,
+        for a method on a value of unknown type, among the packages the
+        caller's file can see."""
+        from codewiki.src.be.dependency_analyzer.analyzers.go import (
+            GoPackageIndex,
+            resolve_go_callee,
+        )
+
+        if self._go_index is None:
+            self._go_index = GoPackageIndex(self.functions)
+        caller_file = Path(caller.relative_path).as_posix()
+        return resolve_go_callee(callee, caller, self._go_index, self._go_visible.get(caller_file))
+
     def _build_dart_scopes(self, base_dir: str) -> None:
         """Resolve recorded Dart directives into per-file visibility scopes."""
         from codewiki.src.be.dependency_analyzer.analyzers.dart_imports import (
@@ -723,6 +770,7 @@ class CallGraphAnalyzer:
                 func_info.language = CODE_EXTENSIONS.get(file_ext)
 
         indexes = self._build_resolution_indexes()
+        self._go_index = None
 
         resolved_count = 0
         for relationship in self.call_relationships:
@@ -740,7 +788,7 @@ class CallGraphAnalyzer:
             relationship
             for relationship in self.call_relationships
             if relationship.is_resolved
-            or not self._is_unresolvable_dart(relationship)
+            or not self._has_authoritative_resolution(relationship)
             and not self._is_external_callee(
                 self._caller_language(relationship.caller),
                 relationship.callee,
@@ -748,12 +796,19 @@ class CallGraphAnalyzer:
             )
         ]
 
-    def _is_unresolvable_dart(self, relationship: CallRelationship) -> bool:
-        """A Dart caller's callee that Dart resolution rejected is external or
-        invisible; drop it so ast_parser's name-only fallback cannot bind it
-        to an unrelated component."""
+        if any(func.language == "go" for func in self.functions.values()):
+            from codewiki.src.be.dependency_analyzer.analyzers.go import link_go_interfaces
+
+            # Go types implement interfaces implicitly: link them once every
+            # method of the package is known.
+            self.call_relationships.extend(link_go_interfaces(self.functions))
+
+    def _has_authoritative_resolution(self, relationship: CallRelationship) -> bool:
+        """A Dart or Go caller's callee that the language's scoped resolution
+        rejected is external or invisible; drop it so ast_parser's name-only
+        fallback cannot bind it to an unrelated component."""
         caller = self.functions.get(relationship.caller)
-        return caller is not None and caller.language == "dart"
+        return caller is not None and caller.language in ("dart", "go")
 
     def _dotted_project_packages(self) -> dict[str, set]:
         """Project packages/namespaces, partitioned by language. Java and C#
@@ -893,6 +948,9 @@ class CallGraphAnalyzer:
             # Dart resolution is authoritative: it never falls back to name
             # guessing in other languages or invisible libraries.
             return self._resolve_dart_callee(relationship.callee, caller, lang_indexes)
+        if caller_language == "go" and caller is not None:
+            # So is Go's: a name resolves only in the package it names.
+            return self._resolve_go_callee(relationship.callee, caller)
         if lang_indexes:
             match = self._resolve_callee_in(
                 relationship, lang_indexes["exact"], lang_indexes["simple"]
@@ -1034,6 +1092,8 @@ class CallGraphAnalyzer:
                 node_classes.append("lang-rust")
             elif file_ext == ".dart":
                 node_classes.append("lang-dart")
+            elif file_ext == ".go":
+                node_classes.append("lang-go")
 
             cytoscape_elements.append(
                 {

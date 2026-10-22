@@ -20,7 +20,7 @@ def cli(ctx):
 
     AI agents write the documentation from your dependency graph. Supports
     Python, Java, JavaScript, TypeScript, C, C++, C#, Kotlin, PHP, Ruby,
-    Scala, Rust, and Dart.
+    Scala, Rust, Dart, and Go.
     """
     # Ensure context object exists
     ctx.ensure_object(dict)
