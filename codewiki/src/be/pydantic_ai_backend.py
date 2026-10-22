@@ -23,7 +23,7 @@ from codewiki.src.be.agent_tools.generate_sub_module_documentations import (
 )
 from codewiki.src.be.agent_tools.read_code_components import read_code_components_tool
 from codewiki.src.be.agent_tools.str_replace_editor import str_replace_editor_tool
-from codewiki.src.be.backend import AgentReply, LLMBackend, usage_to_dict
+from codewiki.src.be.backend import AgentReply, LLMBackend, is_google_provider, usage_to_dict
 from codewiki.src.be.dependency_analyzer.models.core import Node
 from codewiki.src.be.llm_services import call_llm, create_fallback_models, pop_last_usage
 from codewiki.src.be.prompt_template import (
@@ -51,8 +51,24 @@ def _run_usage(result: Any) -> dict[str, Any] | None:
         return None
 
 
+def _run_usage_with_cost(result: Any, provider: str) -> dict[str, Any] | None:
+    """`_run_usage`, plus ``cost_usd`` for Google providers (priced from genai-prices)."""
+    usage = _run_usage(result)
+    if usage is None or not is_google_provider(provider):
+        return usage
+    from codewiki.src.be.google_provider import messages_cost
+
+    try:
+        cost = messages_cost(result.all_messages())
+    except Exception:  # noqa: BLE001 — cost is optional telemetry
+        cost = None
+    if cost is not None:
+        usage["cost_usd"] = cost
+    return usage
+
+
 class PydanticAIBackend(LLMBackend):
-    """API-key based backend using pydantic-ai + openai/litellm clients."""
+    """API-key based backend using pydantic-ai + openai/litellm/google-genai clients."""
 
     def __init__(self, config: Config) -> None:
         self._config = config
@@ -103,7 +119,7 @@ class PydanticAIBackend(LLMBackend):
         usage = self._record_usage(
             "update_agent",
             deps.current_module_name,
-            _run_usage(result),
+            _run_usage_with_cost(result, self._config.provider),
             seconds=seconds,
             model=self._config.main_model,
         )
@@ -198,7 +214,7 @@ class PydanticAIBackend(LLMBackend):
             self._record_usage(
                 "module_agent",
                 module_name,
-                _run_usage(result),
+                _run_usage_with_cost(result, config.provider),
                 seconds=time.time() - started,
                 model=config.main_model,
             )

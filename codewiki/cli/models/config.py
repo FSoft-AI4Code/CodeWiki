@@ -151,6 +151,8 @@ class Configuration:
         aws_region: AWS region for Bedrock provider
         api_version: Azure OpenAI API version
         azure_deployment: Azure OpenAI deployment name
+        google_project: Google Cloud project for google-vertex
+        google_location: Vertex AI location for google-vertex
         max_tokens: Maximum tokens for LLM response (default: 32768)
         max_token_per_module: Maximum tokens per module for clustering (default: 36369)
         max_token_per_leaf_module: Maximum tokens per leaf module (default: 16000)
@@ -171,6 +173,8 @@ class Configuration:
     aws_region: str = "us-east-1"
     api_version: str = "2024-12-01-preview"
     azure_deployment: str = ""
+    google_project: str = ""
+    google_location: str = ""
     max_tokens: int = 32768
     max_token_per_module: int = 36369
     max_token_per_leaf_module: int = 16000
@@ -191,12 +195,13 @@ class Configuration:
         Raises:
             ConfigurationError: If validation fails
         """
-        from codewiki.src.be.backend import is_caw_provider
+        from codewiki.src.be.backend import is_caw_provider, needs_base_url
 
         if is_caw_provider(self.provider):
             validate_model_name(self.main_model)
             return
-        validate_url(self.base_url)
+        if needs_base_url(self.provider):
+            validate_url(self.base_url)
         validate_model_name(self.main_model)
         validate_model_name(self.cluster_model)
         validate_model_name(self.fallback_model)
@@ -212,6 +217,8 @@ class Configuration:
             "aws_region": self.aws_region,
             "api_version": self.api_version,
             "azure_deployment": self.azure_deployment,
+            "google_project": self.google_project,
+            "google_location": self.google_location,
             "max_tokens": self.max_tokens,
             "max_token_per_module": self.max_token_per_module,
             "max_token_per_leaf_module": self.max_token_per_leaf_module,
@@ -251,6 +258,8 @@ class Configuration:
             aws_region=data.get("aws_region", "us-east-1"),
             api_version=data.get("api_version", "2024-12-01-preview"),
             azure_deployment=data.get("azure_deployment", ""),
+            google_project=data.get("google_project", ""),
+            google_location=data.get("google_location", ""),
             max_tokens=data.get("max_tokens", 32768),
             max_token_per_module=data.get("max_token_per_module", 36369),
             max_token_per_leaf_module=data.get("max_token_per_leaf_module", 16000),
@@ -267,15 +276,14 @@ class Configuration:
 
         Subscription-mode providers (claude-code, codex) only require
         ``main_model``; ``base_url``, ``cluster_model`` and ``fallback_model``
-        are unused.
+        are unused. Google providers need no ``base_url``.
         """
-        from codewiki.src.be.backend import is_caw_provider
+        from codewiki.src.be.backend import is_caw_provider, needs_base_url
 
         if is_caw_provider(self.provider):
             return bool(self.main_model)
-        return bool(
-            self.base_url and self.main_model and self.cluster_model and self.fallback_model
-        )
+        has_url = bool(self.base_url) or not needs_base_url(self.provider)
+        return bool(has_url and self.main_model and self.cluster_model and self.fallback_model)
 
     def to_backend_config(
         self,
@@ -319,6 +327,8 @@ class Configuration:
             aws_region=self.aws_region,
             api_version=self.api_version,
             azure_deployment=self.azure_deployment,
+            google_project=self.google_project,
+            google_location=self.google_location,
             max_tokens=self.max_tokens,
             max_token_per_module=self.max_token_per_module,
             max_token_per_leaf_module=self.max_token_per_leaf_module,

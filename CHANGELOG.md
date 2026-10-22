@@ -8,6 +8,12 @@ uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Google provider.** `google` (Gemini API key) and `google-vertex` (Vertex AI
+  with Google credentials: ADC or Workload Identity Federation, plus
+  `--google-project` and `--google-location`) run on Gemini without a base
+  URL. Agent loops use pydantic-ai's native `GoogleModel`, so Gemini 3 thought
+  signatures survive tool-call turns, and the cost summary prices Gemini runs
+  from genai-prices ([#20](https://github.com/FSoft-AI4Code/CodeWiki/issues/20)).
 - **Rust analyzer.** Structs, unions, enums, traits, free functions, and
   impl/trait methods become components, with trait-impl, field-type,
   struct-literal, and call edges. `#[cfg(test)]` modules are skipped, and

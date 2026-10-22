@@ -8,7 +8,9 @@ CodeWiki has two LLM call shapes:
 Two implementations satisfy this interface:
 
 * :class:`PydanticAIBackend` — wraps the existing openai-compatible / anthropic
-  / bedrock / azure-openai paths via pydantic-ai + litellm.  API-key based.
+  / bedrock / azure-openai paths via pydantic-ai + litellm, and the native
+  Google paths (``google``, ``google-vertex``) via pydantic-ai + google-genai.
+  API-key based, except Vertex AI which uses Google credentials.
 * :class:`CawBackend` — routes through the ``claude`` or ``codex`` CLI via the
   :mod:`caw` library, using the user's OAuth subscription.  No API key.
 
@@ -155,6 +157,28 @@ CAW_PROVIDERS = frozenset({"claude-code", "codex"})
 def is_caw_provider(provider: str) -> bool:
     """Return True if *provider* uses caw (CLI subscription mode)."""
     return provider in CAW_PROVIDERS
+
+
+GOOGLE_PROVIDERS = frozenset({"google", "google-vertex"})
+
+
+def is_google_provider(provider: str) -> bool:
+    """Return True if *provider* talks to Gemini natively (Gemini API or Vertex AI)."""
+    return provider in GOOGLE_PROVIDERS
+
+
+def needs_api_key(provider: str) -> bool:
+    """Return True if *provider* authenticates with a stored API key.
+
+    caw providers use the CLI's OAuth login, google-vertex uses Google
+    credentials (ADC / Workload Identity Federation).
+    """
+    return not is_caw_provider(provider) and provider != "google-vertex"
+
+
+def needs_base_url(provider: str) -> bool:
+    """Return True if *provider* needs a configured base URL."""
+    return not is_caw_provider(provider) and not is_google_provider(provider)
 
 
 class LLMBackend(abc.ABC):

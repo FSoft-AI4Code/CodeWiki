@@ -793,6 +793,8 @@ def generate_command(
                 "api_key": api_key,
                 "provider": getattr(config, "provider", "openai-compatible"),
                 "aws_region": getattr(config, "aws_region", "us-east-1"),
+                "google_project": getattr(config, "google_project", ""),
+                "google_location": getattr(config, "google_location", ""),
                 "agent_instructions": agent_instructions_dict,
                 # Max token settings (runtime overrides take precedence)
                 "max_tokens": max_tokens if max_tokens is not None else config.max_tokens,

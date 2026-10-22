@@ -93,11 +93,16 @@ class Config:
     fallback_model: str = FALLBACK_MODEL_1
     # Provider configuration
     provider: str = (
-        "openai-compatible"  # openai-compatible, atlas-cloud, anthropic, bedrock, azure-openai
+        "openai-compatible"  # openai-compatible, atlas-cloud, anthropic, bedrock, azure-openai,
+        # google, google-vertex
     )
     aws_region: str = "us-east-1"
     api_version: str = "2024-12-01-preview"  # Azure OpenAI API version
     azure_deployment: str = ""  # Azure OpenAI deployment name
+    # Vertex AI (google-vertex): project falls back to GOOGLE_CLOUD_PROJECT, location to
+    # GOOGLE_CLOUD_LOCATION, then "global"
+    google_project: str = ""
+    google_location: str = ""
     # Max token settings
     max_tokens: int = DEFAULT_MAX_TOKENS
     max_token_per_module: int = DEFAULT_MAX_TOKEN_PER_MODULE
@@ -241,6 +246,8 @@ class Config:
         aws_region: str = "us-east-1",
         api_version: str = "2024-12-01-preview",
         azure_deployment: str = "",
+        google_project: str = "",
+        google_location: str = "",
         max_tokens: int = DEFAULT_MAX_TOKENS,
         max_token_per_module: int = DEFAULT_MAX_TOKEN_PER_MODULE,
         max_token_per_leaf_module: int = DEFAULT_MAX_TOKEN_PER_LEAF_MODULE,
@@ -268,10 +275,13 @@ class Config:
             main_model: Primary model
             cluster_model: Clustering model
             fallback_model: Fallback model
-            provider: LLM provider type (openai-compatible, atlas-cloud, anthropic, bedrock, azure-openai)
+            provider: LLM provider type (openai-compatible, atlas-cloud, anthropic, bedrock,
+                azure-openai, google, google-vertex)
             aws_region: AWS region for Bedrock provider
             api_version: Azure OpenAI API version
             azure_deployment: Azure OpenAI deployment name
+            google_project: Google Cloud project for the google-vertex provider
+            google_location: Vertex AI location for the google-vertex provider
             max_tokens: Maximum tokens for LLM response
             max_token_per_module: Maximum tokens per module for clustering
             max_token_per_leaf_module: Maximum tokens per leaf module
@@ -312,6 +322,8 @@ class Config:
             aws_region=aws_region,
             api_version=api_version,
             azure_deployment=azure_deployment,
+            google_project=google_project,
+            google_location=google_location,
             max_tokens=max_tokens,
             max_token_per_module=max_token_per_module,
             max_token_per_leaf_module=max_token_per_leaf_module,
