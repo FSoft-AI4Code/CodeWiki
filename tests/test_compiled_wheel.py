@@ -14,6 +14,8 @@ import importlib
 import inspect
 import json
 import pkgutil
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -232,3 +234,94 @@ def test_module_agent_end_to_end_with_scripted_model(tmp_path, monkeypatch):
     page = (out / "Core.md").read_text(encoding="utf-8")
     assert page.startswith("# Core")
     assert "```mermaid" in page
+
+
+# ---------------------------------------------------------------------------
+# Mermaid validation through PythonMonkey, called the way the caw backend does
+# ---------------------------------------------------------------------------
+
+# Runs in a subprocess: the failure this guards against is a segfault.
+_CAW_MERMAID_SCRIPT = r"""
+import asyncio
+import shutil
+import sys
+import tempfile
+import threading
+
+import codewiki.src.be.utils as u
+
+
+def write(text):
+    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as f:
+        f.write(text)
+    return f.name
+
+
+async def check():
+    good = await u.validate_mermaid_diagrams(write("```mermaid\ngraph TD\n  A --> B\n```\n"), "good.md")
+    bad = await u.validate_mermaid_diagrams(write("```mermaid\ngraph TD\n  A -->\n```\n"), "bad.md")
+    return good, bad
+
+
+async def caw_backend():
+    # As CawBackend.run_module_agent: register the loop, run the agent in a
+    # worker thread, and FastMCP calls the tool on a daemon thread of its own.
+    u.set_main_loop(asyncio.get_running_loop())
+
+    def agent():
+        out = {}
+        t = threading.Thread(target=lambda: out.update(r=asyncio.run(check())), daemon=True)
+        t.start()
+        t.join()
+        return out["r"]
+
+    return await asyncio.to_thread(agent)
+
+
+def run():
+    good, bad = asyncio.run(caw_backend())
+    if threading.current_thread() is threading.main_thread():
+        assert "pythonmonkey" in sys.modules, "PythonMonkey was not used"
+        assert "syntax correct" in good, good
+        assert "errors found" in bad, bad
+    else:
+        # Off the main thread PythonMonkey would crash Python at exit; it must
+        # not be loaded at all (validation falls back to system Node.js).
+        assert "pythonmonkey" not in sys.modules, "PythonMonkey loaded off the main thread"
+        if shutil.which("node"):
+            assert "syntax correct" in good, good
+            assert "errors found" in bad, bad
+
+
+errors = []
+if sys.argv[1] == "main":
+    run()
+else:  # the web app runs generation on a background worker thread
+    def target():
+        try:
+            run()
+        except BaseException as e:
+            errors.append(e)
+
+    t = threading.Thread(target=target)
+    t.start()
+    t.join()
+if errors:
+    raise errors[0]
+print("ok")
+"""
+
+
+@pytest.mark.parametrize("loop_thread", ["main", "background"])
+def test_caw_mermaid_validation_through_pythonmonkey(loop_thread):
+    proc = subprocess.run(
+        [sys.executable, "-X", "faulthandler", "-c", _CAW_MERMAID_SCRIPT, loop_thread],
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    assert proc.returncode == 0 and proc.stdout.strip().endswith("ok"), (
+        proc.returncode,
+        proc.stdout[-2000:],
+        proc.stderr[-3000:],
+    )

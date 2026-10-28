@@ -70,8 +70,8 @@ MarkupSafe==3.0.2
 matplotlib-inline==0.1.7
 mcp==1.16.0
 mdurl==0.1.2
+# mermaid-py==0.8.0  # disabled mermaid.ink fallback
 mermaid-parser-py==0.0.2
-mermaid-py==0.8.0
 mistralai==1.9.10
 multidict==6.6.3
 nest-asyncio==1.6.0
@@ -116,7 +116,7 @@ pyperclip==1.9.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.1.1
 python-multipart==0.0.20
-pythonmonkey==1.2.0
+pythonmonkey==1.4.1
 pytz==2025.2
 PyYAML==6.0.2
 pyzmq==27.0.1

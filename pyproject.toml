@@ -58,7 +58,7 @@ dependencies = [
     "psutil>=7.0.0",
     "PyYAML>=6.0.2",
     "mermaid-parser-py>=0.0.2",
-    "mermaid-py>=0.8.0",
+    # "mermaid-py>=0.8.0",  # disabled mermaid.ink fallback, see codewiki/src/be/utils.py
     "fastapi>=0.116.0",
     "uvicorn>=0.35.0",
     "python-multipart>=0.0.20",
@@ -72,8 +72,8 @@ dependencies = [
 [external]
 # Node.js/npm are required at *install* time by PythonMonkey (pulled in via
 # mermaid-parser-py), whose pminit helper shells out to npm to populate its JS
-# dependencies. mermaid-py itself does not need Node.js: it validates diagrams
-# with an HTTP call to a remote rendering service (mermaid.ink by default).
+# dependencies. At run time Mermaid validation uses PythonMonkey, else system
+# Node.js on the same bundle, else it is skipped; it never calls a web service.
 build-requires = [
     { name = "nodejs", version = ">=14.0.0" }
 ]

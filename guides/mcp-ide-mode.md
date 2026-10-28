@@ -177,7 +177,8 @@ scope.
 
 **Mermaid validation errors.**
 The agent gets the validator's message back and fixes the diagram. If every
-diagram fails, check that `mermaid-py` is installed.
+diagram is skipped, PythonMonkey and Node.js are both unavailable: install
+Node.js (or set `CODEWIKI_NODE_PATH`) and check the log for the warning.
 
 **Documentation in another language.**
 Tell the agent: "Write the wiki in English" or "Use Chinese for the
