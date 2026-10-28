@@ -42,6 +42,7 @@ class JobStatistics:
     total_cost_usd: Optional[float] = None
     # Models whose calls reported tokens but no price
     unpriced_models: List[str] = field(default_factory=list)
+    usage_report: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

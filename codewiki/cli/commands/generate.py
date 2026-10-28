@@ -633,10 +633,7 @@ def generate_command(
                 repo_path, output_dir, logger, verbose, compare_to=compare_to
             )
             if changed_files is not None and len(changed_files) == 0:
-                logger.success(
-                    "No changes detected since last generation. Documentation is up to date."
-                )
-                sys.exit(EXIT_SUCCESS)
+                logger.info("No committed changes detected; checking documentation state.")
             if changed_files is not None and update_rung == "0":
                 logger.info(
                     f"  Detected {len(changed_files)} changed files — regenerating affected modules."
@@ -792,6 +789,7 @@ def generate_command(
                 "base_url": config.base_url,
                 "api_key": api_key,
                 "provider": getattr(config, "provider", "openai-compatible"),
+                "pricing": getattr(config, "pricing", {}),
                 "aws_region": getattr(config, "aws_region", "us-east-1"),
                 "google_project": getattr(config, "google_project", ""),
                 "google_location": getattr(config, "google_location", ""),
@@ -878,6 +876,7 @@ def generate_command(
                 "total_files_analyzed": job.statistics.total_files_analyzed,
                 "generation_time": generation_time,
                 "total_tokens_used": job.statistics.total_tokens_used,
+                "usage_report": job.statistics.usage_report,
                 "usage_totals": job.statistics.usage_totals,
                 "total_cost_usd": job.statistics.total_cost_usd,
                 "unpriced_models": job.statistics.unpriced_models,

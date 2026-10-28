@@ -23,7 +23,8 @@ from codewiki.src.be.agent_tools.generate_sub_module_documentations import (
 )
 from codewiki.src.be.agent_tools.read_code_components import read_code_components_tool
 from codewiki.src.be.agent_tools.str_replace_editor import str_replace_editor_tool
-from codewiki.src.be.backend import AgentReply, LLMBackend, is_google_provider, usage_to_dict
+from codewiki.src.be.api_usage import track_usage, record_response
+from codewiki.src.be.backend import AgentReply, LLMBackend, UsageLedger, usage_to_dict
 from codewiki.src.be.dependency_analyzer.models.core import Node
 from codewiki.src.be.llm_services import call_llm, create_fallback_models, pop_last_usage
 from codewiki.src.be.prompt_template import (
@@ -51,27 +52,12 @@ def _run_usage(result: Any) -> dict[str, Any] | None:
         return None
 
 
-def _run_usage_with_cost(result: Any, provider: str) -> dict[str, Any] | None:
-    """`_run_usage`, plus ``cost_usd`` for Google providers (priced from genai-prices)."""
-    usage = _run_usage(result)
-    if usage is None or not is_google_provider(provider):
-        return usage
-    from codewiki.src.be.google_provider import messages_cost
-
-    try:
-        cost = messages_cost(result.all_messages())
-    except Exception:  # noqa: BLE001 — cost is optional telemetry
-        cost = None
-    if cost is not None:
-        usage["cost_usd"] = cost
-    return usage
-
-
 class PydanticAIBackend(LLMBackend):
     """API-key based backend using pydantic-ai + openai/litellm/google-genai clients."""
 
     def __init__(self, config: Config) -> None:
         self._config = config
+        self._usage_ledger = UsageLedger()
         self._fallback_models = create_fallback_models(config)
         self._custom_instructions = config.get_prompt_addition()
         self.last_usage: dict[str, Any] | None = None
@@ -83,17 +69,21 @@ class PydanticAIBackend(LLMBackend):
         model: str | None = None,
         system_prompt: str | None = None,
     ) -> str:
-        pop_last_usage()
-        started = time.time()
-        result = call_llm(prompt, self._config, model=model, system_prompt=system_prompt)
-        self._record_usage(
-            "complete",
-            "",
-            pop_last_usage(),
-            seconds=time.time() - started,
-            model=model or self._config.main_model,
-        )
-        return result
+        started = time.monotonic()
+        with track_usage(self.usage_ledger, self._config, "complete") as tracked:
+            try:
+                return call_llm(prompt, self._config, model=model, system_prompt=system_prompt)
+            except Exception as exc:
+                if not tracked.entries:
+                    record_response(
+                        None, model or self._config.main_model, error=type(exc).__name__
+                    )
+                raise
+            finally:
+                if len(tracked.entries) == 1:
+                    tracked.entries[0]["seconds"] = round(time.monotonic() - started, 2)
+                self.last_usage = tracked.totals()
+                pop_last_usage()
 
     async def run_update_agent(
         self,
@@ -110,19 +100,19 @@ class PydanticAIBackend(LLMBackend):
             retries=self._config.agent_retries,
         )
         started = time.time()
-        result = await agent.run(
-            user_prompt,
-            deps=deps,
-            usage_limits=UsageLimits(request_limit=self._config.request_limit),
-        )
+        with track_usage(
+            self.usage_ledger, self._config, "update_agent", deps.current_module_name
+        ) as tracked:
+            try:
+                result = await agent.run(
+                    user_prompt,
+                    deps=deps,
+                    usage_limits=UsageLimits(request_limit=self._config.request_limit),
+                )
+            finally:
+                self.last_usage = tracked.totals()
         seconds = time.time() - started
-        usage = self._record_usage(
-            "update_agent",
-            deps.current_module_name,
-            _run_usage_with_cost(result, self._config.provider),
-            seconds=seconds,
-            model=self._config.main_model,
-        )
+        usage = self.last_usage
         text = result.output if isinstance(result.output, str) else str(result.output)
         return AgentReply(text=text, usage=usage, seconds=seconds)
 
@@ -195,29 +185,23 @@ class PydanticAIBackend(LLMBackend):
             custom_instructions=self._custom_instructions,
         )
 
-        started = time.time()
         try:
-            result = await agent.run(
-                format_user_prompt(
-                    module_name=module_name,
-                    core_component_ids=core_component_ids,
-                    components=components,
-                    module_tree=deps.module_tree,
-                    module_path=module_path,
-                    layout=config_layout(config),
-                ),
-                deps=deps,
-                usage_limits=UsageLimits(request_limit=config.request_limit),
-            )
-            # Covers this module's own run; pydantic-ai sub-module agents run
-            # with their own usage and are not counted here.
-            self._record_usage(
-                "module_agent",
-                module_name,
-                _run_usage_with_cost(result, config.provider),
-                seconds=time.time() - started,
-                model=config.main_model,
-            )
+            with track_usage(self.usage_ledger, config, "module_agent", module_name) as tracked:
+                try:
+                    await agent.run(
+                        format_user_prompt(
+                            module_name=module_name,
+                            core_component_ids=core_component_ids,
+                            components=components,
+                            module_tree=deps.module_tree,
+                            module_path=module_path,
+                            layout=config_layout(config),
+                        ),
+                        deps=deps,
+                        usage_limits=UsageLimits(request_limit=config.request_limit),
+                    )
+                finally:
+                    self.last_usage = tracked.totals()
             file_manager.save_json(deps.module_tree, module_tree_path)
             return deps.module_tree
         except Exception as e:

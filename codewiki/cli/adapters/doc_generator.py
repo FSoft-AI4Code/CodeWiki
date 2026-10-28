@@ -163,6 +163,7 @@ class CLIDocumentationGenerator:
                 agent_instructions=self.config.get("agent_instructions"),
                 use_gitignore=self.config.get("use_gitignore", True),
                 prompt_caching=self.config.get("prompt_caching", True),
+                pricing=self.config.get("pricing", {}),
                 artifacts_enabled=self.config.get("artifacts_enabled", True),
                 artifact_token_budget=self.config.get("artifact_token_budget", 200_000),
                 with_prose=self.config.get("with_prose", False),
@@ -181,15 +182,18 @@ class CLIDocumentationGenerator:
             self._finalize_job()
 
             # Complete job
+            self._finish_usage()
             self.job.complete()
 
             return self.job
 
         except APIError as e:
             self.job.fail(str(e))
+            self._finish_usage(incomplete=True)
             raise
         except Exception as e:
             self.job.fail(str(e))
+            self._finish_usage(incomplete=True)
             raise
 
     async def _run_backend_generation(self, backend_config: BackendConfig):
@@ -448,6 +452,7 @@ class CLIDocumentationGenerator:
         updater = IncrementalUpdater(
             backend_config, doc_generator.backend, doc_generator, update_opts
         )
+        self._last_update_record = updater.record
         with doc_generator.usage_ledger.in_phase("update"):
             record = await updater.run(prev_graph_path, components, leaf_nodes, revision)
         self._last_update_record = record
@@ -484,6 +489,8 @@ class CLIDocumentationGenerator:
         """Keep the previous docs (and the failed attempt's record) next to the output dir."""
         import shutil
 
+        self._prior_update_history = self._read_update_history(str(self.output_dir))
+
         suffix = (self.commit_id or "unknown")[:8]
         target = self.output_dir.parent / f"{self.output_dir.name}.prev-{suffix}"
         n = 2
@@ -515,11 +522,17 @@ class CLIDocumentationGenerator:
             return
         from codewiki.src.be.updater.record import merge_into_metadata
 
-        summary = record.summary()
         preserved = getattr(self, "_preserved_docs_dir", None)
+        if self._usage_ledger is not None:
+            record.usage_report = self._usage_ledger.summary()
+        summary = record.summary()
         if preserved:
             summary["previous_docs"] = preserved
-        merge_into_metadata(working_dir, summary, prior_history=prior_history)
+        merge_into_metadata(
+            working_dir,
+            summary,
+            prior_history=prior_history or getattr(self, "_prior_update_history", None),
+        )
         try:
             record.save(working_dir)
         except OSError:
@@ -563,6 +576,7 @@ class CLIDocumentationGenerator:
         summary = self._usage_ledger.summary()
         totals = summary["totals"]
         stats = self.job.statistics
+        stats.usage_report = summary
         stats.usage_totals = totals
         stats.total_tokens_used = int(
             sum(
@@ -570,14 +584,57 @@ class CLIDocumentationGenerator:
                 for k in (
                     "input_tokens",
                     "output_tokens",
-                    "cache_read_tokens",
-                    "cache_write_tokens",
                 )
             )
             or totals.get("total_tokens", 0)
         )
         stats.total_cost_usd = totals.get("cost_usd")
         stats.unpriced_models = summary["unpriced_models"]
+
+    def _finish_usage(self, incomplete: bool = False):
+        """Persist the final report even when validation or a later stage fails.
+
+        Reporting errors must never hide the original generation failure.
+        """
+        if self._usage_ledger is None:
+            return
+        self._usage_ledger.incomplete = incomplete
+        self._record_usage_statistics()
+        report = self.job.statistics.usage_report
+        try:
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+            path = self.output_dir / "metadata.json"
+            try:
+                metadata = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                metadata = {}
+            if not isinstance(metadata, dict):
+                metadata = {}
+            metadata["usage"] = report
+            record = getattr(self, "_last_update_record", None)
+            if record is not None:
+                record.usage_report = report
+                record.save(str(self.output_dir))
+                summary = record.summary()
+                if getattr(self, "_preserved_docs_dir", None):
+                    summary["previous_docs"] = self._preserved_docs_dir
+                history = metadata.get("update_history", [])
+                if not isinstance(history, list):
+                    history = []
+                if history and history[-1].get("run_id") == record.run_id:
+                    history[-1] = summary
+                else:
+                    history.append(summary)
+                metadata.update(last_update=summary, update_history=history)
+            from codewiki.cli.utils.fs import safe_write
+
+            safe_write(path, json.dumps(metadata, indent=2, ensure_ascii=False))
+        except Exception:
+            logging.getLogger(__name__).warning("Could not save the run usage report")
+        if incomplete:
+            from codewiki.cli.utils.instructions import _echo_usage
+
+            _echo_usage({"usage_report": report, "provider": self.config.get("provider", "")})
 
     def _finalize_job(self):
         """Finalize the job (metadata already created by backend)."""

@@ -34,6 +34,110 @@ def config_group():
     pass
 
 
+@config_group.group(name="pricing")
+def pricing_group():
+    """Manage API prices in USD per million tokens."""
+
+
+def _pricing_manager():
+    manager = ConfigManager()
+    try:
+        manager.load()
+    except ConfigurationError as exc:
+        raise click.ClickException(str(exc)) from exc
+    return manager
+
+
+def _pricing_provider(manager, provider):
+    provider = provider or (
+        manager.get_config().provider if manager.get_config() else "openai-compatible"
+    )
+    supported = {
+        "openai-compatible",
+        "atlas-cloud",
+        "anthropic",
+        "bedrock",
+        "azure-openai",
+        "google",
+        "google-vertex",
+    }
+    if provider not in supported:
+        raise click.BadParameter(
+            "Choose an API provider; Claude Code and Codex use their provider cost results.",
+            param_hint="--provider",
+        )
+    return provider
+
+
+@pricing_group.command(name="set")
+@click.argument("model")
+@click.option(
+    "--input", "input_rate", required=True, type=float, help="USD per million input tokens."
+)
+@click.option(
+    "--output", "output_rate", required=True, type=float, help="USD per million output tokens."
+)
+@click.option("--cache-read", type=float, help="Defaults to the input rate.")
+@click.option("--cache-write", type=float, help="Defaults to the input rate.")
+@click.option("--provider", help="Defaults to the active API provider.")
+def pricing_set(model, input_rate, output_rate, cache_read, cache_write, provider):
+    """Set rates for MODEL. Explicit zero rates are supported."""
+    from copy import deepcopy
+    from codewiki.src.be.pricing import validate_pricing
+
+    manager = _pricing_manager()
+    provider = _pricing_provider(manager, provider)
+    pricing = deepcopy(manager.get_config().pricing) if manager.get_config() else {}
+    rates = {"input": input_rate, "output": output_rate}
+    if cache_read is not None:
+        rates["cache_read"] = cache_read
+    if cache_write is not None:
+        rates["cache_write"] = cache_write
+    pricing.setdefault(provider, {})[model] = rates
+    try:
+        validate_pricing(pricing)
+        manager.save(pricing=pricing)
+    except (ValueError, ConfigurationError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"API pricing saved for {provider}/{model} (USD per million tokens).")
+
+
+@pricing_group.command(name="show")
+@click.option("--json", "output_json", is_flag=True)
+def pricing_show(output_json):
+    """Show configured rates for all API providers."""
+    manager = _pricing_manager()
+    pricing = manager.get_config().pricing if manager.get_config() else {}
+    if output_json:
+        click.echo(json.dumps(pricing, indent=2, sort_keys=True))
+    elif not pricing:
+        click.echo("No API prices configured. Use 'codewiki config pricing set --help'.")
+    else:
+        click.echo("API pricing (USD per million tokens; omitted cache rates use input):")
+        for provider, models in sorted(pricing.items()):
+            for model, rates in sorted(models.items()):
+                click.echo(f"  {provider}/{model}: {json.dumps(rates, sort_keys=True)}")
+
+
+@pricing_group.command(name="remove")
+@click.argument("model")
+@click.option("--provider", help="Defaults to the active API provider.")
+def pricing_remove(model, provider):
+    """Remove configured rates for MODEL."""
+    from copy import deepcopy
+
+    manager = _pricing_manager()
+    provider = _pricing_provider(manager, provider)
+    pricing = deepcopy(manager.get_config().pricing) if manager.get_config() else {}
+    if model not in pricing.get(provider, {}):
+        raise click.ClickException(f"No price configured for {provider}/{model}")
+    del pricing[provider][model]
+    if not pricing[provider]:
+        del pricing[provider]
+    manager.save(pricing=pricing)
+    click.echo(f"API pricing removed for {provider}/{model}.")
+
+
 @config_group.command(name="set")
 @click.option("--api-key", type=str, help="LLM API key (stored securely in system keychain)")
 @click.option("--base-url", type=str, help="LLM API base URL (e.g., https://api.anthropic.com)")
@@ -473,6 +577,7 @@ def config_show(output_json: bool):
                 "agent_retries": config.agent_retries if config else 3,
                 "use_gitignore": config.use_gitignore if config else True,
                 "prompt_caching": config.prompt_caching if config else True,
+                "pricing": config.pricing if config else {},
                 "agent_instructions": config.agent_instructions.to_dict()
                 if config and config.agent_instructions
                 else {},
@@ -542,6 +647,9 @@ def config_show(output_json: bool):
                 click.echo(f"  Max Token/Module:        {config.max_token_per_module}")
                 click.echo(f"  Max Token/Leaf Module:   {config.max_token_per_leaf_module}")
                 click.echo(f"  Prompt Caching:          {config.prompt_caching}")
+                click.echo(
+                    f"  API Pricing:             {json.dumps(config.pricing, sort_keys=True)}"
+                )
 
             click.echo()
             click.secho("Decomposition Settings", fg="cyan", bold=True)

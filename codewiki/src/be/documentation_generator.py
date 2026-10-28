@@ -555,4 +555,15 @@ class DocumentationGenerator:
         except Exception as e:
             logger.error(f"Documentation generation failed: {e!s}")
             logger.error(f"Traceback: {traceback.format_exc()}")
+            self.usage_ledger.incomplete = True
+            try:
+                path = os.path.join(self.config.docs_dir, "metadata.json")
+                metadata = file_manager.load_json(path) if os.path.exists(path) else {}
+                if not isinstance(metadata, dict):
+                    metadata = {}
+                metadata["usage"] = self.usage_ledger.summary()
+                file_manager.ensure_directory(self.config.docs_dir)
+                file_manager.save_json(metadata, path)
+            except Exception:
+                logger.warning("Could not save the incomplete run usage report")
             raise

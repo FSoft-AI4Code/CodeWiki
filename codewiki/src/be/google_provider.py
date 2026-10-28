@@ -15,14 +15,12 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Iterable, Optional
+from typing import Any, Optional
 
 from google import genai
 from google.genai import types as genai_types
-from pydantic_ai.messages import ModelResponse
 from pydantic_ai.models.google import GoogleModel, GoogleModelSettings
 from pydantic_ai.providers.google import GoogleProvider
-from pydantic_ai.usage import RequestUsage
 
 logger = logging.getLogger(__name__)
 
@@ -123,36 +121,6 @@ def create_google_model(config, model_name: str) -> GoogleModel:
     )
 
 
-def _price(usage: dict[str, Any], model: str) -> Optional[float]:
-    """USD price of one call from pydantic-ai's genai-prices data, or None if unknown."""
-    response = ModelResponse(
-        parts=[],
-        usage=RequestUsage(
-            input_tokens=usage.get("input_tokens", 0),
-            output_tokens=usage.get("output_tokens", 0),
-            cache_read_tokens=usage.get("cache_read_tokens", 0),
-        ),
-        model_name=model,
-        provider_name="google",
-    )
-    return _response_cost(response)
-
-
-def _response_cost(response: ModelResponse) -> Optional[float]:
-    try:
-        return float(response.cost().total_price)
-    except Exception:  # noqa: BLE001 - unknown model or old genai-prices; cost is optional
-        return None
-
-
-def messages_cost(messages: Iterable[Any]) -> Optional[float]:
-    """Summed price of the ModelResponses of an agent run, or None if none could be priced."""
-    prices = [
-        p for m in messages if isinstance(m, ModelResponse) if (p := _response_cost(m)) is not None
-    ]
-    return sum(prices) if prices else None
-
-
 def _usage_dict(metadata) -> dict[str, Any]:
     if metadata is None:
         return {"requests": 1}
@@ -187,9 +155,20 @@ def call_google(
         ),
     )
     usage = _usage_dict(response.usage_metadata)
-    price = _price(usage, response.model_version or name)
-    if price is not None:
-        usage["cost_usd"] = price
+    from codewiki.src.be.api_usage import normalize_api_usage, record_response
+    from codewiki.src.be.pricing import price_usage
+
+    actual_model = response.model_version or name
+    priced = price_usage(
+        normalize_api_usage(usage),
+        getattr(config, "pricing", {}),
+        config.provider,
+        actual_model,
+        model,
+    )
+    if "cost_usd" in priced:
+        usage["cost_usd"] = priced["cost_usd"]
+    record_response(usage, model, model=actual_model)
 
     candidate = response.candidates[0] if response.candidates else None
     if candidate is None:

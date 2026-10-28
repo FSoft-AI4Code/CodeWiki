@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import time
+import uuid
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -60,6 +61,8 @@ class UpdateRecord:
     detector_notes: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     wall_seconds: float | None = None
+    usage_report: dict[str, Any] | None = None
+    run_id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
     def add_call(self, cost: CallCost) -> None:
         self.calls.append(asdict(cost))
@@ -74,6 +77,8 @@ class UpdateRecord:
                 if isinstance(v, (int, float)):
                     usage_total[k] = usage_total.get(k, 0) + v
         return {
+            "run_id": self.run_id,
+            "started_at": self.started_at,
             "outcome": self.outcome,
             "finished_at": self.finished_at,
             "rung": self.options.get("rung"),
@@ -85,8 +90,9 @@ class UpdateRecord:
                 1 for a in self.ownership if str(a.get("rule", "")).startswith("4:")
             ),
             "fallback": self.fallback,
-            "n_calls": len(self.calls),
-            "usage_total": usage_total,
+            "n_calls": self.usage_report["n_calls"] if self.usage_report else len(self.calls),
+            "usage_total": self.usage_report["totals"] if self.usage_report else usage_total,
+            "usage": self.usage_report,
             "pages_written": sorted(set(self.pages_written)),
             "pages_removed": sorted(set(self.pages_removed)),
             "wall_seconds": self.wall_seconds,

@@ -1,15 +1,12 @@
 """Native Google provider: model factories, one-shot calls, usage and cost."""
 
 import logging
-from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
 from google.genai import types as gt
-from pydantic_ai.messages import ModelRequest, ModelResponse, UserPromptPart
 from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.models.google import GoogleModel
-from pydantic_ai.usage import RequestUsage
 
 from codewiki.src.be import google_provider
 from codewiki.src.be.llm_services import (
@@ -101,7 +98,7 @@ def test_google_fallback_models_are_google_models(clean_env):
     chain = create_fallback_models(config)
 
     assert isinstance(chain, FallbackModel)
-    assert all(isinstance(m, GoogleModel) for m in chain.models)
+    assert all(isinstance(m.wrapped, GoogleModel) for m in chain.models)
     assert chain.models[0].model_name == "gemini-3.8-flash"
 
 
@@ -148,12 +145,16 @@ def fake_models(monkeypatch):
     return install
 
 
-def test_call_llm_google_text_and_usage(fake_models, monkeypatch):
+def test_call_llm_google_text_and_usage(fake_models):
     models = fake_models(_response([_text_candidate("hello")]))
-    monkeypatch.setattr(google_provider, "_price", lambda usage, model: 0.25)
     pop_last_usage()
 
-    text = call_llm("p", _config(provider="google", llm_api_key="test-key"), system_prompt="s")
+    config = _config(
+        provider="google",
+        llm_api_key="test-key",
+        pricing={"google": {MODEL: {"input": 1000, "output": 3000}}},
+    )
+    text = call_llm("p", config, system_prompt="s")
 
     assert text == "hello"
     call = models.calls[0]
@@ -200,7 +201,7 @@ def test_call_llm_google_empty_returns_none(fake_models, caplog, response, reaso
         assert pop_last_usage()["output_tokens"] == 50
 
 
-def test_cost_unknown_model_is_omitted(fake_models, monkeypatch):
+def test_cost_unknown_model_is_omitted(fake_models):
     response = _response([_text_candidate("hello")])
     response.model_version = "not-a-real-model"
     fake_models(response)
@@ -208,13 +209,6 @@ def test_cost_unknown_model_is_omitted(fake_models, monkeypatch):
 
     assert call_llm("p", _config(provider="google", llm_api_key="test-key")) == "hello"
     assert "cost_usd" not in pop_last_usage()
-
-    priced = ModelResponse(parts=[], usage=RequestUsage(), model_name=MODEL)
-    monkeypatch.setattr(
-        ModelResponse, "cost", lambda self: SimpleNamespace(total_price=Decimal("0.5"))
-    )
-    messages = [priced, ModelRequest(parts=[UserPromptPart("x")]), priced]
-    assert google_provider.messages_cost(messages) == 1.0
 
 
 def test_call_google_reuses_sync_client(monkeypatch):

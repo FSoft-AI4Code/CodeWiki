@@ -268,8 +268,10 @@ def create_fallback_model(config: Config) -> Model:
 
 def create_fallback_models(config: Config) -> FallbackModel:
     """Create fallback models chain from configuration."""
-    main = create_main_model(config)
-    fallback = create_fallback_model(config)
+    from codewiki.src.be.api_usage import UsageModel
+
+    main = UsageModel(create_main_model(config), config.main_model)
+    fallback = UsageModel(create_fallback_model(config), config.fallback_model)
     # The default fallback_on (ModelAPIError, or ModelHTTPError on older pydantic-ai)
     # misses UnexpectedModelBehavior, which pydantic-ai raises for a 200 response whose
     # body does not parse (e.g. choices=None from an OpenAI-compatible gateway); without
@@ -309,6 +311,9 @@ def _extract_content(response, model: str) -> Optional[str]:
     instead of surfacing later as an opaque NoneType error.
     """
     _remember_usage(response)
+    from codewiki.src.be.api_usage import record_response
+
+    record_response(getattr(response, "usage", None), model, model=getattr(response, "model", None))
     choice = response.choices[0]
     content = choice.message.content
     finish_reason = getattr(choice, "finish_reason", None)
@@ -449,7 +454,7 @@ def _call_llm_via_litellm(
         max_tokens=config.max_tokens,
         api_key=config.llm_api_key if config.provider != "bedrock" else None,
     )
-    return _extract_content(response, litellm_model)
+    return _extract_content(response, model)
 
 
 def _call_llm_via_azure(
@@ -479,4 +484,4 @@ def _call_llm_via_azure(
         messages=_messages(prompt, system_prompt),
         max_tokens=config.max_tokens,
     )
-    return _extract_content(response, deployment)
+    return _extract_content(response, model)

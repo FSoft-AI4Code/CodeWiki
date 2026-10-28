@@ -16,6 +16,7 @@ from codewiki.src.be.utils import is_complex_module, count_tokens
 from codewiki.src.be.cluster_modules import format_potential_core_components
 
 import logging
+from codewiki.src.be.api_usage import usage_target
 
 logger = logging.getLogger(__name__)
 
@@ -124,22 +125,24 @@ async def generate_sub_module_documentation(
         # log the current module tree
         # print(f"Current module tree: {json.dumps(deps.module_tree, indent=4)}")
 
-        await sub_agent.run(
-            format_user_prompt(
-                module_name=deps.current_module_name,
-                core_component_ids=core_component_ids,
-                components=ctx.deps.components,
-                module_tree=ctx.deps.module_tree,
-                module_path=list(deps.path_to_current_module),
-                layout=layout,
-            ),
-            deps=ctx.deps,
-            usage_limits=UsageLimits(request_limit=ctx.deps.config.request_limit),
-        )
-
-        # remove the sub-module name from the path to current module and the module tree
-        deps.path_to_current_module.pop()
-        deps.current_depth -= 1
+        try:
+            with usage_target(sub_module_name):
+                await sub_agent.run(
+                    format_user_prompt(
+                        module_name=deps.current_module_name,
+                        core_component_ids=core_component_ids,
+                        components=ctx.deps.components,
+                        module_tree=ctx.deps.module_tree,
+                        module_path=list(deps.path_to_current_module),
+                        layout=layout,
+                    ),
+                    deps=ctx.deps,
+                    usage_limits=UsageLimits(request_limit=ctx.deps.config.request_limit),
+                )
+        finally:
+            deps.path_to_current_module.pop()
+            deps.current_depth -= 1
+            deps.current_module_name = previous_module_name
 
     # restore the previous module name
     deps.current_module_name = previous_module_name
