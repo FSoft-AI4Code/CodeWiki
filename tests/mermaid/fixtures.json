@@ -154,5 +154,46 @@
     "name": "thick inline edge text untouched",
     "source": "flowchart TD\nA == process(data) ==> B",
     "valid": true
+  },
+  {
+    "name": "issue 141 exact reproduction",
+    "source": "flowchart TD\n    A[\"consumer.poll(1.0)\"] --> B{msg is None?}\n    B -- no --> C{msg.error()?}",
+    "valid": false,
+    "repaired": "flowchart TD\n    A[\"consumer.poll(1.0)\"] --> B{msg is None?}\n    B -- no --> C{\"msg.error()?\"}"
+  },
+  {
+    "name": "inline edge code text preserved",
+    "source": "flowchart TD\nA -- state C{not a node} --> B{msg.error()?}",
+    "valid": false,
+    "repaired": "flowchart TD\nA -- state C{not a node} --> B{\"msg.error()?\"}"
+  },
+  {
+    "name": "compact inline edge",
+    "source": "flowchart TD\nA--no-->C{msg.error()?}",
+    "valid": false,
+    "repaired": "flowchart TD\nA--no-->C{\"msg.error()?\"}"
+  },
+  {
+    "name": "thick inline edge target",
+    "source": "flowchart TD\nA == state C{not a node} ==> B{msg.error()?}",
+    "valid": false,
+    "repaired": "flowchart TD\nA == state C{not a node} ==> B{\"msg.error()?\"}"
+  },
+  {
+    "name": "dotted inline edge target",
+    "source": "flowchart TD\nA -. no .-> C{msg.error()?}",
+    "valid": false,
+    "repaired": "flowchart TD\nA -. no .-> C{\"msg.error()?\"}"
+  },
+  {
+    "name": "quoted inline double dash target",
+    "source": "flowchart TD\nA -- \"start -- stop\" --> C{msg.error()?}",
+    "valid": false,
+    "repaired": "flowchart TD\nA -- \"start -- stop\" --> C{\"msg.error()?\"}"
+  },
+  {
+    "name": "unclosed inline label untouched",
+    "source": "flowchart TD\nA -- C{msg.error()?}",
+    "valid": false
   }
 ]

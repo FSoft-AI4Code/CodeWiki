@@ -115,8 +115,8 @@ def quote_flowchart_labels(source: str) -> tuple[str, list[tuple[str, str]]]:
     changes = []
     output = []
     for line in source.splitlines(keepends=True):
-        # Definitions, directives, comments, compound shapes, and inline edge
-        # labels need their own grammars. Never guess at their contents.
+        # Definitions, directives, comments and compound shapes need their
+        # own grammars. Never guess at their contents.
         if re.match(
             r"\s*(?:%%|---|subgraph\b|end\b|class\b|classDef\b|style\b|linkStyle\b|click\b)",
             line,
@@ -138,9 +138,29 @@ def quote_flowchart_labels(source: str) -> tuple[str, list[tuple[str, str]]]:
                 pieces.append(line[i : end + 1])
                 i = end + 1
                 continue
-            if re.match(r"[A-Za-z][A-Za-z0-9_]*(?:\(|>)", line[i:]) or re.match(
-                r"(?:--|==|-\.)\s+[^>|.\s]", line[i:]
-            ):
+            arrow = re.match(r"-->|---|--x|--o|==>|===|-\.->|-\.-", line[i:])
+            if arrow:
+                pieces.append(arrow.group())
+                i += len(arrow.group())
+                continue
+            inline = re.match(r"--(?![->ox])|==(?![=>])|-\.(?![-.])", line[i:])
+            if inline:
+                # Consume the edge text as one token, then resume at the
+                # target node. A code-like label is not a node definition.
+                closer = {"--": "-->", "==": "==>", "-.": ".->"}[inline.group()]
+                end = line.find(closer, i + len(inline.group()))
+                label = line[i + len(inline.group()) : end].strip()
+                quoted_label = (
+                    label.startswith('"') and label.endswith('"') and label.count('"') == 2
+                )
+                if end < 0 or (re.search(r"--|==|-\.", label) and not quoted_label):
+                    pieces = [line]
+                    del changes[first_change:]
+                    break
+                pieces.append(line[i : end + len(closer)])
+                i = end + len(closer)
+                continue
+            if re.match(r"[A-Za-z][A-Za-z0-9_]*(?:\(|>)", line[i:]):
                 pieces = [line]
                 del changes[first_change:]
                 break

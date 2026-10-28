@@ -1,8 +1,10 @@
 """Mermaid integration across writing backends, prompts and overview generation."""
 
 import asyncio
+import importlib.util
 import json
 from pathlib import Path
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -13,7 +15,6 @@ from codewiki.mcp.tools.prompt_server import _resolve_prompt
 from codewiki.src.be import utils
 from codewiki.src.be.agent_tools.str_replace_editor import EditTool, str_replace_editor
 from codewiki.src.be.backend import UsageLedger
-from codewiki.src.be.caw_toolkit import CawToolKit
 from codewiki.src.be.documentation_generator import DocumentationGenerator
 from codewiki.src.be.mermaid_support import DiagramResult, MERMAID_GUIDELINES
 from codewiki.src.be.updater.prompts import (
@@ -42,15 +43,43 @@ def parser(monkeypatch):
     return calls
 
 
+def load_toolkit_class(monkeypatch):
+    if importlib.util.find_spec("caw") is not None:
+        from codewiki.src.be.caw_toolkit import CawToolKit
+
+        return CawToolKit
+
+    # CI installs the API-backend dependencies without the subscription CLI
+    # SDK. Stub only its registration boundary; execute the real editor body.
+    class ToolKit:
+        def __init_subclass__(cls, **kwargs):
+            pass
+
+    def tool(**kwargs):
+        return lambda fn: fn
+
+    monkeypatch.setitem(sys.modules, "caw", SimpleNamespace(ToolKit=ToolKit, tool=tool))
+    path = Path(__file__).parents[1] / "codewiki/src/be/caw_toolkit.py"
+    spec = importlib.util.spec_from_file_location("_mermaid_test_caw_toolkit", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.CawToolKit
+
+
+@pytest.fixture
+def toolkit_class(monkeypatch):
+    return load_toolkit_class(monkeypatch)
+
+
 @pytest.fixture(params=["pydantic", "caw"])
-def editor(request, tmp_path):
+def editor(request, tmp_path, toolkit_class):
     deps = SimpleNamespace(
         registry={},
         absolute_docs_path=str(tmp_path),
         absolute_repo_path=str(tmp_path / "repo"),
         allowed_write_paths=None,
     )
-    toolkit = CawToolKit(deps, backend=None, allow_subagent=False)
+    toolkit = toolkit_class(deps, backend=None, allow_subagent=False)
 
     async def call(command, **kwargs):
         if request.param == "caw":
@@ -273,3 +302,19 @@ def test_editor_undo_preserves_tabs_and_crlf(tmp_path, editor, parser):
 
     asyncio.run(check())
     assert path.read_bytes() == original
+
+
+def test_caw_editor_without_cli_sdk(tmp_path, monkeypatch, parser):
+    find_spec = importlib.util.find_spec
+    monkeypatch.setattr(
+        importlib.util, "find_spec", lambda name: None if name == "caw" else find_spec(name)
+    )
+    toolkit = load_toolkit_class(monkeypatch)
+    deps = SimpleNamespace(registry={}, absolute_docs_path=str(tmp_path), allowed_write_paths=None)
+    result = asyncio.run(
+        toolkit(deps, None, False).str_replace_editor(
+            "docs", "create", path="x.md", file_text=INVALID
+        )
+    )
+    assert (tmp_path / "x.md").read_text() == FIXED
+    assert "repaired and validated" in result

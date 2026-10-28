@@ -30,7 +30,7 @@ def parser(monkeypatch):
 
     async def parse(source):
         calls.append(source)
-        if INVALID in source.replace("\r\n", "\n"):
+        if "C{msg.error()?}" in source:
             return DiagramResult("invalid", PARSE_ERROR)
         if "broken" in source:
             return DiagramResult("invalid", "Parse error on line 2: got 'TEXT'")
@@ -109,7 +109,7 @@ def test_concurrent_change_is_not_overwritten(tmp_path, monkeypatch):
     path.write_text(markdown())
 
     async def parse(source):
-        if INVALID in source.replace("\r\n", "\n"):
+        if "C{msg.error()?}" in source:
             return DiagramResult("invalid", PARSE_ERROR)
         path.write_text("concurrent edit")
         return DiagramResult("valid")
@@ -291,3 +291,12 @@ def test_valid_result_never_triggers_repair(monkeypatch):
     report = asyncio.run(utils.validate_mermaid_content(markdown(), repair=True))
     assert not report.errors and not report.repairs
     assert report.content == markdown() and len(calls) == 1
+
+
+def test_issue_exact_reproduction_repairs_only_diamond(parser):
+    case = next(case for case in FIXTURES if case["name"] == "issue 141 exact reproduction")
+    original = markdown(case["source"])
+    report = asyncio.run(utils.validate_mermaid_content(original, repair=True))
+    assert report.content == markdown(case["repaired"])
+    assert not report.errors and len(report.repairs) == 1
+    assert len(parser) == 2
