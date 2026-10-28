@@ -3,6 +3,7 @@ from collections import defaultdict
 from typing import Any
 
 from codewiki.src.be.doc_layout import doc_relpaths, module_doc_file
+from codewiki.src.be.mermaid_support import MERMAID_GUIDELINES
 from codewiki.src.config import LAYOUT_FLAT
 from codewiki.src.utils import file_manager
 
@@ -139,6 +140,14 @@ Please generate the overview of the `{module_name}` module in markdown format wi
 overview_content
 </OVERVIEW>
 """.strip()
+
+# These templates are formatted later; braces in literal Mermaid labels must
+# survive that formatting exactly once.
+_MERMAID_TEMPLATE_GUIDANCE = MERMAID_GUIDELINES.replace("{", "{{").replace("}", "}}")
+SYSTEM_PROMPT += "\n\n" + _MERMAID_TEMPLATE_GUIDANCE
+LEAF_SYSTEM_PROMPT += "\n\n" + _MERMAID_TEMPLATE_GUIDANCE
+REPO_OVERVIEW_PROMPT += "\n\n" + _MERMAID_TEMPLATE_GUIDANCE
+MODULE_OVERVIEW_PROMPT += "\n\n" + _MERMAID_TEMPLATE_GUIDANCE
 
 CLUSTER_REPO_PROMPT = """
 Here is list of all potential core components of the repository (It's normal that some components are not essential to the repository):

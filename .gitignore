@@ -91,3 +91,10 @@ Thumbs.db
 !tests/test_updater_write_guard.py
 !tests/test_updater_orchestrator.py
 !tests/test_usage_ledger.py
+
+# Mermaid regression tests and development-only parser harness
+!tests/test_mermaid_validation.py
+!tests/test_mermaid_writers.py
+!tests/mermaid/
+!tests/mermaid/**
+tests/mermaid/node_modules/

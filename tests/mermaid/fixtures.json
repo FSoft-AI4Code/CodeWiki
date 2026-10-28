@@ -1,0 +1,199 @@
+[
+  {
+    "name": "decision function",
+    "source": "flowchart TD\nC{msg.error()?}",
+    "valid": false,
+    "repaired": "flowchart TD\nC{\"msg.error()?\"}"
+  },
+  {
+    "name": "rectangle function",
+    "source": "graph LR\nA[consumer.poll(1.0)] --> B[End]",
+    "valid": false,
+    "repaired": "graph LR\nA[\"consumer.poll(1.0)\"] --> B[End]"
+  },
+  {
+    "name": "nested brackets",
+    "source": "flowchart TD\nD[config[key]]",
+    "valid": false,
+    "repaired": "flowchart TD\nD[\"config[key]\"]"
+  },
+  {
+    "name": "nested braces",
+    "source": "flowchart TD\nD{config{key}}",
+    "valid": false,
+    "repaired": "flowchart TD\nD{\"config{key}\"}"
+  },
+  {
+    "name": "multiple nodes",
+    "source": "flowchart TD\nA[process(data)] --> B{msg.error()?}",
+    "valid": false,
+    "repaired": "flowchart TD\nA[\"process(data)\"] --> B{\"msg.error()?\"}"
+  },
+  {
+    "name": "quoted decision",
+    "source": "flowchart TD\nC{\"msg.error()?\"}",
+    "valid": true
+  },
+  {
+    "name": "plain labels",
+    "source": "flowchart TD\nA[Start] --> B{Ready?}",
+    "valid": true
+  },
+  {
+    "name": "sequence call",
+    "source": "sequenceDiagram\nA->>B: call process(data)",
+    "valid": true
+  },
+  {
+    "name": "sequence punctuation",
+    "source": "sequenceDiagram\nA->>B: process(a, b), config[key], {value}",
+    "valid": true
+  },
+  {
+    "name": "sequence double dash",
+    "source": "sequenceDiagram\nA->>B: start -- stop",
+    "valid": true
+  },
+  {
+    "name": "sequence raw semicolon",
+    "source": "sequenceDiagram\nA->>B: first; second",
+    "valid": false
+  },
+  {
+    "name": "sequence backtick semicolon",
+    "source": "sequenceDiagram\nA->>B: `first; second`",
+    "valid": false
+  },
+  {
+    "name": "sequence encoded semicolon",
+    "source": "sequenceDiagram\nA->>B: first#59; second",
+    "valid": true
+  },
+  {
+    "name": "pipe double dash",
+    "source": "flowchart TD\nA -->|start -- stop| B",
+    "valid": true
+  },
+  {
+    "name": "inline double dash",
+    "source": "flowchart TD\nA -- start -- stop --> B",
+    "valid": false
+  },
+  {
+    "name": "quoted inline double dash",
+    "source": "flowchart TD\nA -- \"start -- stop\" --> B",
+    "valid": true
+  },
+  {
+    "name": "node command flag",
+    "source": "flowchart TD\nA[run --dry-run]",
+    "valid": true
+  },
+  {
+    "name": "pipe function",
+    "source": "flowchart TD\nA -->|process(data)| B",
+    "valid": false
+  },
+  {
+    "name": "compound shape",
+    "source": "flowchart TD\nA[[\"func(data)\"]] --> B[(\"store(key)\")]",
+    "valid": true
+  },
+  {
+    "name": "round shape",
+    "source": "flowchart TD\nA(\"func(data)\") --> B((\"func(data)\"))",
+    "valid": true
+  },
+  {
+    "name": "html label",
+    "source": "flowchart TD\nA[\"<b>func()</b>\"]",
+    "valid": true
+  },
+  {
+    "name": "raw html label",
+    "source": "flowchart TD\nA[<b>func()</b>]",
+    "valid": false
+  },
+  {
+    "name": "markdown label",
+    "source": "flowchart TD\nA[\"`func(data)`\"]",
+    "valid": true
+  },
+  {
+    "name": "comment",
+    "source": "flowchart TD\n%% C{msg.error()?}\nA --> B",
+    "valid": true
+  },
+  {
+    "name": "unbalanced label",
+    "source": "flowchart TD\nA[config[key]",
+    "valid": false
+  },
+  {
+    "name": "style statement",
+    "source": "flowchart TD\nA --> B\nclassDef green fill:#0f0;\nclass A green",
+    "valid": true
+  },
+  {
+    "name": "compound alongside repairable",
+    "source": "flowchart TD\nA[[foo]] --> C{msg.error()?}",
+    "valid": false
+  },
+  {
+    "name": "inline comment untouched",
+    "source": "flowchart TD\nA[process(data)] %% C{msg.error()?}",
+    "valid": false
+  },
+  {
+    "name": "dash in label alongside function",
+    "source": "flowchart TD\nA[process(data) -- result]",
+    "valid": false,
+    "repaired": "flowchart TD\nA[\"process(data) -- result\"]"
+  },
+  {
+    "name": "thick inline edge text untouched",
+    "source": "flowchart TD\nA == process(data) ==> B",
+    "valid": true
+  },
+  {
+    "name": "issue 141 exact reproduction",
+    "source": "flowchart TD\n    A[\"consumer.poll(1.0)\"] --> B{msg is None?}\n    B -- no --> C{msg.error()?}",
+    "valid": false,
+    "repaired": "flowchart TD\n    A[\"consumer.poll(1.0)\"] --> B{msg is None?}\n    B -- no --> C{\"msg.error()?\"}"
+  },
+  {
+    "name": "inline edge code text preserved",
+    "source": "flowchart TD\nA -- state C{not a node} --> B{msg.error()?}",
+    "valid": false,
+    "repaired": "flowchart TD\nA -- state C{not a node} --> B{\"msg.error()?\"}"
+  },
+  {
+    "name": "compact inline edge",
+    "source": "flowchart TD\nA--no-->C{msg.error()?}",
+    "valid": false,
+    "repaired": "flowchart TD\nA--no-->C{\"msg.error()?\"}"
+  },
+  {
+    "name": "thick inline edge target",
+    "source": "flowchart TD\nA == state C{not a node} ==> B{msg.error()?}",
+    "valid": false,
+    "repaired": "flowchart TD\nA == state C{not a node} ==> B{\"msg.error()?\"}"
+  },
+  {
+    "name": "dotted inline edge target",
+    "source": "flowchart TD\nA -. no .-> C{msg.error()?}",
+    "valid": false,
+    "repaired": "flowchart TD\nA -. no .-> C{\"msg.error()?\"}"
+  },
+  {
+    "name": "quoted inline double dash target",
+    "source": "flowchart TD\nA -- \"start -- stop\" --> C{msg.error()?}",
+    "valid": false,
+    "repaired": "flowchart TD\nA -- \"start -- stop\" --> C{\"msg.error()?\"}"
+  },
+  {
+    "name": "unclosed inline label untouched",
+    "source": "flowchart TD\nA -- C{msg.error()?}",
+    "valid": false
+  }
+]

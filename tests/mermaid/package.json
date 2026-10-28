@@ -1,0 +1,12 @@
+{
+  "name": "codewiki-mermaid-regressions",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node check.mjs"
+  },
+  "devDependencies": {
+    "mermaid": "11.9.0",
+    "jsdom": "26.1.0"
+  }
+}

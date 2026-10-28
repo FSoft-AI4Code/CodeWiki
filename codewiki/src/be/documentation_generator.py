@@ -22,6 +22,7 @@ from codewiki.src.be.doc_layout import (
     organize_docs,
     relative_link,
 )
+from codewiki.src.be.utils import validate_mermaid_content
 from codewiki.src.be.module_naming import (
     dedupe_module_tree_names,
     find_missing_module_docs,
@@ -403,31 +404,50 @@ class DocumentationGenerator:
 
         phase = "overview" if not module_path else "parent_modules"
         try:
-            with self.usage_ledger.in_phase(phase, target=module_name):
-                parent_docs = self.backend.complete(
-                    prompt,
-                    system_prompt=format_overview_system_prompt(self.config.get_prompt_addition()),
+            request = prompt
+            for attempt in range(2):
+                with self.usage_ledger.in_phase(phase, target=module_name):
+                    parent_docs = self.backend.complete(
+                        request,
+                        system_prompt=format_overview_system_prompt(
+                            self.config.get_prompt_addition()
+                        ),
+                    )
+                if not parent_docs:
+                    raise RuntimeError(
+                        f"LLM returned empty content for {module_name} overview "
+                        f"(possible output truncation at max_tokens)"
+                    )
+                # Subscription backends may return raw Markdown instead of
+                # the requested wrapper. Validate either form before saving.
+                if "<OVERVIEW>" in parent_docs and "</OVERVIEW>" in parent_docs:
+                    parent_content = (
+                        parent_docs.split("<OVERVIEW>")[1].split("</OVERVIEW>")[0].strip()
+                    )
+                else:
+                    parent_content = parent_docs.strip()
+                report = await validate_mermaid_content(parent_content, repair=True)
+                if not report.errors:
+                    if report.unavailable:
+                        logger.warning(report.format(parent_docs_path))
+                    elif report.repairs:
+                        logger.info(report.format(parent_docs_path))
+                    break
+                if attempt == 1:
+                    raise RuntimeError(
+                        f"Invalid Mermaid in {module_name} overview after one correction attempt:\n"
+                        + report.format(parent_docs_path)
+                    )
+                request = (
+                    prompt
+                    + "\n\nCorrect the Mermaid syntax in this previous draft. Return the complete "
+                    "overview, preserving the other content.\n<PREVIOUS_DRAFT>\n"
+                    + report.content
+                    + "\n</PREVIOUS_DRAFT>\n"
+                    + report.format(parent_docs_path)
                 )
-            if not parent_docs:
-                raise RuntimeError(
-                    f"LLM returned empty content for {module_name} overview "
-                    f"(possible output truncation at max_tokens)"
-                )
-
-            # Parse and save parent documentation. Subscription-CLI backends
-            # (claude-code / codex) sometimes ignore the <OVERVIEW> wrapper and
-            # return raw markdown; fall back to the response as-is in that case
-            # rather than crashing with an index error.
-            if "<OVERVIEW>" in parent_docs and "</OVERVIEW>" in parent_docs:
-                parent_content = parent_docs.split("<OVERVIEW>")[1].split("</OVERVIEW>")[0].strip()
-            else:
-                logger.warning(
-                    f"Overview response for {module_name} missing <OVERVIEW> wrapper; "
-                    f"using raw response as markdown."
-                )
-                parent_content = parent_docs.strip()
             os.makedirs(os.path.dirname(parent_docs_path), exist_ok=True)
-            file_manager.save_text(parent_content, parent_docs_path)
+            file_manager.save_text(report.content, parent_docs_path)
 
             logger.debug(f"Successfully generated parent documentation for: {module_name}")
             return module_tree
