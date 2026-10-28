@@ -17,7 +17,7 @@ from typing import Annotated, Literal
 from pydantic import BeforeValidator
 from pydantic_ai import RunContext, Tool
 
-from ..utils import validate_mermaid_diagrams
+from ..utils import validate_and_repair_mermaid_diagrams, validate_mermaid_diagrams
 from .deps import CodeWikiDeps
 
 # Configure logging and monitoring
@@ -422,6 +422,7 @@ class EditTool:
         self._encoding = None
         self.REGISTRY = REGISTRY
         self.logs = []
+        self.did_write = False
         self.absolute_docs_path = Path(absolute_docs_path) if absolute_docs_path else None
 
     def _get_display_path(self, path: Path) -> str:
@@ -436,11 +437,20 @@ class EditTool:
 
     @property
     def _file_history(self):
-        return defaultdict(list, json.loads(self.REGISTRY.get("file_history", "{}")))
+        stored = self.REGISTRY.get("file_history", "{}")
+        stored = json.loads(stored) if isinstance(stored, str) else stored
+        return defaultdict(list, {Path(key): value for key, value in stored.items()})
 
     @_file_history.setter
     def _file_history(self, value: dict):
-        self.REGISTRY["file_history"] = json.dumps(value)
+        self.REGISTRY["file_history"] = json.dumps(
+            {str(key): items for key, items in value.items()}
+        )
+
+    def _remember(self, path: Path, content: str) -> None:
+        history = self._file_history
+        history[path].append(content)
+        self._file_history = history
 
     def __call__(
         self,
@@ -525,8 +535,9 @@ class EditTool:
                 f"The parent directory {self._get_display_path(path.parent)} does not exist. Please create it first."
             )
             return
-        self.write_file(path, file_text)
-        self._file_history[path].append(file_text)
+        if not self.write_file(path, file_text):
+            return
+        self._remember(path, file_text)
         self.logs.append(f"File created successfully at: {self._get_display_path(path)}")
 
     def _inside_docs(self, path: Path) -> bool:
@@ -630,7 +641,8 @@ class EditTool:
     def str_replace(self, path: Path, old_str: str, new_str: str | None):
         """Implement the str_replace command, which replaces old_str with new_str in the file content"""
         # Read the file content
-        file_content = self.read_file(path).expandtabs()
+        history_content = self.read_file(path)
+        file_content = history_content.expandtabs()
         old_str = old_str.expandtabs()
         new_str = new_str.expandtabs() if new_str is not None else ""
 
@@ -666,7 +678,8 @@ class EditTool:
         new_file_content = file_content.replace(old_str, new_str)
 
         # Write the new content to the file
-        self.write_file(path, new_file_content)
+        if not self.write_file(path, new_file_content):
+            return
 
         post_edit_lint = ""
         if USE_LINTER:
@@ -691,7 +704,7 @@ class EditTool:
                 epilogue = LINT_WARNING_TEMPLATE.format(errors=errors)
 
         # Save the content to history
-        self._file_history[path].append(file_content)
+        self._remember(path, history_content)
 
         # Create a snippet of the edited section
         replacement_line = file_content.split(old_str)[0].count("\n")
@@ -720,7 +733,8 @@ class EditTool:
 
     def insert(self, path: Path, insert_line: int, new_str: str):
         """Implement the insert command, which inserts new_str at the specified line in the file content."""
-        file_text = self.read_file(path).expandtabs()
+        history_content = self.read_file(path)
+        file_text = history_content.expandtabs()
         new_str = new_str.expandtabs()
         file_text_lines = file_text.split("\n")
         n_lines_file = len(file_text_lines)
@@ -744,8 +758,9 @@ class EditTool:
         new_file_text = "\n".join(new_file_text_lines)
         snippet = "\n".join(snippet_lines)
 
-        self.write_file(path, new_file_text)
-        self._file_history[path].append(file_text)
+        if not self.write_file(path, new_file_text):
+            return
+        self._remember(path, history_content)
 
         # todo: Also expand these windows
 
@@ -760,12 +775,16 @@ class EditTool:
 
     def undo_edit(self, path: Path):
         """Implement the undo_edit command."""
-        if not self._file_history[path]:
+        history = self._file_history
+        if not history[path]:
             self.logs.append(f"No edit history found for {self._get_display_path(path)}.")
             return
 
-        old_text = self._file_history[path].pop()
-        self.write_file(path, old_text)
+        old_text = history[path][-1]
+        if not self.write_file(path, old_text):
+            return
+        history[path].pop()
+        self._file_history = history
 
         self.logs.append(
             f"Last edit to {self._get_display_path(path)} undone successfully. {self._make_output(old_text, self._get_display_path(path))}"
@@ -782,7 +801,8 @@ class EditTool:
         exception = None
         for self._encoding, errors in encodings:
             try:
-                text = path.read_text(encoding=self._encoding, errors=errors)
+                with path.open(encoding=self._encoding, errors=errors, newline="") as stream:
+                    text = stream.read()
             except UnicodeDecodeError as e:
                 exception = e
             else:
@@ -797,12 +817,15 @@ class EditTool:
     def write_file(self, path: Path, file: str):
         """Write the content of a file to a given path; raise a ToolError if an error occurs."""
         try:
-            path.write_text(file, encoding=self._encoding or "utf-8")
+            with path.open("w", encoding=self._encoding or "utf-8", newline="") as stream:
+                stream.write(file)
+            self.did_write = True
+            return True
         except Exception as e:  # noqa: BLE001 — reported to the agent as a tool message
             self.logs.append(
                 f"Ran into {e} while trying to write to {self._get_display_path(path)}"
             )
-            return
+            return False
 
     def _make_output(
         self,
@@ -928,8 +951,18 @@ async def str_replace_editor(
 
     result = "\n".join(tool.logs)
 
-    if command != "view" and path.endswith(".md"):
-        mermaid_validation = await validate_mermaid_diagrams(absolute_path, path)
+    if tool.did_write and path.endswith(".md"):
+        before_validation = Path(absolute_path).read_bytes()
+        validator = (
+            validate_mermaid_diagrams
+            if command == "undo_edit"
+            else validate_and_repair_mermaid_diagrams
+        )
+        mermaid_validation = await validator(absolute_path, path)
+        if Path(absolute_path).read_bytes() != before_validation:
+            result = "File saved with repaired Mermaid labels.\n" + tool._make_output(
+                Path(absolute_path).read_text(encoding="utf-8"), path
+            )
         result = result + "\n---------- Mermaid validation ----------\n" + mermaid_validation
 
     return result

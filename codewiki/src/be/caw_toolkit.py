@@ -143,7 +143,10 @@ class CawToolKit(
         insert_line: int | str | None = None,
     ) -> str:
         from codewiki.src.be.agent_tools.str_replace_editor import EditTool
-        from codewiki.src.be.utils import validate_mermaid_diagrams
+        from codewiki.src.be.utils import (
+            validate_and_repair_mermaid_diagrams,
+            validate_mermaid_diagrams,
+        )
 
         # ``Literal`` annotations would be the cleanest way to constrain these,
         # but ``from __future__ import annotations`` turns them into forward refs
@@ -226,8 +229,18 @@ class CawToolKit(
 
         result = "\n".join(edit_tool.logs)
 
-        if command != "view" and path.endswith(".md"):
-            mermaid_validation = await validate_mermaid_diagrams(absolute_path, path)
+        if edit_tool.did_write and path.endswith(".md"):
+            before_validation = Path(absolute_path).read_bytes()
+            validator = (
+                validate_mermaid_diagrams
+                if command == "undo_edit"
+                else validate_and_repair_mermaid_diagrams
+            )
+            mermaid_validation = await validator(absolute_path, path)
+            if Path(absolute_path).read_bytes() != before_validation:
+                result = "File saved with repaired Mermaid labels.\n" + edit_tool._make_output(
+                    Path(absolute_path).read_text(encoding="utf-8"), path
+                )
             result = result + "\n---------- Mermaid validation ----------\n" + mermaid_validation
 
         return result

@@ -165,16 +165,22 @@ The granularity of incremental updates is **module-level** — if any component 
 
 ## Mermaid Syntax Guidelines
 
-```mermaid
-graph TD
-    A[ComponentA] --> B[ComponentB]
-    A --> C[ComponentC]
-```
-
-- Node IDs use only letters and digits (avoid Chinese characters, spaces, colons)
-- Node labels wrapped in square brackets: `A[display text]`
-- Subgraph syntax: `subgraph title ... end`
-- Do not use interactive syntax like `click`, `linkStyle`, etc.
+- Use simple alphanumeric node IDs and quote flowchart labels, keeping the shape:
+  - BAD: `C{msg.error()?}` → GOOD: `C{"msg.error()?"}`
+  - BAD: `D[config[key]]` → GOOD: `D["config[key]"]`
+- In sequence messages, function calls, `()` `{}` `[]`, commas and `--` are ordinary text:
+  `A->>B: call process(data), config[key], {value} -- result`
+- A literal sequence-message semicolon must be encoded as `#59;`. Backticks do **not** escape it:
+  - BAD: `A->>B: first; second` → GOOD: `A->>B: first#59; second`
+- Double dashes are valid inside node labels, pipe-delimited edge labels and sequence messages.
+  Quote inline flowchart edge text containing `--`:
+  - BAD: `A -- start -- stop --> B` → GOOD: `A -- "start -- stop" --> B`
+  - Also valid: `A -->|start -- stop| B`. Do not rewrite valid `--` text or command-line flags.
+- Subgraph syntax: `subgraph title ... end`.
+- Do not use interactive syntax such as `click`.
+- Fix confirmed syntax errors using the returned diagnostics. Validation unavailable is a warning,
+  not a request to rewrite a diagram. If a tool repairs a label, use its reported saved replacement
+  in subsequent edits.
 
 ## Error Handling
 

@@ -11,6 +11,7 @@ import json
 from typing import Any
 
 from codewiki.src.be.dependency_analyzer.models.core import Node
+from codewiki.src.be.mermaid_support import MERMAID_GUIDELINES
 from codewiki.src.be.prompt_template import _fence_language, _format_module_tree_str
 from codewiki.src.be.updater.change_report import LeafReport
 from codewiki.src.be.updater.graph_diff import GraphDiff, documented_source
@@ -61,6 +62,8 @@ already correct; "rewrite" is allowed only for the leaf page.
 </OUTPUT>
 {custom_instructions}
 """.strip()
+
+UPDATE_LEAF_SYSTEM_PROMPT += "\n\n" + MERMAID_GUIDELINES.replace("{", "{{").replace("}", "}}")
 
 UPDATE_LEAF_USER_PROMPT = """
 Update the documentation for the module `{leaf_name}` (mode: {mode}).
@@ -174,6 +177,8 @@ that remove or correct the stale items; everything else on the page stays word f
 End your answer with a fenced JSON block: {"verdicts": {"<page>.md": {"verdict": "patch|no-op",
 "reason": "..."}}}.
 """.strip()
+
+STALE_FIX_SYSTEM_PROMPT += "\n\n" + MERMAID_GUIDELINES
 
 STALE_FIX_USER_PROMPT = """
 Page to fix: `{page_path}` (view it with str_replace_editor, working_dir="docs").

@@ -45,14 +45,18 @@ def _ensure_parent_dirs(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
-async def _validate_mermaid(file_path: str, relative_path: str) -> str:
+async def _validate_mermaid(file_path: str, relative_path: str, *, repair: bool = True) -> str:
     """Run Mermaid validation and return the result string."""
     try:
-        from codewiki.src.be.utils import validate_mermaid_diagrams
+        from codewiki.src.be.utils import (
+            validate_and_repair_mermaid_diagrams,
+            validate_mermaid_diagrams,
+        )
 
-        return await validate_mermaid_diagrams(file_path, relative_path)
+        validator = validate_and_repair_mermaid_diagrams if repair else validate_mermaid_diagrams
+        return await validator(file_path, relative_path)
     except Exception as e:
-        return f"Mermaid validation skipped: {e}"
+        return f"Warning: Mermaid validation unavailable: {e}"
 
 
 def _save_history(session: SessionState, doc_path: Path, content: str) -> None:
@@ -142,7 +146,7 @@ async def handle_edit_doc_file(
         await asyncio.to_thread(doc_path.write_text, old_content, "utf-8")
 
         # Validate Mermaid after undo
-        mermaid_result = await _validate_mermaid(str(doc_path), filename)
+        mermaid_result = await _validate_mermaid(str(doc_path), filename, repair=False)
         return json.dumps(
             {
                 "status": "undone",
@@ -157,7 +161,7 @@ async def handle_edit_doc_file(
             {"error": f"File not found: {filename}. Use write_doc_file to create it."}
         )
 
-    current_content = await asyncio.to_thread(doc_path.read_text, "utf-8")
+    current_content = (await asyncio.to_thread(doc_path.read_bytes)).decode("utf-8")
 
     if command == "str_replace":
         old_str = arguments.get("old_str")
@@ -213,6 +217,12 @@ async def handle_edit_doc_file(
 
     # Mermaid validation
     mermaid_result = await _validate_mermaid(str(doc_path), filename)
+
+    # Validation may have repaired labels; show the persisted text to the agent.
+    saved_lines = (await asyncio.to_thread(doc_path.read_text, "utf-8")).split("\n")
+    snippet = "\n".join(
+        f"{i + 1:6}\t{saved_lines[i]}" for i in range(start, min(end, len(saved_lines)))
+    )
 
     result = {
         "status": "edited",
