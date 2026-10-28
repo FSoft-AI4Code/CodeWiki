@@ -117,6 +117,14 @@ agent call. Every page written in an update can be explained after the fact.
 
 ## Cost
 
+Each update prints tokens and estimated USD cost by model and phase. Its
+`metadata.json` usage report is also attached to the update record and the
+corresponding update-history entry. Full-build fallback includes both the
+update attempt and rebuild in the same run total. An unchanged update records
+zero calls and zero cost. Configure API rates with
+`codewiki config pricing set MODEL --input RATE --output RATE`; see
+[cost tracking](providers.md#cost-tracking) for cache rates and unknown prices.
+
 Measured on svelte (about 125k lines of JavaScript) with the same model:
 
 | Run | Cost | Time |

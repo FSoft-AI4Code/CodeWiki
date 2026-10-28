@@ -23,6 +23,7 @@ import abc
 import contextlib
 import threading
 from collections.abc import Iterator
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List
 
@@ -46,7 +47,11 @@ def usage_to_dict(usage: Any) -> dict[str, Any] | None:
     if usage is None:
         return None
     if isinstance(usage, dict):
-        return {k: v for k, v in usage.items() if isinstance(v, (int, float))} or None
+        return {
+            k: v
+            for k, v in usage.items()
+            if isinstance(v, (int, float)) and not isinstance(v, bool)
+        } or None
     out: dict[str, Any] = {}
     for key in (
         "input_tokens",
@@ -88,6 +93,7 @@ class UsageLedger:
     phase: str = "generate"
     target: str = ""
     entries: list[dict[str, Any]] = field(default_factory=list)
+    incomplete: bool = False
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
     @contextlib.contextmanager
@@ -107,7 +113,8 @@ class UsageLedger:
         *,
         seconds: float = 0.0,
         model: str | None = None,
-    ) -> None:
+        **metadata: Any,
+    ) -> dict[str, Any]:
         entry: dict[str, Any] = {
             "phase": self.phase,
             "kind": kind,
@@ -115,37 +122,75 @@ class UsageLedger:
             "model": model or "",
             "seconds": round(seconds, 2),
             **(usage or {}),
+            "usage_reported": usage is not None,
+            **metadata,
         }
         with self._lock:
             self.entries.append(entry)
+        return entry
 
     def summary(self) -> dict[str, Any]:
-        """Totals overall and per phase, plus the per-call list.
-
-        A call with tokens but no ``cost_usd`` is *unpriced*: its model is
-        listed under ``unpriced_models`` so a $0 total is never mistaken for
-        a free run.
-        """
+        """One accounting result, grouped for display without charging twice."""
         with self._lock:
-            entries = [dict(e) for e in self.entries]
+            entries = deepcopy(self.entries)
         totals: dict[str, float] = {}
         by_phase: dict[str, dict[str, float]] = {}
+        by_model: dict[str, dict[str, Any]] = {}
         unpriced: set[str] = set()
+        priced_calls = 0
+        unknown_usage = 0
         for e in entries:
             phase_totals = by_phase.setdefault(e["phase"], {"calls": 0})
+            model_totals = by_model.setdefault(e["model"] or "<default>", {"calls": 0})
             phase_totals["calls"] += 1
+            model_totals["calls"] += 1
             for k, v in e.items():
-                if k == "seconds" or not isinstance(v, (int, float)) or isinstance(v, bool):
+                if k not in (
+                    *_TOKEN_KEYS,
+                    "total_tokens",
+                    "cache_read_tokens",
+                    "cache_write_tokens",
+                    "requests",
+                    "cost_usd",
+                ):
+                    continue
+                if not isinstance(v, (int, float)) or isinstance(v, bool):
                     continue
                 totals[k] = totals.get(k, 0) + v
                 phase_totals[k] = phase_totals.get(k, 0) + v
-            if not e.get("cost_usd") and any(e.get(k) for k in _TOKEN_KEYS):
+                model_totals[k] = model_totals.get(k, 0) + v
+            # Legacy integrations use zero for "no rate"; explicitly priced zero is valid.
+            priced = e.get("cost_usd") is not None and (
+                e.get("cost_usd") != 0
+                or e.get("cost_source") in ("configured", "provider")
+                or not any(e.get(k) for k in _TOKEN_KEYS)
+            )
+            if priced:
+                priced_calls += 1
+            else:
                 unpriced.add(e["model"] or "<default>")
+                for group in (phase_totals, model_totals):
+                    group["unpriced_calls"] = group.get("unpriced_calls", 0) + 1
+            if not e.get("usage_reported", True):
+                unknown_usage += 1
+        if not entries:
+            totals["cost_usd"] = 0.0
+        status = (
+            "complete"
+            if priced_calls == len(entries)
+            else ("partial" if priced_calls else "unknown")
+        )
         return {
+            "schema_version": 2,
             "scope": "this run only (modules resumed from disk cost nothing)",
+            "currency": "USD",
+            "cost_status": status,
+            "incomplete": self.incomplete,
+            "unknown_usage_calls": unknown_usage,
             "n_calls": len(entries),
             "totals": totals,
             "by_phase": by_phase,
+            "by_model": by_model,
             "unpriced_models": sorted(unpriced),
             "calls": entries,
         }
@@ -210,8 +255,31 @@ class LLMBackend(abc.ABC):
     ) -> dict[str, Any] | None:
         """Set ``last_usage`` from a provider usage object and log it in the ledger."""
         usage_dict = usage_to_dict(usage)
+        provider = getattr(getattr(self, "_config", None), "provider", "")
+        if not provider:
+            provider = {"claude_code": "claude-code"}.get(
+                getattr(self, "_caw_provider", ""), getattr(self, "_caw_provider", "")
+            )
+        if usage_dict is not None and is_caw_provider(provider):
+            # caw exposes uncached input for both CLI providers.
+            usage_dict["input_tokens"] = sum(
+                usage_dict.get(k, 0)
+                for k in ("input_tokens", "cache_read_tokens", "cache_write_tokens")
+            )
+            usage_dict["total_tokens"] = usage_dict["input_tokens"] + usage_dict.get(
+                "output_tokens", 0
+            )
         self.last_usage = usage_dict
-        self.usage_ledger.add(kind, target, usage_dict, seconds=seconds, model=model)
+        source = "provider" if usage_dict and usage_dict.get("cost_usd") else "unknown"
+        self.usage_ledger.add(
+            kind,
+            target,
+            usage_dict,
+            seconds=seconds,
+            model=model,
+            provider=provider,
+            cost_source=source,
+        )
         return usage_dict
 
     @abc.abstractmethod

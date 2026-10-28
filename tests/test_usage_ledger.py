@@ -62,8 +62,9 @@ def test_tokens_without_cost_are_unpriced():
     ledger = UsageLedger()
     ledger.add("module_agent", "a", {"input_tokens": 10, "cost_usd": 0.0}, model="gpt-x")
     ledger.add("module_agent", "b", {"input_tokens": 10}, model="")
-    ledger.add("module_agent", "c", None, model="ignored")  # no usage reported at all
-    assert ledger.summary()["unpriced_models"] == ["<default>", "gpt-x"]
+    ledger.add("module_agent", "c", None, model="missing-usage")
+    assert ledger.summary()["unpriced_models"] == ["<default>", "gpt-x", "missing-usage"]
+    assert ledger.summary()["unknown_usage_calls"] == 1
 
 
 def test_add_is_thread_safe():
@@ -121,7 +122,8 @@ def test_caw_complete_records_usage(monkeypatch):
     assert call["target"] == "repo"
     assert call["kind"] == "complete"
     assert call["model"] == "opus"
-    assert call["input_tokens"] == 1000
+    assert call["input_tokens"] == 1050  # normalized inclusive input, including cache reads
+    assert call["total_tokens"] == 1250
     assert call["cost_usd"] == 0.12
 
 

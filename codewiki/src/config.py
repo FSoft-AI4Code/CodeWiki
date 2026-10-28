@@ -1,6 +1,6 @@
 import argparse
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from dotenv import load_dotenv
@@ -115,6 +115,7 @@ class Config:
     # Prompt caching for agentic/multi-turn calls (auto-disables per model if
     # the provider rejects cache_control markers)
     prompt_caching: bool = True
+    pricing: dict = field(default_factory=dict)
     # Agent instructions for customization
     agent_instructions: dict[str, Any] | None = None
     # Apply Git ignore rules before dependency analysis
@@ -263,6 +264,7 @@ class Config:
         artifact_token_budget: int = DEFAULT_ARTIFACT_TOKEN_BUDGET,
         with_prose: bool = False,
         layout: str = DEFAULT_LAYOUT,
+        pricing: dict | None = None,
     ) -> "Config":
         """
         Create configuration for CLI context.
@@ -306,6 +308,9 @@ class Config:
             Config instance
         """
         base_output_dir = os.path.join(output_dir, "temp")
+        from codewiki.src.be.pricing import validate_pricing
+
+        validate_pricing(pricing or {})
 
         return cls(
             repo_path=repo_path,
@@ -338,4 +343,5 @@ class Config:
             artifact_token_budget=artifact_token_budget,
             with_prose=with_prose,
             layout=layout,
+            pricing=pricing or {},
         )

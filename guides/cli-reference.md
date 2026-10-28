@@ -9,6 +9,7 @@ Commands:
 | --- | --- |
 | `codewiki generate` | Build or update the documentation for the current directory |
 | `codewiki config set` | Store provider, model, and token settings |
+| `codewiki config pricing set/show/remove` | Manage API model rates in USD per million tokens |
 | `codewiki config agent` | Store default include/exclude/focus/doc-type/instructions |
 | `codewiki config show` | Print the stored settings (`--json` for machine-readable output) |
 | `codewiki config validate` | Check the settings and test the provider connection (`--skip-api-test`, `--verbose`) |
@@ -188,6 +189,22 @@ Where things are stored:
   headless or container environments. Set `CODEWIKI_NO_KEYRING=1` to force the
   file.
 - **Settings and agent defaults**: `~/.codewiki/config.json`.
+
+## `codewiki config pricing`
+
+```bash
+codewiki config pricing set MODEL --input RATE --output RATE \
+  [--cache-read RATE] [--cache-write RATE] [--provider PROVIDER]
+codewiki config pricing show [--json]
+codewiki config pricing remove MODEL [--provider PROVIDER]
+```
+
+Prices are stored alongside provider settings and appear in `config show`.
+Input and output rates are required, finite, nonnegative USD amounts per million
+tokens; omitted cache rates use the input rate. The provider defaults to your
+active API provider. Claude Code and Codex keep their existing provider costs.
+Missing API prices produce unknown or partial reports without stopping the run.
+See [Cost tracking](providers.md#cost-tracking) for report details.
 
 ## `codewiki config agent`
 

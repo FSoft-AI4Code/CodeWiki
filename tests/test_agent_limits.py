@@ -47,13 +47,21 @@ def test_backend_config_defaults():
 
 
 def test_fallback_covers_malformed_responses(monkeypatch):
+    from pydantic_ai.models.function import FunctionModel
+
     captured = {}
-    monkeypatch.setattr(llm_services, "create_main_model", lambda config: "main")
-    monkeypatch.setattr(llm_services, "create_fallback_model", lambda config: "fallback")
+    monkeypatch.setattr(
+        llm_services, "create_main_model", lambda config: FunctionModel(lambda m, i: None)
+    )
+    monkeypatch.setattr(
+        llm_services, "create_fallback_model", lambda config: FunctionModel(lambda m, i: None)
+    )
     monkeypatch.setattr(
         llm_services, "FallbackModel", lambda *models, **kwargs: captured.update(kwargs)
     )
-    llm_services.create_fallback_models(SimpleNamespace())
+    llm_services.create_fallback_models(
+        SimpleNamespace(main_model="main", fallback_model="fallback")
+    )
     # a 200 response with an unparseable body must also switch to the fallback model
     assert set(captured["fallback_on"]) == {llm_services.ModelAPIError, UnexpectedModelBehavior}
 

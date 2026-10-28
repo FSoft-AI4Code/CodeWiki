@@ -183,7 +183,17 @@ class Configuration:
     agent_retries: int = 3
     use_gitignore: bool = True
     prompt_caching: bool = True
+    pricing: dict = field(default_factory=dict)
     agent_instructions: AgentInstructions = field(default_factory=AgentInstructions)
+
+    def __post_init__(self):
+        from codewiki.src.be.pricing import validate_pricing
+        from codewiki.cli.utils.errors import ConfigurationError
+
+        try:
+            validate_pricing(self.pricing)
+        except ValueError as exc:
+            raise ConfigurationError(str(exc)) from exc
 
     def validate(self):
         """
@@ -227,6 +237,7 @@ class Configuration:
             "agent_retries": self.agent_retries,
             "use_gitignore": self.use_gitignore,
             "prompt_caching": self.prompt_caching,
+            "pricing": self.pricing,
             "fallback_model": self.fallback_model,
         }
         if self.agent_instructions and not self.agent_instructions.is_empty():
@@ -268,6 +279,7 @@ class Configuration:
             agent_retries=data.get("agent_retries", 3),
             use_gitignore=data.get("use_gitignore", True),
             prompt_caching=data.get("prompt_caching", True),
+            pricing=data.get("pricing", {}),
             agent_instructions=agent_instructions,
         )
 
@@ -338,4 +350,5 @@ class Configuration:
             agent_instructions=final_instructions.to_dict() if final_instructions else None,
             use_gitignore=self.use_gitignore,
             prompt_caching=self.prompt_caching,
+            pricing=self.pricing,
         )

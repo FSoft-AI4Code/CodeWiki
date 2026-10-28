@@ -146,6 +146,7 @@ class ConfigManager:
         google_location: Optional[str] = None,
         use_gitignore: Optional[bool] = None,
         prompt_caching: Optional[bool] = None,
+        pricing: Optional[dict] = None,
     ):
         """
         Save configuration to file and keyring.
@@ -199,6 +200,14 @@ class ConfigManager:
         was_google = is_google_provider(self._config.provider)
 
         # Update fields if provided
+        if pricing is not None:
+            from codewiki.src.be.pricing import validate_pricing
+
+            try:
+                validate_pricing(pricing)
+            except ValueError as exc:
+                raise ConfigurationError(str(exc)) from exc
+            self._config.pricing = pricing
         if base_url is not None:
             self._config.base_url = base_url
         if main_model is not None:

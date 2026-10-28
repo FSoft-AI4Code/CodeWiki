@@ -545,6 +545,7 @@ async def _legacy_generate_docs(arguments: dict[str, Any]) -> list[TextContent]:
         cluster_model=config.cluster_model,
         fallback_model=config.fallback_model,
         provider=getattr(config, "provider", "openai-compatible"),
+        pricing=getattr(config, "pricing", {}),
         aws_region=getattr(config, "aws_region", "us-east-1"),
         google_project=getattr(config, "google_project", ""),
         google_location=getattr(config, "google_location", ""),
