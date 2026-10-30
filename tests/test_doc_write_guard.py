@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import json
+from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -49,7 +50,8 @@ def _scripted_agent(responses):
     calls = []
 
     def model(messages, info: AgentInfo):
-        calls.append(messages)
+        # Older PydanticAI versions extend the same list after the callback.
+        calls.append(deepcopy(messages))
         return ModelResponse(parts=responses[len(calls) - 1])
 
     agent = Agent(FunctionModel(model), deps_type=CodeWikiDeps, tools=[str_replace_editor_tool])
