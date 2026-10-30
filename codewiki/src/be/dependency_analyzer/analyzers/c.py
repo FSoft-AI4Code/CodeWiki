@@ -5,6 +5,10 @@ import os
 
 from tree_sitter import Parser, Language
 import tree_sitter_c
+from codewiki.src.be.dependency_analyzer.analyzers.c_declarators import (
+    function_declarator,
+    macro_typed_name,
+)
 from codewiki.src.be.dependency_analyzer.models.core import Node, CallRelationship
 
 logger = logging.getLogger(__name__)
@@ -70,12 +74,7 @@ class TreeSitterCAnalyzer:
 
         if node.type == "function_definition":
             node_type = "function"
-            # look for function_declarator
-            declarator = next((c for c in node.children if c.type == "function_declarator"), None)
-            if declarator:
-                identifier = next((c for c in declarator.children if c.type == "identifier"), None)
-                if identifier:
-                    node_name = identifier.text.decode()
+            node_name = self._function_name(node)
         elif node.type == "struct_specifier":
             # Extract struct definitions: struct Name { ... }
             node_type = "struct"
@@ -215,20 +214,23 @@ class TreeSitterCAnalyzer:
         current = node.parent
         while current:
             if current.type == "function_definition":
-                # Get function name
-                declarator = next(
-                    (c for c in current.children if c.type == "function_declarator"), None
-                )
-                if declarator:
-                    identifier = next(
-                        (c for c in declarator.children if c.type == "identifier"), None
-                    )
-                    if identifier:
-                        func_name = identifier.text.decode()
-                        if func_name in top_level_nodes:
-                            return func_name
+                func_name = self._function_name(current)
+                if func_name in top_level_nodes:
+                    return func_name
             current = current.parent
         return None
+
+    def _function_name(self, definition):
+        """The name a function_definition defines, also when its return type is a pointer (`char *f()`) or an
+        export macro stands before a typedef'd return type (`API lua_Integer f()`)."""
+        declarator = function_declarator(definition)
+        if declarator is None:
+            return None
+        name = macro_typed_name(declarator)
+        if name:
+            return name
+        identifier = next((c for c in declarator.children if c.type == "identifier"), None)
+        return identifier.text.decode() if identifier else None
 
 
 def analyze_c_file(
