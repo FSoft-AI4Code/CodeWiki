@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import builtins
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -189,6 +190,53 @@ def test_capped_artifact_does_not_hide_symbol_free_source_code(tmp_path):
     assert len(components["setup.py::setup.py"].source_code) < len(source)
     assert "setup.py::__file__" in complete_file_candidates(leaves, components)
     assert get_module_token_count(components) >= count_tokens(source)
+
+
+@pytest.mark.parametrize(
+    ("language", "included", "excluded"),
+    [
+        ("go", "source.go", "vendor/source.go"),
+        ("zig", "source.zig", "zig-out/source.zig"),
+        ("php", "source.php", "templates/source.php"),
+    ],
+)
+def test_file_exclusions_do_not_import_parsers(monkeypatch, language, included, excluded):
+    from codewiki.src.be.dependency_analyzer.utils.file_selection import is_skipped_source_file
+
+    original_import = builtins.__import__
+
+    def without_grammars(name, *args, **kwargs):
+        if name.startswith(("tree_sitter", "codewiki.src.be.dependency_analyzer.analyzers")):
+            raise ModuleNotFoundError(name)
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", without_grammars)
+    assert not is_skipped_source_file({"language": language, "path": included}, "/repo")
+    assert is_skipped_source_file({"language": language, "path": excluded}, "/repo")
+
+
+def test_symbol_free_file_survives_missing_php_grammar(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    source = "<?php\nconst CAPACITY = 16;\n"
+    (repo / "source.php").write_text(source)
+    templates = repo / "templates"
+    templates.mkdir()
+    (templates / "view.php").write_text("<?php echo 'view';\n")
+    original_import = builtins.__import__
+
+    def without_php(name, *args, **kwargs):
+        if name in ("tree_sitter_php", "codewiki.src.be.dependency_analyzer.analyzers.php"):
+            raise ModuleNotFoundError(name)
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", without_php)
+    components, leaves = DependencyGraphBuilder(
+        _config(repo, tmp_path / "out")
+    ).build_dependency_graph()
+    assert component_files(list(components), components) == {"source.php"}
+    assert components["source.php::__file__"].source_code == source
+    assert complete_file_candidates(leaves, components) == ["source.php::__file__"]
 
 
 def test_recursive_size_uses_child_files_not_whole_graph(tmp_path):

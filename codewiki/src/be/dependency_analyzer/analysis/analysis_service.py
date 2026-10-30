@@ -11,10 +11,7 @@ import traceback
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from codewiki.src.be.dependency_analyzer.analysis.call_graph_analyzer import (
-    CallGraphAnalyzer,
-    is_skipped_source_file,
-)
+from codewiki.src.be.dependency_analyzer.analysis.call_graph_analyzer import CallGraphAnalyzer
 from codewiki.src.be.dependency_analyzer.analysis.cloning import (
     cleanup_repository,
     clone_repository,
@@ -23,6 +20,7 @@ from codewiki.src.be.dependency_analyzer.analysis.cloning import (
 from codewiki.src.be.dependency_analyzer.analysis.repo_analyzer import RepoAnalyzer
 from codewiki.src.be.dependency_analyzer.models.analysis import AnalysisResult
 from codewiki.src.be.dependency_analyzer.models.core import Repository
+from codewiki.src.be.dependency_analyzer.utils.file_selection import is_skipped_source_file
 from codewiki.src.be.dependency_analyzer.utils.security import assert_safe_path, safe_open_text
 
 if TYPE_CHECKING:  # pragma: no cover
