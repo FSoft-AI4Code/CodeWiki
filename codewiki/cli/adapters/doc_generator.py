@@ -278,6 +278,10 @@ class CLIDocumentationGenerator:
             super_group_modules,
         )
         from codewiki.src.config import FIRST_MODULE_TREE_FILENAME, MODULE_TREE_FILENAME
+        from codewiki.src.be.module_scope import (
+            get_module_token_count,
+            validate_module_file_coverage,
+        )
         from codewiki.src.utils import file_manager
 
         working_dir = str(self.output_dir.absolute())
@@ -298,19 +302,20 @@ class CLIDocumentationGenerator:
                     self.progress_tracker.update_stage(0.5, "Loaded cached module tree")
             else:
                 if self.verbose:
-                    clustering_tokens = get_clustering_input_token_count(leaf_nodes, components)
+                    clustering_tokens = get_module_token_count(components)
                     self.progress_tracker.update_stage(
                         0.3,
                         (
                             f"Preparing {len(leaf_nodes)} leaf nodes for clustering "
-                            f"({clustering_tokens} tokens, threshold "
+                            f"(code_tokens={clustering_tokens}, leaf_tokens="
+                            f"{get_clustering_input_token_count(leaf_nodes, components)}, threshold "
                             f"{backend_config.max_token_per_module})"
                         ),
                     )
                     if clustering_tokens <= backend_config.max_token_per_module:
                         self.progress_tracker.update_stage(
                             0.4,
-                            "Skipping LLM clustering; selected leaf nodes fit within the module token threshold",
+                            "Skipping LLM clustering; code size fits within the module token threshold",
                         )
                     else:
                         self.progress_tracker.update_stage(
@@ -342,6 +347,7 @@ class CLIDocumentationGenerator:
                 from codewiki.src.be.module_naming import dedupe_module_tree_names
 
                 module_tree = dedupe_module_tree_names(module_tree)
+                validate_module_file_coverage(module_tree, components)
                 file_manager.save_json(module_tree, first_module_tree_path)
                 file_manager.save_json(module_tree, module_tree_path)
 

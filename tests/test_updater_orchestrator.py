@@ -294,6 +294,22 @@ def test_whole_repo_baseline_falls_back_when_scope_needs_clustering(tmp_path):
     assert (docs / "overview.md").exists()
 
 
+def test_whole_repo_growth_counts_methods_outside_leaf_entry_points(tmp_path):
+    docs, config, prev = _setup(tmp_path, tree={})
+    backend = FakeBackend()
+    graph = graph_r2()
+    method_id = "src/engine.go::Engine.execute"
+    graph[method_id] = node(method_id, "method", "execute();\n" * 20000)
+    updater = IncrementalUpdater(config, backend, _generator(config, backend), UpdateOptions())
+    record = asyncio.run(
+        updater.run(prev, graph, sorted(tracked_r2()), {"old_commit": "old", "new_commit": "new"})
+    )
+    assert record.fallback["leaf_tokens"] < config.max_token_per_module
+    assert record.fallback["clustering_tokens"] > config.max_token_per_module
+    assert record.outcome == "full_fallback"
+    assert backend.module_calls == [] and backend.update_calls == []
+
+
 # ------------------------------------------------------------ ownership closure
 HELPER = "src/misc/util.py::helper"  # fresh dir, no tracked neighbour: rules 1-3 fail
 

@@ -13,6 +13,11 @@ import os
 from tree_sitter import Parser, Language
 import tree_sitter_php
 from codewiki.src.be.dependency_analyzer.models.core import Node, CallRelationship
+from codewiki.src.be.dependency_analyzer.utils.file_selection import (
+    PHP_TEMPLATE_DIRECTORIES,
+    PHP_TEMPLATE_PATTERNS,
+    is_php_template_file,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,8 +68,8 @@ PHP_PRIMITIVES: Set[str] = {
 }
 
 # Template file patterns to skip
-TEMPLATE_PATTERNS: Set[str] = {".blade.php", ".phtml", ".twig.php"}
-TEMPLATE_DIRECTORIES: Set[str] = {"views", "templates", "resources/views"}
+TEMPLATE_PATTERNS = PHP_TEMPLATE_PATTERNS
+TEMPLATE_DIRECTORIES = PHP_TEMPLATE_DIRECTORIES
 
 # Maximum recursion depth to prevent stack overflow
 MAX_RECURSION_DEPTH = 100
@@ -138,19 +143,7 @@ class TreeSitterPHPAnalyzer:
 
     def _is_template_file(self) -> bool:
         """Check if file is a PHP template that should be skipped."""
-        file_str = str(self.file_path)
-
-        # Check extension patterns
-        for pattern in TEMPLATE_PATTERNS:
-            if file_str.endswith(pattern):
-                return True
-
-        # Check directory patterns
-        for dir_pattern in TEMPLATE_DIRECTORIES:
-            if f"/{dir_pattern}/" in file_str or f"\\{dir_pattern}\\" in file_str:
-                return True
-
-        return False
+        return is_php_template_file(str(self.file_path))
 
     def _get_module_path(self) -> str:
         """Get module path for the file."""

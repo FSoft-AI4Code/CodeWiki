@@ -78,12 +78,8 @@ def test_repeat_request_is_skipped_not_suffixed(tmp_path):
     assert (tmp_path / "approval.md").exists() and (tmp_path / "billing.md").exists()
     assert set(deps.module_tree) == {"approval", "billing"}
 
-    # Round 2: same names again -> parent prefix, once (issue #76 behaviour).
-    _call(deps, specs)
-    assert (tmp_path / "overview_approval.md").exists()
-    assert (tmp_path / "overview_billing.md").exists()
-
-    # Round 3: plain and prefixed both exist -> skipped, nothing new anywhere.
+    # Repeating under parent-prefixed names must not assign the same files
+    # to a second leaf or run additional agents.
     files_before = sorted(p.name for p in tmp_path.iterdir())
     tree_before = dict(deps.module_tree)
     runs_before = len(FakeAgent.runs)

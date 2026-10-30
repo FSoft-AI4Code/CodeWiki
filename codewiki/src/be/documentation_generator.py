@@ -28,6 +28,11 @@ from codewiki.src.be.module_naming import (
     find_missing_module_docs,
     resolve_module_doc_path,
 )
+from codewiki.src.be.module_scope import (
+    complete_file_candidates,
+    get_module_token_count,
+    validate_module_file_coverage,
+)
 from codewiki.src.be.prompt_template import (
     MODULE_OVERVIEW_PROMPT,
     REPO_OVERVIEW_ARTIFACT_ADDENDUM,
@@ -322,12 +327,13 @@ class DocumentationGenerator:
             final_module_tree = await self.backend.run_module_agent(
                 module_name=repo_name,
                 components=components,
-                core_component_ids=leaf_nodes,
+                core_component_ids=complete_file_candidates(leaf_nodes, components),
                 module_path=[],
                 working_dir=working_dir,
             )
 
             # save final_module_tree to module_tree.json
+            validate_module_file_coverage(final_module_tree, components)
             file_manager.save_json(
                 final_module_tree, os.path.join(working_dir, MODULE_TREE_FILENAME)
             )
@@ -336,6 +342,10 @@ class DocumentationGenerator:
             repo_overview_path = os.path.join(working_dir, f"{repo_name}.md")
             if os.path.exists(repo_overview_path):
                 os.rename(repo_overview_path, os.path.join(working_dir, OVERVIEW_FILENAME))
+
+        # Also check resumed trees whose agents returned early because their
+        # pages already existed. Do not silently bless an old partial tree.
+        validate_module_file_coverage(file_manager.load_json(module_tree_path), components)
 
         # Move pages an agent saved in the wrong folder and fix links between pages
         organize_docs(working_dir, config_layout(self.config))
@@ -485,11 +495,13 @@ class DocumentationGenerator:
                     file_manager.save_json(module_tree, module_tree_path)
             else:
                 logger.debug(f"Module tree not found at {module_tree_path}, clustering modules")
-                clustering_tokens = get_clustering_input_token_count(leaf_nodes, components)
+                clustering_tokens = get_module_token_count(components)
                 logger.info(
-                    "Preparing %d leaf nodes for module clustering (%d tokens, threshold %d)",
+                    "Preparing %d leaf nodes for module clustering "
+                    "(code_tokens=%d, leaf_tokens=%d, threshold=%d)",
                     len(leaf_nodes),
                     clustering_tokens,
+                    get_clustering_input_token_count(leaf_nodes, components),
                     self.config.max_token_per_module,
                 )
                 # Bind cluster_model into the completer so the backend uses the
@@ -517,6 +529,7 @@ class DocumentationGenerator:
                 # Only freshly clustered trees are deduped: renaming a cached
                 # key whose .md already exists would orphan the doc.
                 module_tree = dedupe_module_tree_names(module_tree)
+                validate_module_file_coverage(module_tree, components)
                 file_manager.save_json(module_tree, first_module_tree_path)
                 file_manager.save_json(module_tree, module_tree_path)
 

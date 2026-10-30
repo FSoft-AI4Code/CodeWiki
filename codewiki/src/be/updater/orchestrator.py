@@ -10,6 +10,7 @@ from typing import Any
 
 from codewiki.src.be.backend import LLMBackend
 from codewiki.src.be.cluster_modules import cluster_modules, get_clustering_input_token_count
+from codewiki.src.be.module_scope import get_module_token_count
 from codewiki.src.be.dependency_analyzer.models.core import Node
 from codewiki.src.be.updater import pages as P
 from codewiki.src.be.updater import tree as T
@@ -334,9 +335,11 @@ class IncrementalUpdater:
             # --include and then updated against the full repo does not, and
             # feeding that to the single-page agent runs unbounded (issue #113).
             scope = [c for c in leaf_nodes if c in new_graph]
-            tokens = get_clustering_input_token_count(scope, new_graph)
+            tokens = get_module_token_count(new_graph)
+            leaf_tokens = get_clustering_input_token_count(scope, new_graph)
             threshold = self.config.max_token_per_module
             ratios["clustering_tokens"] = tokens
+            ratios["leaf_tokens"] = leaf_tokens
             ratios["tau_cluster"] = threshold
             if tokens <= threshold:
                 ratios["fired"] = False

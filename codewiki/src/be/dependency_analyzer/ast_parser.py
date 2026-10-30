@@ -1,10 +1,12 @@
 import json
 import logging
 import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codewiki.src.be.dependency_analyzer.analysis.analysis_service import AnalysisService
 from codewiki.src.be.dependency_analyzer.models.core import Node
+from codewiki.src.be.dependency_analyzer.utils.security import safe_open_text
 
 if TYPE_CHECKING:  # pragma: no cover
     from codewiki.src.be.dependency_analyzer.analyzers.artifact import ArtifactOptions
@@ -69,9 +71,44 @@ class DependencyParser:
         self.artifact_index = call_graph_result.get("artifact_index")
 
         self._build_components_from_analysis(call_graph_result)
+        self._retain_symbol_free_files(call_graph_result.get("source_files", []))
 
         logger.debug(f"Found {len(self.components)} components across {len(self.modules)} modules")
         return self.components
+
+    def _retain_symbol_free_files(self, source_files: list[dict]) -> None:
+        # An artifact head (e.g. setup.py) may be capped. It does not stand
+        # in for the full source of a supported code file without symbols.
+        covered = {
+            node.relative_path
+            for node in self.components.values()
+            if node.component_type != "artifact"
+        }
+        base = Path(self.repo_path)
+        for info in source_files:
+            relative = info["path"]
+            if relative in covered:
+                continue
+            try:
+                source = safe_open_text(base, base / relative)
+            except OSError as exc:
+                logger.warning("Cannot retain source file %s: %s", relative, exc)
+                continue
+            cid = f"{relative}::__file__"
+            self.components[cid] = Node(
+                id=cid,
+                name="__file__",
+                component_type="file",
+                file_path=str(base / relative),
+                relative_path=relative,
+                source_code=source,
+                start_line=1,
+                end_line=len(source.splitlines()),
+                language=info.get("language"),
+            )
+            self.modules.add(relative)
+            covered.add(relative)
+            logger.info("Retained source file without indexed symbols: %s", relative)
 
     def _build_components_from_analysis(self, call_graph_result: dict):
         functions = call_graph_result.get("functions", [])

@@ -50,6 +50,7 @@ from pathlib import Path
 from tree_sitter_language_pack import get_parser
 
 from codewiki.src.be.dependency_analyzer.models.core import CallRelationship, Node
+from codewiki.src.be.dependency_analyzer.utils.file_selection import is_skipped_zig_file
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,6 @@ _CONTAINER_MAPPING = {
     "opaque": ("class", "opaque"),
 }
 
-_SKIPPED_DIRS = {"zig-cache", ".zig-cache", "zig-out"}
 _EXTERNAL_IMPORTS = {"std", "builtin", "root"}
 # Constructors by convention: their result is a value of the owning type.
 _CONSTRUCTOR_NAMES = {"init", "initCapacity", "create", "new", "open", "parse"}
@@ -82,10 +82,6 @@ _ADD_MODULE_RE = re.compile(
 #   ("external",)             std, builtin, or a third-party package
 _EXTERNAL = ("external",)
 _UNKNOWN = ("unknown",)
-
-
-def is_skipped_zig_file(relative_path: str) -> bool:
-    return any(part in _SKIPPED_DIRS for part in Path(relative_path).parts[:-1])
 
 
 @lru_cache(maxsize=64)

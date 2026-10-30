@@ -51,6 +51,7 @@ from pathlib import Path
 from tree_sitter_language_pack import get_parser
 
 from codewiki.src.be.dependency_analyzer.models.core import CallRelationship, Node
+from codewiki.src.be.dependency_analyzer.utils.file_selection import is_skipped_go_file
 
 logger = logging.getLogger(__name__)
 
@@ -220,12 +221,6 @@ def split_go_package_ref(callee: str) -> tuple[str, str] | None:
     if head.endswith(suffix):
         return head[: -len(suffix)], name
     return None
-
-
-def is_skipped_go_file(relative_path: str) -> bool:
-    """`_test.go` files and vendored dependencies yield no components."""
-    posix = Path(relative_path).as_posix()
-    return posix.endswith("_test.go") or "vendor" in posix.split("/")[:-1]
 
 
 def package_dir_of(relative_path: str) -> str:
