@@ -30,6 +30,7 @@ from caw import Agent as CawAgent
 from caw import ToolGroup
 
 from codewiki.src.be.agent_tools.deps import CodeWikiDeps
+from codewiki.src.be.agent_tools.doc_guard import DocumentationWriteError, doc_written
 from codewiki.src.be.backend import AgentReply, LLMBackend
 from codewiki.src.be.module_scope import (
     complete_file_candidates,
@@ -44,7 +45,8 @@ from codewiki.src.be.prompt_template import (
     format_user_prompt,
 )
 from codewiki.src.be.utils import is_complex_module, set_main_loop
-from codewiki.src.be.doc_layout import config_layout, find_doc
+from codewiki.src.be.doc_layout import config_layout, find_doc, module_doc_file
+from codewiki.src.be.overview_support import reusable_overview, root_recovery_prompt
 from codewiki.src.config import MODULE_TREE_FILENAME, OVERVIEW_FILENAME, Config
 from codewiki.src.utils import file_manager
 
@@ -393,13 +395,13 @@ class CawBackend(LLMBackend):
         # or a resume after a partial run silently skips every missing one.
         if not module_path:
             overview_docs_path = os.path.join(working_dir, OVERVIEW_FILENAME)
-            if os.path.exists(overview_docs_path):
+            if reusable_overview(overview_docs_path):
                 logger.info("✓ Overview docs already exists at %s", overview_docs_path)
                 return module_tree
         docs_path = find_doc(working_dir, module_name, module_tree) if module_path else None
         if docs_path is None:
             docs_path = os.path.join(working_dir, f"{module_name}.md")
-        if os.path.exists(docs_path):
+        if os.path.isfile(docs_path) and (module_path or reusable_overview(docs_path)):
             logger.info("✓ Module docs already exists at %s", docs_path)
             return module_tree
 
@@ -463,6 +465,8 @@ class CawBackend(LLMBackend):
             module_path=list(module_path),
             layout=config_layout(config),
         )
+        if not module_path:
+            user_prompt = root_recovery_prompt(user_prompt, working_dir, module_name)
 
         # caw forks claude / codex via subprocess.Popen without a cwd, so the
         # child CLI inherits Python's cwd — typically the repo root where the
@@ -508,6 +512,7 @@ class CawBackend(LLMBackend):
                 traj = agent.completion(user_prompt)
             finally:
                 os.chdir(original_cwd)
+                file_manager.save_json(deps.module_tree, module_tree_path)
             # Nested sub-module agents are separate CLI processes that record
             # their own usage, so this covers only this module's own run.
             usage = self._record_usage(
@@ -524,6 +529,18 @@ class CawBackend(LLMBackend):
                 traj.total_tool_calls,
                 (usage or {}).get("cost_usd", 0.0),
             )
+            if not doc_written(working_dir, module_name, list(module_path), deps.module_tree):
+                doc_file = module_doc_file(module_name, list(module_path), config_layout(config))
+                logger.error(
+                    "Agent for %s finished without writing %s (turns=%d, tool_calls=%d). "
+                    "Final answer: %s",
+                    module_name,
+                    doc_file,
+                    traj.num_turns,
+                    traj.total_tool_calls,
+                    " ".join((getattr(traj, "result", None) or "").split())[:300] or "<empty>",
+                )
+                raise DocumentationWriteError(f"Agent for {module_name} has not written {doc_file}")
             validate_module_file_coverage(deps.module_tree, components)
             file_manager.save_json(deps.module_tree, module_tree_path)
             return deps.module_tree

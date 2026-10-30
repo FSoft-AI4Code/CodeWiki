@@ -2,6 +2,7 @@ from pydantic_ai import RunContext, Tool, Agent
 from pydantic_ai.usage import UsageLimits
 
 from codewiki.src.be.agent_tools.deps import CodeWikiDeps
+from codewiki.src.be.agent_tools.doc_guard import run_until_doc_written
 from codewiki.src.be.doc_layout import config_layout, module_doc_file
 from codewiki.src.be.module_naming import skipped_report, plan_sub_module_specs, sub_module_report
 from codewiki.src.be.agent_tools.read_code_components import read_code_components_tool
@@ -146,7 +147,8 @@ async def generate_sub_module_documentation(
 
         try:
             with usage_target(sub_module_name):
-                await sub_agent.run(
+                await run_until_doc_written(
+                    sub_agent,
                     format_user_prompt(
                         module_name=deps.current_module_name,
                         core_component_ids=core_component_ids,
@@ -156,6 +158,9 @@ async def generate_sub_module_documentation(
                         layout=layout,
                     ),
                     deps=ctx.deps,
+                    module_name=sub_module_name,
+                    module_path=list(deps.path_to_current_module),
+                    layout=layout,
                     usage_limits=UsageLimits(request_limit=ctx.deps.config.request_limit),
                 )
         finally:

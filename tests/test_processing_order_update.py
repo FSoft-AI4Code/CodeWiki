@@ -80,7 +80,7 @@ class FakeBackend:
 
     def complete(self, prompt, model=None, system_prompt=None):
         self.complete_calls += 1
-        return "<OVERVIEW>overview</OVERVIEW>"
+        return "<OVERVIEW># Overview\n\nThe repository coordinates its modules.</OVERVIEW>"
 
 
 def _generator(docs_dir: Path) -> tuple[DocumentationGenerator, FakeBackend]:

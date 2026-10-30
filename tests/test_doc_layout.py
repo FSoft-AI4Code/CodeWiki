@@ -246,7 +246,7 @@ class _FakeBackend:
         return tree
 
     def complete(self, prompt, model=None, system_prompt=None):
-        return "<OVERVIEW>[store](store.md)</OVERVIEW>"
+        return "<OVERVIEW># Overview\n\nSee [store](store.md).</OVERVIEW>"
 
 
 def test_generation_writes_nested_pages(tmp_path):
@@ -267,7 +267,7 @@ def test_generation_writes_nested_pages(tmp_path):
     assert (tmp_path / "auth/session/store.md").read_text() == (
         "# store\n\n[billing](../../billing.md)\n"
     )
-    assert (tmp_path / "auth.md").read_text() == "[store](auth/session/store.md)"
+    assert (tmp_path / "auth.md").read_text() == "# Overview\n\nSee [store](auth/session/store.md)."
     assert find_missing_module_docs(TREE, str(tmp_path)) == []
 
     # Resume: everything exists, nothing is regenerated

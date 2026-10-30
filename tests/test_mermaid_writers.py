@@ -220,18 +220,21 @@ def generator(tmp_path, replies):
     return gen
 
 
+OVERVIEW_PROSE = "# Overview\n\nThe module coordinates the application components.\n\n"
+
+
 @pytest.mark.parametrize("module_path,filename", [([], "overview.md"), (["parent"], "parent.md")])
 def test_overview_repairs_before_saving(tmp_path, parser, module_path, filename):
-    gen = generator(tmp_path, ["<OVERVIEW>" + INVALID + "</OVERVIEW>"])
+    gen = generator(tmp_path, ["<OVERVIEW>" + OVERVIEW_PROSE + INVALID + "</OVERVIEW>"])
     asyncio.run(gen.generate_parent_module_docs(module_path, str(tmp_path)))
-    assert (tmp_path / filename).read_text() == FIXED.strip()
+    assert (tmp_path / filename).read_text() == (OVERVIEW_PROSE + FIXED).strip()
     assert len(gen.backend.calls) == 1
 
 
 def test_overview_retries_once_and_tracks_usage(tmp_path, parser):
-    gen = generator(tmp_path, [BROKEN, FIXED])
+    gen = generator(tmp_path, [OVERVIEW_PROSE + BROKEN, OVERVIEW_PROSE + FIXED])
     asyncio.run(gen.generate_parent_module_docs([], str(tmp_path)))
-    assert (tmp_path / "overview.md").read_text() == FIXED.strip()
+    assert (tmp_path / "overview.md").read_text() == (OVERVIEW_PROSE + FIXED).strip()
     assert len(gen.backend.calls) == 2
     correction, system = gen.backend.calls[1]
     assert "<PREVIOUS_DRAFT>" in correction and "Parse error" in correction
@@ -241,7 +244,7 @@ def test_overview_retries_once_and_tracks_usage(tmp_path, parser):
 
 
 def test_invalid_overview_after_retry_is_not_saved(tmp_path, parser):
-    gen = generator(tmp_path, [BROKEN, BROKEN])
+    gen = generator(tmp_path, [OVERVIEW_PROSE + BROKEN, OVERVIEW_PROSE + BROKEN])
     with pytest.raises(RuntimeError, match="after one correction attempt"):
         asyncio.run(gen.generate_parent_module_docs([], str(tmp_path)))
     assert not (tmp_path / "overview.md").exists()
@@ -253,9 +256,9 @@ def test_overview_unavailable_warns_without_retry(tmp_path, monkeypatch, caplog)
         return DiagramResult("unavailable", "HTTP 503")
 
     monkeypatch.setattr(utils, "_validate_diagram", unavailable)
-    gen = generator(tmp_path, [INVALID])
+    gen = generator(tmp_path, [OVERVIEW_PROSE + INVALID])
     asyncio.run(gen.generate_parent_module_docs([], str(tmp_path)))
-    assert (tmp_path / "overview.md").read_text() == INVALID.strip()
+    assert (tmp_path / "overview.md").read_text() == (OVERVIEW_PROSE + INVALID).strip()
     assert len(gen.backend.calls) == 1
     assert "validation unavailable" in caplog.text and "HTTP 503" in caplog.text
 

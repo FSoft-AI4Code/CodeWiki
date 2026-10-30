@@ -46,7 +46,7 @@ class FakeBackend:
             else:
                 decisions = [{"component_id": c, "action": "untracked"} for c in ids]
             return "```json\n" + json.dumps({"decisions": decisions}) + "\n```"
-        return "<OVERVIEW>regenerated overview</OVERVIEW>"
+        return "<OVERVIEW># Overview\n\nregenerated overview of the modules.</OVERVIEW>"
 
     async def run_module_agent(
         self, module_name, components, core_component_ids, module_path, working_dir
