@@ -49,3 +49,26 @@ def macro_typed_name(declarator) -> Optional[str]:
     if len(errors) != 1 or [c.type for c in errors[0].named_children] != ["identifier"]:
         return None
     return errors[0].named_children[0].text.decode()
+
+
+def split_macro_function_name(definition) -> Optional[str]:
+    """`int API f(void) {...}`: a macro between the return type and the name, and a parameter list of one word.
+    tree-sitter-c reads `int API` as a declaration missing its `;`, then a function_definition whose type is the
+    name (`f`) and whose declarator is `(void)`. With real parameters the macro lands in an ERROR node instead and
+    `function_declarator` finds the name."""
+    declarator = definition.child_by_field_name("declarator")
+    kind = definition.child_by_field_name("type")
+    before = definition.prev_named_sibling
+    if (
+        declarator is None
+        or declarator.type != "parenthesized_declarator"
+        or [c.type for c in declarator.named_children] != ["identifier"]
+        or kind is None
+        or kind.type != "type_identifier"
+        or before is None
+        or before.type != "declaration"
+        or not (before.children and before.children[-1].is_missing)
+        or before.end_point[0] != definition.start_point[0]
+    ):
+        return None
+    return kind.text.decode()

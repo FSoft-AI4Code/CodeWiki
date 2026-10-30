@@ -8,6 +8,7 @@ import tree_sitter_c
 from codewiki.src.be.dependency_analyzer.analyzers.c_declarators import (
     function_declarator,
     macro_typed_name,
+    split_macro_function_name,
 )
 from codewiki.src.be.dependency_analyzer.models.core import Node, CallRelationship
 
@@ -222,10 +223,11 @@ class TreeSitterCAnalyzer:
 
     def _function_name(self, definition):
         """The name a function_definition defines, also when its return type is a pointer (`char *f()`) or an
-        export macro stands before a typedef'd return type (`API lua_Integer f()`)."""
+        export macro stands before a typedef'd return type (`API lua_Integer f()`) or before the name of a function
+        taking `(void)` (`int CJSON_CDECL main(void)`)."""
         declarator = function_declarator(definition)
         if declarator is None:
-            return None
+            return split_macro_function_name(definition)
         name = macro_typed_name(declarator)
         if name:
             return name
