@@ -49,6 +49,8 @@ tests/*
 !tests/test_scala_analyzer.py
 !tests/test_agent_limits.py
 !tests/test_module_scope.py
+!tests/test_doc_write_guard.py
+!tests/test_overview_generation.py
 
 # Jupyter
 *.ipynb

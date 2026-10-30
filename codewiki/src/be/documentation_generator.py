@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from pathlib import Path
 import traceback
 from copy import deepcopy
 from typing import Any
@@ -23,6 +24,14 @@ from codewiki.src.be.doc_layout import (
     relative_link,
 )
 from codewiki.src.be.utils import validate_mermaid_content
+from codewiki.src.be.overview_support import (
+    bounded_overview_prompt,
+    overview_content,
+    overview_error,
+    preserve_incomplete_overviews,
+    reusable_overview,
+    save_overview,
+)
 from codewiki.src.be.module_naming import (
     dedupe_module_tree_names,
     find_missing_module_docs,
@@ -161,10 +170,9 @@ class DocumentationGenerator:
         """Build structure for overview generation with 1-depth children doc paths and target indicator.
 
         Children docs are referenced by absolute file path (``docs_path``)
-        rather than inlined, and ``components`` lists are stripped: inlining
-        the full tree plus docs blew past provider input caps (codex rejects
-        turns over 1,048,576 chars) on large repos. The overview agent reads
-        the referenced files itself.
+        rather than inlined, and ``components`` lists are stripped. The
+        completion prompt separately includes bounded child excerpts so API
+        backends need no file-reading tools.
         """
 
         processed_module_tree = deepcopy(module_tree)
@@ -185,9 +193,9 @@ class DocumentationGenerator:
         for child_name, child_info in module_info.items():
             child_rel = module_doc_relpath(module_path + [child_name], layout)
             child_docs_path = self._resolve_child_docs_path(working_dir, child_name, module_tree)
+            child_info["link"] = relative_link(page_rel, child_rel)
             if child_docs_path is not None:
                 child_info["docs_path"] = child_docs_path
-                child_info["link"] = relative_link(page_rel, child_rel)
             else:
                 logger.warning(f"Module docs not found at {os.path.join(working_dir, child_rel)}")
                 child_info["docs_path"] = None
@@ -274,6 +282,7 @@ class DocumentationGenerator:
         # Process modules in dependency order
         final_module_tree = module_tree
         processed_modules = set()
+        failures = []
 
         if len(module_tree) > 0:
             for module_path, module_name in processing_order:
@@ -312,6 +321,7 @@ class DocumentationGenerator:
                     processed_modules.add(module_key)
 
                 except Exception as e:  # noqa: BLE001 — one failed module must not abort the run
+                    failures.append(f"{module_key}: {e}")
                     logger.error(f"Failed to process module {module_key}: {e!s}")
                     logger.error(f"Traceback: {traceback.format_exc()}")
                     continue
@@ -324,24 +334,20 @@ class DocumentationGenerator:
         else:
             logger.info("Processing whole repo because repo can fit in the context window")
             repo_name = os.path.basename(os.path.normpath(self.config.repo_path))
-            final_module_tree = await self.backend.run_module_agent(
-                module_name=repo_name,
-                components=components,
-                core_component_ids=complete_file_candidates(leaf_nodes, components),
-                module_path=[],
-                working_dir=working_dir,
-            )
-
-            # save final_module_tree to module_tree.json
-            validate_module_file_coverage(final_module_tree, components)
-            file_manager.save_json(
-                final_module_tree, os.path.join(working_dir, MODULE_TREE_FILENAME)
-            )
-
-            # rename repo_name.md to overview.md
             repo_overview_path = os.path.join(working_dir, f"{repo_name}.md")
-            if os.path.exists(repo_overview_path):
-                os.rename(repo_overview_path, os.path.join(working_dir, OVERVIEW_FILENAME))
+            overview_path = os.path.join(working_dir, OVERVIEW_FILENAME)
+            with preserve_incomplete_overviews([repo_overview_path, overview_path]):
+                final_module_tree = await self.backend.run_module_agent(
+                    module_name=repo_name,
+                    components=components,
+                    core_component_ids=complete_file_candidates(leaf_nodes, components),
+                    module_path=[],
+                    working_dir=working_dir,
+                )
+                validate_module_file_coverage(final_module_tree, components)
+                file_manager.save_json(final_module_tree, module_tree_path)
+                if os.path.exists(repo_overview_path):
+                    os.replace(repo_overview_path, overview_path)
 
         # Also check resumed trees whose agents returned early because their
         # pages already existed. Do not silently bless an old partial tree.
@@ -349,6 +355,9 @@ class DocumentationGenerator:
 
         # Move pages an agent saved in the wrong folder and fix links between pages
         organize_docs(working_dir, config_layout(self.config))
+
+        if failures:
+            raise RuntimeError("Documentation failed for modules: " + "; ".join(failures))
 
         return working_dir
 
@@ -382,13 +391,13 @@ class DocumentationGenerator:
         existing_docs_path = (
             resolve_module_doc_path(working_dir, module_name, module_tree) if module_path else None
         )
-        if existing_docs_path is not None:
+        if existing_docs_path is not None and reusable_overview(existing_docs_path):
             logger.info(f"✓ Parent docs already exists at {existing_docs_path}")
             return module_tree
-        parent_docs_path = os.path.join(
+        parent_docs_path = existing_docs_path or os.path.join(
             working_dir, module_doc_relpath(module_path, config_layout(self.config))
         )
-        if os.path.exists(parent_docs_path):
+        if existing_docs_path is None and reusable_overview(parent_docs_path):
             logger.info(f"✓ Parent docs already exists at {parent_docs_path}")
             return module_tree
 
@@ -412,52 +421,51 @@ class DocumentationGenerator:
                 )
         logger.debug(f"Overview prompt for {module_name}: {len(prompt)} chars")
 
+        child_info = repo_structure
+        for part in module_path:
+            child_info = child_info[part]["children"]
+        children = {}
+        for name, info in child_info.items():
+            path = info.get("docs_path")
+            if path:
+                try:
+                    children[name] = Path(path).read_text(encoding="utf-8")
+                except (OSError, UnicodeError) as exc:
+                    logger.warning("Cannot read child documentation %s: %s", path, exc)
+        system_prompt = format_overview_system_prompt(self.config.get_prompt_addition())
+
         phase = "overview" if not module_path else "parent_modules"
         try:
-            request = prompt
+            correction = previous = ""
             for attempt in range(2):
+                request = bounded_overview_prompt(
+                    prompt, children, system_prompt, correction=correction, previous=previous
+                )
                 with self.usage_ledger.in_phase(phase, target=module_name):
                     parent_docs = self.backend.complete(
                         request,
-                        system_prompt=format_overview_system_prompt(
-                            self.config.get_prompt_addition()
-                        ),
+                        system_prompt=system_prompt,
                     )
-                if not parent_docs:
-                    raise RuntimeError(
-                        f"LLM returned empty content for {module_name} overview "
-                        f"(possible output truncation at max_tokens)"
-                    )
-                # Subscription backends may return raw Markdown instead of
-                # the requested wrapper. Validate either form before saving.
-                if "<OVERVIEW>" in parent_docs and "</OVERVIEW>" in parent_docs:
-                    parent_content = (
-                        parent_docs.split("<OVERVIEW>")[1].split("</OVERVIEW>")[0].strip()
-                    )
-                else:
-                    parent_content = parent_docs.strip()
-                report = await validate_mermaid_content(parent_content, repair=True)
-                if not report.errors:
-                    if report.unavailable:
-                        logger.warning(report.format(parent_docs_path))
-                    elif report.repairs:
-                        logger.info(report.format(parent_docs_path))
-                    break
+                parent_content = overview_content(parent_docs)
+                correction = overview_error(parent_content)
+                previous = parent_content
+                if correction is None:
+                    report = await validate_mermaid_content(parent_content, repair=True)
+                    if not report.errors:
+                        if report.unavailable:
+                            logger.warning(report.format(parent_docs_path))
+                        elif report.repairs:
+                            logger.info(report.format(parent_docs_path))
+                        save_overview(report.content, parent_docs_path)
+                        break
+                    correction = report.format(parent_docs_path)
+                    previous = report.content
                 if attempt == 1:
                     raise RuntimeError(
-                        f"Invalid Mermaid in {module_name} overview after one correction attempt:\n"
-                        + report.format(parent_docs_path)
+                        f"Invalid documentation for {module_name} at {parent_docs_path} "
+                        f"after one correction attempt: {correction}"
                     )
-                request = (
-                    prompt
-                    + "\n\nCorrect the Mermaid syntax in this previous draft. Return the complete "
-                    "overview, preserving the other content.\n<PREVIOUS_DRAFT>\n"
-                    + report.content
-                    + "\n</PREVIOUS_DRAFT>\n"
-                    + report.format(parent_docs_path)
-                )
-            os.makedirs(os.path.dirname(parent_docs_path), exist_ok=True)
-            file_manager.save_text(report.content, parent_docs_path)
+                logger.warning("Retrying documentation for %s: %s", module_name, correction)
 
             logger.debug(f"Successfully generated parent documentation for: {module_name}")
             return module_tree

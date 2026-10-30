@@ -373,6 +373,7 @@ def test_small_whole_repo_agent_has_all_files_and_optional_delegate(
 
             async def run(self, prompt, deps, **kwargs):
                 captured["ids"] = deps.module_component_ids()
+                (out / "tiny.md").write_text("# Tiny\n\nModule documentation.")
                 return SimpleNamespace(output="ok")
 
         monkeypatch.setattr(mod, "Agent", FakeAgent)
@@ -391,6 +392,7 @@ def test_small_whole_repo_agent_has_all_files_and_optional_delegate(
                 captured["ids"] = toolkit._deps.module_component_ids()
 
             def completion(self, prompt):
+                (out / "tiny.md").write_text("# Tiny\n\nModule documentation.")
                 return SimpleNamespace(
                     total_usage=None, model="test", num_turns=1, total_tool_calls=0
                 )
@@ -441,6 +443,15 @@ def test_delegate_normalizes_files_before_running_subagents(tmp_path, monkeypatc
 
             async def run(self, prompt, deps, **kwargs):
                 seen.extend(deps.module_component_ids())
+                from codewiki.src.be.doc_layout import module_doc_file
+
+                name = module_doc_file(
+                    deps.current_module_name, deps.path_to_current_module, deps.config.layout
+                )
+                path = Path(deps.absolute_docs_path, name)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("# Module\n\nModule documentation.")
+                return SimpleNamespace(output="ok")
 
         monkeypatch.setattr(tool, "Agent", FakeAgent)
         monkeypatch.setattr(tool, "create_fallback_models", lambda config: None)

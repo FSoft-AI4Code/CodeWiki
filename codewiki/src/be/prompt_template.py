@@ -112,12 +112,13 @@ Provide `{repo_name}` repo structure:
 {repo_structure}
 </REPO_STRUCTURE>
 
-The core modules' documentation is NOT inlined above. Each top-level module carries a `docs_path` field with the absolute path to its documentation file — read those files with your file-reading tools before writing the overview (skip entries whose `docs_path` is null). When referencing a child's documentation, link it with the relative path in its `link` field, e.g. [alt text](<link>).
+Child documentation excerpts are supplied below as context. Some excerpts may be truncated or unavailable; use only the supplied evidence and do not invent missing details. No file-reading tools are available or needed. Link to child documentation using its relative `link` field, e.g. [alt text](<link>).
 
 Please generate the overview of the `{repo_name}` repository in markdown format with the following structure:
 <OVERVIEW>
 overview_content
 </OVERVIEW>
+Include a Markdown heading and explanatory prose. Return the finished page, without plans to read files or tool commands.
 """.strip()
 
 MODULE_OVERVIEW_PROMPT = """
@@ -133,12 +134,13 @@ Provide repo structure of the `{module_name}` module (marked with `is_target_for
 {repo_structure}
 </REPO_STRUCTURE>
 
-The child modules' documentation is NOT inlined above. Each child of the target module carries a `docs_path` field with the absolute path to its documentation file — read those files with your file-reading tools before writing the overview (skip entries whose `docs_path` is null). When referencing a child's documentation, link it with the relative path in its `link` field, e.g. [alt text](<link>).
+Child documentation excerpts are supplied below as context. Some excerpts may be truncated or unavailable; use only the supplied evidence and do not invent missing details. No file-reading tools are available or needed. Link to child documentation using its relative `link` field, e.g. [alt text](<link>).
 
 Please generate the overview of the `{module_name}` module in markdown format with the following structure:
 <OVERVIEW>
 overview_content
 </OVERVIEW>
+Include a Markdown heading and explanatory prose. Return the finished page, without plans to read files or tool commands.
 """.strip()
 
 # These templates are formatted later; braces in literal Mermaid labels must
