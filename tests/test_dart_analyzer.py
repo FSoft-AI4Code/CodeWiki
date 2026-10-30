@@ -99,6 +99,7 @@ def test_extracts_declarations_with_types(tmp_path: Path) -> None:
         "CarRepo.fetch": ("method", "method"),
         "CarRepo.count": ("method", "getter"),
         "CarRepo.dispose": ("method", "method"),
+        "CarRepo.create": ("method", "constructor"),
         "StringX": ("class", "extension"),
         "StringX.shout": ("method", "method"),
         "extension_on_int": ("class", "extension"),
@@ -109,8 +110,8 @@ def test_extracts_declarations_with_types(tmp_path: Path) -> None:
         "appName": ("function", "getter"),
     }
     assert {name: (n.component_type, n.node_type) for name, n in by_name.items()} == expected
-    # Constructors and setters are not components.
-    assert "CarRepo.create" not in by_name
+    # A constructor with code of its own is a component; one without (`CarRepo(this.api);`) is not.
+    assert "CarRepo.CarRepo" not in by_name
     assert all(node.language == "dart" for node in nodes)
     assert by_name["CarRepo"].id == "lib/repo.dart::CarRepo"
     assert by_name["CarRepo.fetch"].class_name == "CarRepo"
@@ -206,7 +207,7 @@ def test_call_and_instantiation_edges(tmp_path: Path) -> None:
     assert ("CarRepo.fetch", "log", False) in edges  # inherited, resolved cross-file later
     assert ("CarRepo.fetch", "Car", False) in edges  # Car.fromJson -> type edge
     assert ("CarRepo", "CarRepo", True) not in edges  # no self edges
-    assert ("CarRepo", "ApiClient", False) in edges  # factory body -> class-level
+    assert ("CarRepo.create", "ApiClient", False) in edges  # factory body -> the factory
     assert ("Status.isIdle", "Status", True) in edges  # enum value access
     callees = {callee for _, callee, _ in edges}
     assert "print" not in callees
