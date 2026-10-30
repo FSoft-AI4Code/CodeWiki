@@ -28,6 +28,24 @@ from codewiki.src.be.dependency_analyzer.utils.security import safe_open_text
 logger = logging.getLogger(__name__)
 
 
+def is_skipped_source_file(file_info: dict, base_dir: str) -> bool:
+    """Reuse explicit analyzer exclusions when retaining symbol-free files."""
+    language = file_info.get("language")
+    if language == "go":
+        from codewiki.src.be.dependency_analyzer.analyzers.go import is_skipped_go_file
+
+        return is_skipped_go_file(file_info["path"])
+    if language == "zig":
+        from codewiki.src.be.dependency_analyzer.analyzers.zig import is_skipped_zig_file
+
+        return is_skipped_zig_file(file_info["path"])
+    if language == "php":
+        from codewiki.src.be.dependency_analyzer.analyzers.php import is_template_file
+
+        return is_template_file(str(Path(base_dir) / file_info["path"]))
+    return False
+
+
 class TimeoutError(BaseException):
     """Raised when file parsing exceeds timeout.
 

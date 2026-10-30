@@ -8,6 +8,14 @@ from typing import Any
 from codewiki.src.be.dependency_analyzer.models.core import Node
 from codewiki.src.be.llm_services import call_llm
 from codewiki.src.be.module_naming import resolve_unique_name, sanitize_module_name
+from codewiki.src.be.module_scope import (
+    complete_file_candidates,
+    component_files,
+    file_token_counts,
+    get_module_token_count,
+    normalize_module_partition,
+    validate_module_file_coverage,
+)
 from codewiki.src.be.prompt_template import format_cluster_prompt, format_super_group_prompt
 from codewiki.src.be.utils import count_tokens
 from codewiki.src.config import (
@@ -20,8 +28,7 @@ logger = logging.getLogger(__name__)
 
 Completer = Callable[[str], str | None]
 
-# When whole-repo mode is chosen but leaf entry points touch fewer than this
-# fraction of parsed files, warn that coverage depends on agent exploration.
+# Below this share, log why entry points were expanded before choosing a mode.
 LOW_COVERAGE_RATIO = 0.5
 
 
@@ -61,7 +68,7 @@ def format_potential_core_components(
 
 
 def get_clustering_input_token_count(leaf_nodes: list[str], components: dict[str, Node]) -> int:
-    """Count the tokens used to decide whether a module needs clustering."""
+    """Count leaf prompt tokens for diagnostics, never for the split decision."""
     _, potential_core_components_with_code = format_potential_core_components(
         leaf_nodes, components
     )
@@ -196,7 +203,7 @@ def _cluster_via_llm(
         response_content = response.split("<GROUPED_COMPONENTS>")[1].split("</GROUPED_COMPONENTS>")[
             0
         ]
-        module_tree = eval(response_content)
+        module_tree = ast.literal_eval(response_content)
 
         if not isinstance(module_tree, dict):
             logger.error(f"Invalid module tree format - expected dict, got {type(module_tree)}")
@@ -213,7 +220,9 @@ def _cluster_via_llm(
         logger.error(f"Traceback: {traceback.format_exc()}")
         return {}
 
-    return module_tree
+    # Validate each batch before merging untrusted LLM output. File ownership
+    # is reconciled again across batches once every response is available.
+    return normalize_module_partition(module_tree, leaf_nodes, components)
 
 
 def _merge_module_trees(target: dict[str, Any], addition: dict[str, Any]) -> None:
@@ -261,6 +270,37 @@ def _batch_fallback_name(
     return resolve_unique_name(name, None, set(existing))
 
 
+def _structural_fallback(
+    candidates: list[str], components: dict[str, Node], threshold: int
+) -> dict[str, Any]:
+    """Pack path-adjacent whole files by code size when the LLM cannot split."""
+    by_file = defaultdict(list)
+    for cid in candidates:
+        by_file[components[cid].relative_path].append(cid)
+    sizes = file_token_counts(components)
+    groups = []
+    current: list[str] = []
+    current_tokens = 0
+    for path in sorted(by_file):
+        if current and current_tokens + sizes[path] > threshold:
+            groups.append(current)
+            current = []
+            current_tokens = 0
+        current.extend(by_file[path])
+        current_tokens += sizes[path]
+    if current:
+        groups.append(current)
+    tree = {}
+    for group in groups:
+        name = _batch_fallback_name(group, components, tree)
+        tree[name] = {
+            "path": _common_path_prefix(sorted(component_files(group, components))),
+            "components": group,
+            "children": {},
+        }
+    return tree
+
+
 def cluster_modules(
     leaf_nodes: list[str],
     components: dict[str, Node],
@@ -269,6 +309,8 @@ def cluster_modules(
     current_module_name: str | None = None,
     current_module_path: list[str] | None = None,
     completer: Completer | None = None,
+    *,
+    scope_files: set[str] | None = None,
 ) -> dict[str, Any]:
     """
     Cluster the potential core components into modules.
@@ -279,59 +321,85 @@ def cluster_modules(
             ``call_llm``.  This is how the LLMBackend abstraction injects
             subscription-mode (caw) routing.  If ``None``, falls back to
             ``call_llm`` for backward compatibility with direct callers.
+        scope_files: exact file ownership of this invocation. The repository
+            defaults to all indexed files; a submodule defaults to the files
+            of its supplied entry points. Recursion always passes it explicitly.
     """
     current_module_tree = {} if current_module_tree is None else current_module_tree
     current_module_path = [] if current_module_path is None else current_module_path
-    _, potential_core_components_with_code = format_potential_core_components(
-        leaf_nodes, components
-    )
-    input_tokens = count_tokens(potential_core_components_with_code)
+    if scope_files is None:
+        scope_files = (
+            component_files(list(components), components)
+            if current_module_name is None
+            else component_files(leaf_nodes, components)
+        )
+    leaves = [
+        cid
+        for cid in leaf_nodes
+        if cid in components and components[cid].relative_path in scope_files
+    ]
+    candidates = complete_file_candidates(leaves, components, scope_files)
+    input_tokens = get_module_token_count(components, scope_files)
+    leaf_tokens = get_clustering_input_token_count(leaves, components)
+    leaf_files = component_files(leaves, components)
+    coverage = len(leaf_files) / len(scope_files) if scope_files else 1.0
     threshold = config.max_token_per_module
     module_label = current_module_name or "repository"
 
     logger.info(
-        "Module clustering input for %s: %d leaf nodes, %d tokens, threshold %d",
+        "Module clustering input for %s: code_tokens=%d, leaf_tokens=%d, threshold=%d, "
+        "leaf_files=%d/%d (%.0f%%), candidate_files=%d/%d, candidates=%d",
         module_label,
-        len(leaf_nodes),
         input_tokens,
+        leaf_tokens,
         threshold,
+        len(leaf_files),
+        len(scope_files),
+        coverage * 100,
+        len(component_files(candidates, components)),
+        len(scope_files),
+        len(candidates),
     )
+    if coverage < LOW_COVERAGE_RATIO:
+        logger.warning(
+            "Leaf coverage for %s is below %.0f%%; added file representatives before "
+            "choosing documentation mode (%d -> %d entry points).",
+            module_label,
+            LOW_COVERAGE_RATIO * 100,
+            len(leaves),
+            len(candidates),
+        )
 
     if input_tokens <= threshold:
         logger.info(
-            "Skipping LLM module clustering for %s because %d tokens fit within the "
+            "Skipping LLM module clustering for %s because %d code tokens fit within the "
             "%d-token threshold; using whole-module documentation mode.",
             module_label,
             input_tokens,
             threshold,
         )
-        if current_module_name is None:
-            leaf_files = {
-                components[leaf_node].relative_path
-                for leaf_node in leaf_nodes
-                if leaf_node in components
-            }
-            all_files = {c.relative_path for c in components.values()}
-            if all_files and len(leaf_files) / len(all_files) < LOW_COVERAGE_RATIO:
-                logger.warning(
-                    "Leaf-node entry points cover only %d of %d parsed files (%.0f%%). "
-                    "Whole-repository documentation will start from these entry points and "
-                    "rely on agent exploration to reach the rest of the codebase.",
-                    len(leaf_files),
-                    len(all_files),
-                    100 * len(leaf_files) / len(all_files),
-                )
+        return {}
+
+    if len(scope_files) <= 1:
+        logger.warning(
+            "Module %s has %d code tokens above threshold %d but only %d file; "
+            "keeping the indivisible file without another clustering call.",
+            module_label,
+            input_tokens,
+            threshold,
+            len(scope_files),
+        )
         return {}
 
     logger.info(
-        "Requesting LLM module clustering for %s because %d tokens exceed the %d-token threshold.",
+        "Requesting LLM module clustering for %s because %d code tokens exceed the %d-token threshold.",
         module_label,
         input_tokens,
         threshold,
     )
 
     batches = partition_leaf_nodes_by_structure(
-        leaf_nodes, components, lambda ids: _cluster_batch_fits(ids, config)
+        candidates, components, lambda ids: _cluster_batch_fits(ids, config)
     )
 
     if len(batches) == 1:
@@ -344,12 +412,10 @@ def cluster_modules(
             module_label,
             completer,
         )
-        if not module_tree:
-            return {}
     else:
         logger.info(
-            "Partitioned %d leaf nodes for %s into %d structure-based batches for clustering.",
-            len(leaf_nodes),
+            "Partitioned %d entry points for %s into %d structure-based batches for clustering.",
+            len(candidates),
             module_label,
             len(batches),
         )
@@ -386,18 +452,17 @@ def cluster_modules(
                 )
             _merge_module_trees(module_tree, partial)
 
-    # check if the module tree is valid
+    module_tree = normalize_module_partition(module_tree, candidates, components)
     if len(module_tree) <= 1:
-        logger.info(
-            "Skipping LLM clustering result for %s because it produced only "
-            "%d module(s); using whole-module documentation mode.",
+        logger.warning(
+            "Clustering %s produced only %d usable module(s); using a structural file partition.",
             module_label,
             len(module_tree),
         )
-        return {}
+        module_tree = _structural_fallback(candidates, components, threshold)
 
     logger.info(
-        "LLM module clustering for %s produced %d top-level modules.",
+        "Module clustering for %s produced %d top-level modules.",
         module_label,
         len(module_tree),
     )
@@ -413,31 +478,26 @@ def cluster_modules(
             value[module_name] = module_info
 
     for module_name, module_info in module_tree.items():
-        sub_leaf_nodes = module_info.get("components", [])
-
-        # Filter sub_leaf_nodes to ensure they exist in components
-        valid_sub_leaf_nodes = []
-        for node in sub_leaf_nodes:
-            if node in components:
-                valid_sub_leaf_nodes.append(node)
-            else:
-                logger.warning(
-                    f"Skipping invalid sub leaf node '{node}' in module '{module_name}' - not found in components"
-                )
+        sub_files = component_files(module_info["components"], components)
+        # Reuse original leaves for coverage diagnostics, not the added file
+        # representatives. The next call reconstructs its complete candidate set.
+        sub_leaves = [cid for cid in leaves if components[cid].relative_path in sub_files]
 
         current_module_path.append(module_name)
         module_info["children"] = {}
         module_info["children"] = cluster_modules(
-            valid_sub_leaf_nodes,
+            sub_leaves,
             components,
             config,
             current_module_tree,
             module_name,
             current_module_path,
             completer=completer,
+            scope_files=sub_files,
         )
         current_module_path.pop()
 
+    validate_module_file_coverage(module_tree, components, scope_files)
     return module_tree
 
 

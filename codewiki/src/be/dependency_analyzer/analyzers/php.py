@@ -70,6 +70,15 @@ TEMPLATE_DIRECTORIES: Set[str] = {"views", "templates", "resources/views"}
 MAX_RECURSION_DEPTH = 100
 
 
+def is_template_file(file_path: str) -> bool:
+    """The same exclusion policy for parsing and the source-file inventory."""
+    file_str = str(file_path)
+    return any(file_str.endswith(pattern) for pattern in TEMPLATE_PATTERNS) or any(
+        f"/{directory}/" in file_str or f"\\{directory}\\" in file_str
+        for directory in TEMPLATE_DIRECTORIES
+    )
+
+
 class NamespaceResolver:
     """Resolves PHP class names to fully qualified names using use statements."""
 
@@ -138,19 +147,7 @@ class TreeSitterPHPAnalyzer:
 
     def _is_template_file(self) -> bool:
         """Check if file is a PHP template that should be skipped."""
-        file_str = str(self.file_path)
-
-        # Check extension patterns
-        for pattern in TEMPLATE_PATTERNS:
-            if file_str.endswith(pattern):
-                return True
-
-        # Check directory patterns
-        for dir_pattern in TEMPLATE_DIRECTORIES:
-            if f"/{dir_pattern}/" in file_str or f"\\{dir_pattern}\\" in file_str:
-                return True
-
-        return False
+        return is_template_file(str(self.file_path))
 
     def _get_module_path(self) -> str:
         """Get module path for the file."""

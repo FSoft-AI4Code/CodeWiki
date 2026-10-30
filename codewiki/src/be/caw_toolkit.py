@@ -30,6 +30,7 @@ from mcp.server.fastmcp import Context
 from codewiki.src.be.agent_tools.deps import CodeWikiDeps
 from codewiki.src.be.doc_layout import config_layout, module_doc_file
 from codewiki.src.be.module_naming import skipped_report, plan_sub_module_specs, sub_module_report
+from codewiki.src.be.module_scope import prepare_submodule_partition
 
 if TYPE_CHECKING:
     from codewiki.src.be.caw_backend import CawBackend
@@ -325,6 +326,17 @@ class CawToolKit(
         value = deps.module_tree
         for key in deps.path_to_current_module:
             value = value[key]["children"]
+        final_specs = prepare_submodule_partition(
+            final_specs, deps.module_component_ids(), deps.components, value
+        )
+        for requested, final_name in list(name_map.items()):
+            if final_name not in final_specs:
+                plan.skipped[requested] = "no unassigned files in the current module scope"
+                del name_map[requested]
+        if not final_specs:
+            return skipped_report(
+                plan.skipped, module_doc_file(previous_module_name, parent_path, layout)
+            )
         for sub_name, core_ids in final_specs.items():
             value[sub_name] = {"components": core_ids, "children": {}}
 

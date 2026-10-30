@@ -31,14 +31,19 @@ from caw import ToolGroup
 
 from codewiki.src.be.agent_tools.deps import CodeWikiDeps
 from codewiki.src.be.backend import AgentReply, LLMBackend
-from codewiki.src.be.cluster_modules import format_potential_core_components
+from codewiki.src.be.module_scope import (
+    complete_file_candidates,
+    component_files,
+    get_module_token_count,
+    validate_module_file_coverage,
+)
 from codewiki.src.be.dependency_analyzer.models.core import Node
 from codewiki.src.be.prompt_template import (
     format_leaf_system_prompt,
     format_system_prompt,
     format_user_prompt,
 )
-from codewiki.src.be.utils import count_tokens, is_complex_module, set_main_loop
+from codewiki.src.be.utils import is_complex_module, set_main_loop
 from codewiki.src.be.doc_layout import config_layout, find_doc
 from codewiki.src.config import MODULE_TREE_FILENAME, OVERVIEW_FILENAME, Config
 from codewiki.src.utils import file_manager
@@ -399,21 +404,18 @@ class CawBackend(LLMBackend):
             return module_tree
 
         custom_instructions = config.get_prompt_addition()
+        if not module_path:
+            core_component_ids = complete_file_candidates(core_component_ids, components)
 
-        # Mirror PydanticAIBackend's early-cut: a module is only worth
-        # delegating to sub-agents when it spans multiple files AND has enough
-        # content to justify the cost AND we still have recursion budget.
-        # Without this gate the caw path would give every multi-file sub-module
-        # the recursive SYSTEM_PROMPT + delegation tool and fan out one extra
-        # agent call per sub-spec even when a single leaf write would suffice.
-        # See generate_sub_module_documentation_tool for the pydantic-ai
-        # equivalent.
-        _, components_with_code = format_potential_core_components(core_component_ids, components)
-        num_tokens = count_tokens(components_with_code)
+        # Whole-repository agents may optionally delegate even below the leaf
+        # token budget. Nested modules retain the cost gate and depth limit.
+        num_tokens = get_module_token_count(
+            components, component_files(core_component_ids, components)
+        )
         can_delegate = (
             is_complex_module(components, core_component_ids)
             and start_depth < config.max_depth
-            and num_tokens >= config.max_token_per_leaf_module
+            and (not module_path or num_tokens >= config.max_token_per_leaf_module)
         )
         logger.info(
             f"Module {module_name} can delegate: {can_delegate} - is_complex_module: {is_complex_module(components, core_component_ids)} - start_depth: {start_depth} - num_tokens: {num_tokens} - max_depth: {config.max_depth} - max_token_per_leaf_module: {config.max_token_per_leaf_module}"
@@ -440,6 +442,7 @@ class CawBackend(LLMBackend):
             current_depth=start_depth,
             config=config,
             custom_instructions=custom_instructions,
+            scope_component_ids=core_component_ids,
         )
 
         toolkit = CawToolKit(deps=deps, backend=self, allow_subagent=can_delegate)
@@ -521,6 +524,7 @@ class CawBackend(LLMBackend):
                 traj.total_tool_calls,
                 (usage or {}).get("cost_usd", 0.0),
             )
+            validate_module_file_coverage(deps.module_tree, components)
             file_manager.save_json(deps.module_tree, module_tree_path)
             return deps.module_tree
         except Exception as e:

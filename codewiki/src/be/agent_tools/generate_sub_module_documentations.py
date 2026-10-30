@@ -12,8 +12,12 @@ from codewiki.src.be.prompt_template import (
     format_system_prompt,
     format_user_prompt,
 )
-from codewiki.src.be.utils import is_complex_module, count_tokens
-from codewiki.src.be.cluster_modules import format_potential_core_components
+from codewiki.src.be.utils import is_complex_module
+from codewiki.src.be.module_scope import (
+    component_files,
+    get_module_token_count,
+    prepare_submodule_partition,
+)
 
 import logging
 from codewiki.src.be.api_usage import usage_target
@@ -38,6 +42,8 @@ async def generate_sub_module_documentation(
 
     deps = ctx.deps
     previous_module_name = deps.current_module_name
+    if deps.current_depth >= deps.max_depth:
+        return "Maximum delegation depth reached; write this module directly."
 
     # Create fallback models from config
     fallback_models = create_fallback_models(deps.config)
@@ -64,10 +70,20 @@ async def generate_sub_module_documentation(
         if requested_name in name_map
     }
 
-    # add the sub-module to the module tree
     value = deps.module_tree
     for key in deps.path_to_current_module:
         value = value[key]["children"]
+    final_specs = prepare_submodule_partition(
+        final_specs, deps.module_component_ids(), deps.components, value
+    )
+    for requested, final_name in list(name_map.items()):
+        if final_name not in final_specs:
+            plan.skipped[requested] = "no unassigned files in the current module scope"
+            del name_map[requested]
+    if not final_specs:
+        return skipped_report(plan.skipped, parent_doc)
+
+    # Reserve every child's complete file scope before running any agent.
     for sub_module_name, core_component_ids in final_specs.items():
         value[sub_module_name] = {"components": core_component_ids, "children": {}}
 
@@ -78,14 +94,15 @@ async def generate_sub_module_documentation(
 
         logger.info(f"{indent}{arrow} Generating documentation for sub-module: {sub_module_name}")
 
-        num_tokens = count_tokens(
-            format_potential_core_components(core_component_ids, ctx.deps.components)[-1]
+        num_tokens = get_module_token_count(
+            deps.components, component_files(core_component_ids, deps.components)
         )
+        child_depth = deps.current_depth + 1
 
         if (
             is_complex_module(ctx.deps.components, core_component_ids)
-            and ctx.deps.current_depth < ctx.deps.max_depth
-            and num_tokens >= ctx.deps.config.max_token_per_leaf_module * ctx.deps.current_depth
+            and child_depth < ctx.deps.max_depth
+            and num_tokens >= ctx.deps.config.max_token_per_leaf_module * child_depth
         ):
             sub_agent = Agent(
                 model=fallback_models,
@@ -119,6 +136,8 @@ async def generate_sub_module_documentation(
                 tools=[read_code_components_tool, str_replace_editor_tool],
             )
 
+        previous_scope = deps.scope_component_ids
+        deps.scope_component_ids = core_component_ids
         deps.current_module_name = sub_module_name
         deps.path_to_current_module.append(sub_module_name)
         deps.current_depth += 1
@@ -143,6 +162,7 @@ async def generate_sub_module_documentation(
             deps.path_to_current_module.pop()
             deps.current_depth -= 1
             deps.current_module_name = previous_module_name
+            deps.scope_component_ids = previous_scope
 
     # restore the previous module name
     deps.current_module_name = previous_module_name

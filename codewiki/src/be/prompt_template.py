@@ -150,12 +150,12 @@ REPO_OVERVIEW_PROMPT += "\n\n" + _MERMAID_TEMPLATE_GUIDANCE
 MODULE_OVERVIEW_PROMPT += "\n\n" + _MERMAID_TEMPLATE_GUIDANCE
 
 CLUSTER_REPO_PROMPT = """
-Here is list of all potential core components of the repository (It's normal that some components are not essential to the repository):
+Here are the core entry points of the repository, grouped by source file:
 <POTENTIAL_CORE_COMPONENTS>
 {potential_core_components}
 </POTENTIAL_CORE_COMPONENTS>
 
-Please group the components into groups such that each group is a set of components that are closely related to each other and together they form a module. DO NOT include components that are not essential to the repository.
+Group related source files into modules. Assign EVERY provided component ID exactly once. All IDs from the same file must stay together in one module. Each file represents its entire implementation, including methods and functions absent from this entry-point list. A `__file__` entry represents a source file without indexed symbols; include it too.
 
 Files marked `(artifact: <class>)` are build, CI, container, packaging, manifest, configuration, schema or script files. Their components describe how the system is built, packaged, shipped, configured and tested. They ARE essential: group them into a dedicated build/deployment/configuration module, or attach them to the module they configure. Never drop them.
 
@@ -192,12 +192,12 @@ Here is the module tree of a repository:
 {module_tree}
 </MODULE_TREE>
 
-Here is list of all potential core components of the module {module_name} (It's normal that some components are not essential to the module):
+Here are the core entry points of the module {module_name}, grouped by source file:
 <POTENTIAL_CORE_COMPONENTS>
 {potential_core_components}
 </POTENTIAL_CORE_COMPONENTS>
 
-Please group the components into groups such that each group is a set of components that are closely related to each other and together they form a smaller module. DO NOT include components that are not essential to the module.
+Group related source files into smaller modules. Assign EVERY provided component ID exactly once. All IDs from the same file must stay together in one module. Each file represents its entire implementation, including methods and functions absent from this entry-point list. A `__file__` entry represents a source file without indexed symbols; include it too.
 
 Files marked `(artifact: <class>)` are build, CI, container, packaging, manifest, configuration, schema or script files. Their components describe how the system is built, packaged, shipped, configured and tested. They ARE essential: group them into a dedicated build/deployment/configuration module, or attach them to the module they configure. Never drop them.
 
