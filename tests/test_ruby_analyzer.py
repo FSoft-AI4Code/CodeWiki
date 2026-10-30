@@ -69,8 +69,8 @@ def test_extracts_modules_classes_and_methods(tmp_path: Path) -> None:
     assert by_name["Pipeline.default_buffer"].component_type == "method"
     assert by_name["standalone_helper"].component_type == "function"
 
-    # Constructors are not documentable components.
-    assert "Buffer.initialize" not in by_name
+    # A constructor is a component like any method.
+    assert by_name["Buffer.initialize"].component_type == "method"
 
     assert by_name["Buffer"].id == "buffer.rb::Buffer"
     assert by_name["Buffer.push"].id == "buffer.rb::Buffer.push"

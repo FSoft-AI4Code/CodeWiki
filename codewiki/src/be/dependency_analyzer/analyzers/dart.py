@@ -22,9 +22,11 @@ Known limitations:
   the broken span are still extracted.
 - Generic invocations ``Foo<T>(x)`` parse as relational expressions and
   are recovered from the node text.
-- Constructors, setters and operators are not components; calls in their
-  bodies, in initializer lists and in field initializers are attributed
-  to the enclosing class.
+- A constructor with a body or an initializer list is a component (``A.A``
+  for the unnamed one, ``A.named`` for a named or factory one), like any
+  method: it often does the real work. Constructors with neither, setters
+  and operators are not components; calls in their code and in field
+  initializers are attributed to the enclosing class.
 """
 
 import logging
@@ -57,6 +59,10 @@ _CLASS_MODIFIERS = frozenset({"abstract", "sealed", "base", "interface", "final"
 # Member signatures that become components, with their node_type.
 _MEMBER_SIGNATURES = {"function_signature": "method", "getter_signature": "getter"}
 _TOP_LEVEL_SIGNATURES = {"function_signature": "function", "getter_signature": "getter"}
+# Constructors that become components when they have code of their own (a body or initializers).
+_CONSTRUCTOR_SIGNATURES = frozenset(
+    {"constructor_signature", "factory_constructor_signature", "constant_constructor_signature"}
+)
 # Member signatures whose code belongs to the class rather than a component.
 _CLASS_LEVEL_SIGNATURES = frozenset(
     {
@@ -493,7 +499,26 @@ class TreeSitterDartAnalyzer:
             if body is not None:
                 self._scan_targets.append(_ScanTarget(node.id, owner, body, signature, name))
             return
-        # Constructors (incl. initializer lists), setters, operators: the
+        if signature.type in _CONSTRUCTOR_SIGNATURES and (
+            body is not None or _first_child(wrapper, "initializers") is not None
+        ):
+            names = [_text(c) for c in signature.named_children if c.type == "identifier"]
+            name = names[-1] if names else owner  # `A(...)` -> A.A, `A.named(...)` -> A.named
+            node = self._add_node(
+                wrapper,
+                body or wrapper,
+                f"{owner}.{name}",
+                "method",
+                "constructor",
+                lines,
+                class_name=owner,
+                parameters=_parameter_names(signature),
+            )
+            self._scan_targets.append(_ScanTarget(node.id, owner, wrapper, signature))
+            if body is not None:
+                self._scan_targets.append(_ScanTarget(node.id, owner, body, signature))
+            return
+        # Constructors with no code of their own, setters, operators: the
         # class owns their code.
         class_id = self._component_id(owner)
         self._scan_targets.append(_ScanTarget(class_id, owner, wrapper, signature))

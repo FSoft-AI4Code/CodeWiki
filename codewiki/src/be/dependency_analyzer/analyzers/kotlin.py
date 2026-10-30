@@ -10,6 +10,11 @@ from codewiki.src.be.dependency_analyzer.models.core import Node, CallRelationsh
 logger = logging.getLogger(__name__)
 
 
+# A constructor with a body is a component like any method (it often does the real work, and calls
+# in its body need it as their caller). The primary constructor has no body of its own.
+CONSTRUCTORS = {"secondary_constructor": "constructor", "anonymous_initializer": "init"}
+
+
 class TreeSitterKotlinAnalyzer:
     def __init__(self, file_path: str, content: str, repo_path: Optional[str] = None):
         self.file_path = Path(file_path)
@@ -97,10 +102,9 @@ class TreeSitterKotlinAnalyzer:
             name_node = next((c for c in node.children if c.type == "identifier"), None)
             node_name = name_node.text.decode() if name_node else None
 
-        elif node.type == "function_declaration":
-            name_node = next((c for c in node.children if c.type == "identifier"), None)
-            if name_node:
-                method_name = name_node.text.decode()
+        elif node.type in ("function_declaration", *CONSTRUCTORS):
+            method_name = self._member_name(node)
+            if method_name:
                 containing_class = self._find_containing_class_name(node)
                 if containing_class:
                     node_type = "method"
@@ -414,12 +418,18 @@ class TreeSitterKotlinAnalyzer:
             return self._get_component_id(class_name)
         return None
 
+    def _member_name(self, node) -> Optional[str]:
+        """A function's name; a secondary constructor is `constructor`, an `init` block `init`."""
+        if node.type in CONSTRUCTORS:
+            return CONSTRUCTORS[node.type]
+        return self._get_identifier_name(node)
+
     def _find_containing_method(self, node):
         """Find the component ID of the containing function/method."""
         current = node.parent
         while current:
-            if current.type == "function_declaration":
-                method_name = self._get_identifier_name(current)
+            if current.type in ("function_declaration", *CONSTRUCTORS):
+                method_name = self._member_name(current)
                 class_name = self._find_containing_class_name(current)
                 if method_name:
                     if class_name:

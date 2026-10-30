@@ -203,7 +203,9 @@ class TreeSitterCSharpAnalyzer:
             node_type = "delegate"
             node_name = self._decl_name(node)
             qualified_name = self._qualify(node, *self._find_containing_type_names(node), node_name)
-        elif node.type == "method_declaration":
+        elif node.type in ("method_declaration", "constructor_declaration"):
+            # A constructor is a component like any method (`A.A`, as C++ names it): it often
+            # does the real work, and calls in its body need it as their caller.
             method_name = self._decl_name(node)
             if method_name:
                 node_type = "method"
@@ -626,7 +628,7 @@ class TreeSitterCSharpAnalyzer:
     def _find_containing_method(self, node):
         current = node.parent
         while current:
-            if current.type == "method_declaration":
+            if current.type in ("method_declaration", "constructor_declaration"):
                 method_name = self._decl_name(current)
                 class_name = self._find_containing_class_name(current)
                 if method_name and class_name:

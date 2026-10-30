@@ -14,6 +14,9 @@ from codewiki.src.be.dependency_analyzer.utils.external_symbols import (
 
 logger = logging.getLogger(__name__)
 
+# A record's compact constructor (`record R(int x) { R { ... } }`) has no parameter list.
+CONSTRUCTORS = ("constructor_declaration", "compact_constructor_declaration")
+
 
 class TreeSitterJavaAnalyzer:
     def __init__(self, file_path: str, content: str, repo_path: str = None):
@@ -133,7 +136,9 @@ class TreeSitterJavaAnalyzer:
             qualified_name = self._qualified_type_name(
                 node_name, self._find_containing_type_names(node)
             )
-        elif node.type == "method_declaration":
+        elif node.type in ("method_declaration", *CONSTRUCTORS):
+            # A constructor is a component like any method (`A.A`, as C++ names it): it often
+            # does the real work, and calls in its body need it as their caller.
             node_type = "method"
             name_node = next((c for c in node.children if c.type == "identifier"), None)
             if name_node:
@@ -602,7 +607,7 @@ class TreeSitterJavaAnalyzer:
     def _find_containing_method(self, node):
         current = node.parent
         while current:
-            if current.type == "method_declaration":
+            if current.type in ("method_declaration", *CONSTRUCTORS):
                 method_name = self._get_identifier_name(current)
                 class_name = self._find_containing_class_name(current)
                 if method_name and class_name:

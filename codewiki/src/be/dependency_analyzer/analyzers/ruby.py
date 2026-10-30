@@ -550,9 +550,6 @@ class TreeSitterRubyAnalyzer:
             class_name = None
 
         parameters = self._method_parameters(node)
-        # Constructors are registered for call resolution but are not
-        # documentable components themselves.
-        include_in_nodes = method_name != "initialize"
         self._add_node(
             node,
             logical_name,
@@ -560,7 +557,6 @@ class TreeSitterRubyAnalyzer:
             lines,
             parameters=parameters,
             class_name=class_name,
-            include_in_nodes=include_in_nodes,
         )
 
     def _add_node(
@@ -573,7 +569,6 @@ class TreeSitterRubyAnalyzer:
         base_classes: list[str] | None = None,
         class_name: str | None = None,
         qualified_name: str | None = None,
-        include_in_nodes: bool = True,
     ):
         component_id = self._get_component_id(logical_name)
         relative_path = self._get_relative_path()
@@ -613,8 +608,7 @@ class TreeSitterRubyAnalyzer:
             language="ruby",
             qualified_name=qualified_name or logical_name,
         )
-        if include_in_nodes:
-            self.nodes.append(node_obj)
+        self.nodes.append(node_obj)
         self.top_level_nodes[logical_name] = node_obj
 
     def _method_parameters(self, method_node) -> list[str] | None:
