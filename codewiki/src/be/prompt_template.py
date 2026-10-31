@@ -775,3 +775,26 @@ def format_overview_system_prompt(custom_instructions: str | None = None) -> str
         "Follow these instructions when writing the overview; they take precedence over "
         "conflicting defaults in the request (language, audience, structure, style)."
     )
+
+
+_OVERVIEW_PYDANTIC_TOOL_GUIDANCE = (
+    "Use the read_module_documentation tool to load every non-null docs_path listed "
+    "in REPO_STRUCTURE before writing the overview."
+)
+
+
+def merge_overview_system_prompt(base: str | None, tool_guidance: str) -> str:
+    """Append backend-specific overview tool guidance to custom-instructions system text."""
+    if base:
+        return f"{base}\n\n{tool_guidance}"
+    return tool_guidance
+
+
+def append_pydantic_overview_tool_guidance(base: str | None) -> str:
+    """Custom-instructions system text plus pydantic-ai overview tool guidance."""
+    return merge_overview_system_prompt(base, _OVERVIEW_PYDANTIC_TOOL_GUIDANCE)
+
+
+def format_overview_agent_system_prompt(custom_instructions: str | None = None) -> str:
+    """System message for pydantic-ai overview agents (custom instructions + tool guidance)."""
+    return append_pydantic_overview_tool_guidance(format_overview_system_prompt(custom_instructions))

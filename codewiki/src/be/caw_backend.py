@@ -289,6 +289,17 @@ class CawBackend(LLMBackend):
                 os.environ["MCP_TIMEOUT"],
             )
 
+    async def run_overview_agent(
+        self,
+        prompt: str,
+        *,
+        system_prompt: str | None = None,
+        working_dir: str,
+        target: str,
+    ) -> str:
+        """Same prompts and completion path as the pre-refactor ``_complete`` helper."""
+        return await self.complete_async(prompt, system_prompt=system_prompt)
+
     # ------------------------------------------------------------------
     # Single-shot completion (clustering, parent / repo overviews)
     # ------------------------------------------------------------------

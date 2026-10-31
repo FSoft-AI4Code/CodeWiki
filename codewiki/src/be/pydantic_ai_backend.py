@@ -22,11 +22,16 @@ from codewiki.src.be.agent_tools.generate_sub_module_documentations import (
     generate_sub_module_documentation_tool,
 )
 from codewiki.src.be.agent_tools.read_code_components import read_code_components_tool
+from codewiki.src.be.agent_tools.read_module_documentation import (
+    OverviewDeps,
+    read_module_documentation_tool,
+)
 from codewiki.src.be.agent_tools.str_replace_editor import str_replace_editor_tool
 from codewiki.src.be.backend import AgentReply, LLMBackend, usage_to_dict
 from codewiki.src.be.dependency_analyzer.models.core import Node
 from codewiki.src.be.llm_services import call_llm, create_fallback_models, pop_last_usage
 from codewiki.src.be.prompt_template import (
+    append_pydantic_overview_tool_guidance,
     format_leaf_system_prompt,
     format_system_prompt,
     format_user_prompt,
@@ -80,6 +85,41 @@ class PydanticAIBackend(LLMBackend):
             model=model or self._config.main_model,
         )
         return result
+
+    async def run_overview_agent(
+        self,
+        prompt: str,
+        *,
+        system_prompt: str | None = None,
+        working_dir: str,
+        target: str,
+    ) -> str:
+        config = self._config
+        agent = Agent(
+            self._fallback_models,
+            name=f"overview:{target}",
+            deps_type=OverviewDeps,
+            tools=[read_module_documentation_tool],
+            system_prompt=append_pydantic_overview_tool_guidance(system_prompt),
+            retries=config.agent_retries,
+        )
+        deps = OverviewDeps(absolute_docs_path=working_dir)
+        started = time.time()
+        async with self.slots.hold_async():
+            result = await agent.run(
+                prompt,
+                deps=deps,
+                usage_limits=UsageLimits(request_limit=config.request_limit),
+            )
+        self._record_usage(
+            "overview_agent",
+            target,
+            _run_usage(result),
+            seconds=time.time() - started,
+            model=config.main_model,
+        )
+        text = result.output if isinstance(result.output, str) else str(result.output)
+        return text
 
     async def run_update_agent(
         self,

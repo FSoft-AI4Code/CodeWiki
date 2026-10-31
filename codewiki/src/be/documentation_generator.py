@@ -398,13 +398,6 @@ class DocumentationGenerator:
 
         await asyncio.gather(*(process([name], info) for name, info in module_tree.items()))
 
-    async def _complete(self, prompt: str, system_prompt: str) -> str:
-        """Single-shot completion off the event loop, so running agents keep going."""
-        complete_async = getattr(self.backend, "complete_async", None)
-        if complete_async is not None:
-            return await complete_async(prompt, system_prompt=system_prompt)
-        return await asyncio.to_thread(self.backend.complete, prompt, system_prompt=system_prompt)
-
     async def generate_parent_module_docs(
         self,
         module_path: list[str],
@@ -468,9 +461,13 @@ class DocumentationGenerator:
         phase = "overview" if not module_path else "parent_modules"
         try:
             with self.usage_ledger.in_phase(phase, target=module_name):
-                parent_docs = await self._complete(
+                parent_docs = await self.backend.run_overview_agent(
                     prompt,
-                    system_prompt=format_overview_system_prompt(self.config.get_prompt_addition()),
+                    system_prompt=format_overview_system_prompt(
+                        self.config.get_prompt_addition()
+                    ),
+                    working_dir=working_dir,
+                    target=module_name,
                 )
             if not parent_docs:
                 raise RuntimeError(
