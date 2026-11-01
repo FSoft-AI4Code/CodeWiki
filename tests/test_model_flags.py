@@ -24,6 +24,7 @@ def captured(tmp_path, monkeypatch):
         aws_region="us-east-1",
         agent_instructions=None,
         max_tokens=1,
+        min_token_per_module=2000,
         max_token_per_module=1,
         max_token_per_leaf_module=1,
         max_depth=1,
@@ -76,3 +77,12 @@ def test_flags_override_saved_models(captured):
         "c",
         "f",
     )
+
+
+@pytest.mark.parametrize("override,expected", [(None, 2000), (1500, 1500)])
+def test_minimum_module_size_override(captured, override, expected):
+    args = ["-o", "out"]
+    if override is not None:
+        args += ["--min-token-per-module", str(override)]
+    CliRunner().invoke(gen.generate_command, args)
+    assert captured["min_token_per_module"] == expected

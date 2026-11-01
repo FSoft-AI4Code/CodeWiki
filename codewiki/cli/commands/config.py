@@ -11,6 +11,7 @@ from typing import Optional, List
 from codewiki.cli.config_manager import ConfigManager
 from codewiki.cli.models.config import AgentInstructions
 from codewiki.src.language import normalize_language
+from codewiki.src.config import DEFAULT_MAX_TOKEN_PER_LEAF_MODULE
 from codewiki.cli.utils.errors import ConfigurationError, handle_error, EXIT_CONFIG_ERROR
 from codewiki.cli.utils.validation import (
     validate_url,
@@ -146,12 +147,20 @@ def pricing_remove(model, provider):
 @click.option("--fallback-model", type=str, help="Fallback model for documentation generation")
 @click.option("--max-tokens", type=int, help="Maximum tokens for LLM response (default: 32768)")
 @click.option(
+    "--min-token-per-module",
+    type=click.IntRange(min=1),
+    default=None,
+    help="Minimum code tokens per standalone module (default: 1000)",
+)
+@click.option(
     "--max-token-per-module",
     type=int,
     help="Maximum tokens per module for clustering (default: 36369)",
 )
 @click.option(
-    "--max-token-per-leaf-module", type=int, help="Maximum tokens per leaf module (default: 16000)"
+    "--max-token-per-leaf-module",
+    type=int,
+    help=f"Base code-token threshold to allow delegation (default: {DEFAULT_MAX_TOKEN_PER_LEAF_MODULE})",
 )
 @click.option(
     "--max-depth", type=int, help="Maximum depth for hierarchical decomposition (default: 2)"
@@ -223,6 +232,7 @@ def config_set(
     max_token_per_module: Optional[int],
     max_token_per_leaf_module: Optional[int],
     max_depth: Optional[int],
+    min_token_per_module: Optional[int] = None,
     request_limit: Optional[int] = None,
     agent_retries: Optional[int] = None,
     provider: Optional[str] = None,
@@ -303,6 +313,7 @@ def config_set(
                 cluster_model,
                 fallback_model,
                 max_tokens,
+                min_token_per_module,
                 max_token_per_module,
                 max_token_per_leaf_module,
                 max_depth,
@@ -369,6 +380,9 @@ def config_set(
                 raise ConfigurationError("max_tokens must be a positive integer")
             validated_data["max_tokens"] = max_tokens
 
+        if min_token_per_module is not None:
+            validated_data["min_token_per_module"] = min_token_per_module
+
         if max_token_per_module is not None:
             if max_token_per_module < 1:
                 raise ConfigurationError("max_token_per_module must be a positive integer")
@@ -425,6 +439,7 @@ def config_set(
             cluster_model=validated_data.get("cluster_model"),
             fallback_model=validated_data.get("fallback_model"),
             max_tokens=validated_data.get("max_tokens"),
+            min_token_per_module=validated_data.get("min_token_per_module"),
             max_token_per_module=validated_data.get("max_token_per_module"),
             max_token_per_leaf_module=validated_data.get("max_token_per_leaf_module"),
             max_depth=validated_data.get("max_depth"),
@@ -475,6 +490,9 @@ def config_set(
 
         if max_tokens:
             click.secho(f"✓ Max tokens: {max_tokens}", fg="green")
+
+        if min_token_per_module is not None:
+            click.secho(f"✓ Min token per module: {min_token_per_module}", fg="green")
 
         if max_token_per_module:
             click.secho(f"✓ Max token per module: {max_token_per_module}", fg="green")
@@ -570,8 +588,11 @@ def config_show(output_json: bool):
                 "fallback_model": config.fallback_model if config else "glm-4p5",
                 "default_output": config.default_output if config else "docs",
                 "max_tokens": config.max_tokens if config else 32768,
+                "min_token_per_module": config.min_token_per_module if config else 1000,
                 "max_token_per_module": config.max_token_per_module if config else 36369,
-                "max_token_per_leaf_module": config.max_token_per_leaf_module if config else 16000,
+                "max_token_per_leaf_module": config.max_token_per_leaf_module
+                if config
+                else DEFAULT_MAX_TOKEN_PER_LEAF_MODULE,
                 "max_depth": config.max_depth if config else 2,
                 "request_limit": config.request_limit if config else 100,
                 "agent_retries": config.agent_retries if config else 3,
@@ -644,6 +665,7 @@ def config_show(output_json: bool):
             click.secho("Token Settings", fg="cyan", bold=True)
             if config:
                 click.echo(f"  Max Tokens:              {config.max_tokens}")
+                click.echo(f"  Min Token/Module:        {config.min_token_per_module}")
                 click.echo(f"  Max Token/Module:        {config.max_token_per_module}")
                 click.echo(f"  Max Token/Leaf Module:   {config.max_token_per_leaf_module}")
                 click.echo(f"  Prompt Caching:          {config.prompt_caching}")

@@ -53,7 +53,13 @@ def _deps(tmp_path) -> CodeWikiDeps:
         module_tree={},
         max_depth=2,
         current_depth=1,
-        config=SimpleNamespace(max_token_per_leaf_module=4000, agent_retries=3, request_limit=100),
+        config=SimpleNamespace(
+            min_token_per_module=1,
+            max_token_per_module=36369,
+            max_token_per_leaf_module=1,
+            agent_retries=3,
+            request_limit=100,
+        ),
         custom_instructions="",
     )
 
@@ -95,8 +101,16 @@ def test_mixed_batch_generates_only_new_names(tmp_path):
     deps = _deps(tmp_path)
     (tmp_path / "approval.md").write_text("old")
     (tmp_path / "overview_approval.md").write_text("old")
-    report = _call(deps, {"approval": ["a.py::fa"], "billing": ["b.py::fb"]})
+    deps.components["c.py::fc"] = _node("c.py::fc")
+    report = _call(
+        deps,
+        {
+            "approval": ["a.py::fa"],
+            "billing": ["b.py::fb"],
+            "shipping": ["c.py::fc"],
+        },
+    )
     assert (tmp_path / "billing.md").exists()
-    assert FakeAgent.runs == ["billing"]
+    assert FakeAgent.runs == ["billing", "shipping"]
     assert "billing.md" in report and "'approval'" in report and "Skipped" in report
-    assert set(deps.module_tree) == {"billing"}
+    assert set(deps.module_tree) == {"billing", "shipping"}

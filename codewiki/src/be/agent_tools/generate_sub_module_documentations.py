@@ -13,11 +13,10 @@ from codewiki.src.be.prompt_template import (
     format_system_prompt,
     format_user_prompt,
 )
-from codewiki.src.be.utils import is_complex_module
+from codewiki.src.config import DEFAULT_MIN_TOKEN_PER_MODULE
 from codewiki.src.be.module_scope import (
-    component_files,
-    get_module_token_count,
-    prepare_submodule_partition,
+    can_split_module,
+    prepare_sized_submodule_partition,
 )
 
 import logging
@@ -38,16 +37,30 @@ async def generate_sub_module_documentation(
             Sub-module names must be unique across the whole wiki. A name already used by another module is
             prefixed with the current module name; a name that is already documented (plain or prefixed)
             is SKIPPED, not regenerated. The tool result reports the final file names actually saved and
-            every skipped request.
+            every skipped request. Children below the configured minimum code-token size are
+            merged into a nearby sibling. Partitions with fewer than two viable children are
+            rejected; document the module directly instead.
     """
 
     deps = ctx.deps
     previous_module_name = deps.current_module_name
-    if deps.current_depth >= deps.max_depth:
-        return "Maximum delegation depth reached; write this module directly."
-
-    # Create fallback models from config
-    fallback_models = create_fallback_models(deps.config)
+    if not can_split_module(
+        deps.components,
+        deps.module_component_ids(),
+        deps.config,
+        deps.current_depth,
+        max_depth=deps.max_depth,
+    ):
+        return skipped_report(
+            {
+                name: "module cannot delegate: file count, token threshold or depth limit; "
+                "write this module directly"
+                for name in sub_module_specs
+            },
+            module_doc_file(
+                previous_module_name, deps.path_to_current_module, config_layout(deps.config)
+            ),
+        )
 
     # Resolve name collisions against the module tree and files already on disk
     # before touching the tree (issue #76): names are unique across the wiki.
@@ -74,15 +87,22 @@ async def generate_sub_module_documentation(
     value = deps.module_tree
     for key in deps.path_to_current_module:
         value = value[key]["children"]
-    final_specs = prepare_submodule_partition(
-        final_specs, deps.module_component_ids(), deps.components, value
+    final_specs, rejected = prepare_sized_submodule_partition(
+        final_specs,
+        deps.module_component_ids(),
+        deps.components,
+        value,
+        getattr(deps.config, "min_token_per_module", DEFAULT_MIN_TOKEN_PER_MODULE),
+        deps.config.max_token_per_module,
     )
     for requested, final_name in list(name_map.items()):
         if final_name not in final_specs:
-            plan.skipped[requested] = "no unassigned files in the current module scope"
+            plan.skipped[requested] = rejected[final_name]
             del name_map[requested]
     if not final_specs:
         return skipped_report(plan.skipped, parent_doc)
+
+    fallback_models = create_fallback_models(deps.config)
 
     # Reserve every child's complete file scope before running any agent.
     for sub_module_name, core_component_ids in final_specs.items():
@@ -95,15 +115,14 @@ async def generate_sub_module_documentation(
 
         logger.info(f"{indent}{arrow} Generating documentation for sub-module: {sub_module_name}")
 
-        num_tokens = get_module_token_count(
-            deps.components, component_files(core_component_ids, deps.components)
-        )
         child_depth = deps.current_depth + 1
 
-        if (
-            is_complex_module(ctx.deps.components, core_component_ids)
-            and child_depth < ctx.deps.max_depth
-            and num_tokens >= ctx.deps.config.max_token_per_leaf_module * child_depth
+        if can_split_module(
+            deps.components,
+            core_component_ids,
+            deps.config,
+            child_depth,
+            max_depth=deps.max_depth,
         ):
             sub_agent = Agent(
                 model=fallback_models,

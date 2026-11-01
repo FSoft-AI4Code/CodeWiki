@@ -262,10 +262,16 @@ def test_subagent_failure_restores_dependencies(tmp_path, monkeypatch):
         source_code="class A: pass",
     )
     deps = _deps(tmp_path)
-    deps.components = {node.id: node}
-    deps.scope_component_ids = [node.id]
+    other = node.model_copy(update={"id": "b.py::B", "file_path": "b.py", "relative_path": "b.py"})
+    deps.components = {node.id: node, other.id: other}
+    deps.scope_component_ids = [node.id, other.id]
     deps.config = SimpleNamespace(
-        agent_retries=1, request_limit=10, max_token_per_leaf_module=100, layout="flat"
+        agent_retries=1,
+        request_limit=10,
+        max_token_per_leaf_module=1,
+        layout="flat",
+        min_token_per_module=1,
+        max_token_per_module=36369,
     )
     original_scope = deps.scope_component_ids
 
@@ -281,7 +287,9 @@ def test_subagent_failure_restores_dependencies(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "run_until_doc_written", fail)
     with pytest.raises(DocumentationWriteError):
         asyncio.run(
-            mod.generate_sub_module_documentation(SimpleNamespace(deps=deps), {"child": [node.id]})
+            mod.generate_sub_module_documentation(
+                SimpleNamespace(deps=deps), {"child": [node.id], "other": [other.id]}
+            )
         )
     assert deps.current_module_name == "repo" and deps.current_depth == 1
     assert deps.path_to_current_module == []

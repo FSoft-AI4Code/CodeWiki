@@ -303,6 +303,12 @@ def _invalidate_affected_modules(output_dir: Path, changed_files: list[str], log
     help="Maximum tokens for LLM response (overrides config)",
 )
 @click.option(
+    "--min-token-per-module",
+    type=click.IntRange(min=1),
+    default=None,
+    help="Minimum code tokens per standalone module (default: 1000)",
+)
+@click.option(
     "--max-token-per-module",
     type=int,
     default=None,
@@ -312,7 +318,7 @@ def _invalidate_affected_modules(output_dir: Path, changed_files: list[str], log
     "--max-token-per-leaf-module",
     type=int,
     default=None,
-    help="Maximum tokens per leaf module (overrides config)",
+    help="Base code-token threshold to allow delegation (overrides config)",
 )
 @click.option(
     "--max-depth",
@@ -469,6 +475,7 @@ def generate_command(
     request_limit: int | None,
     agent_retries: int | None,
     prompt_caching: bool | None,
+    min_token_per_module: int | None = None,
     main_model: str | None = None,
     cluster_model: str | None = None,
     fallback_model: str | None = None,
@@ -745,6 +752,9 @@ def generate_command(
             )
             logger.debug(f"Main model: {main_model or config.main_model}")
             logger.debug(f"Cluster model: {cluster_model or config.cluster_model}")
+            logger.debug(
+                f"Min token/module: {min_token_per_module if min_token_per_module is not None else getattr(config, 'min_token_per_module', 1000)}"
+            )
             logger.debug(f"Max tokens: {effective_max_tokens}")
             logger.debug(f"Max token/module: {effective_max_token_per_module}")
             logger.debug(f"Max token/leaf module: {effective_max_token_per_leaf}")
@@ -796,6 +806,9 @@ def generate_command(
                 "agent_instructions": agent_instructions_dict,
                 # Max token settings (runtime overrides take precedence)
                 "max_tokens": max_tokens if max_tokens is not None else config.max_tokens,
+                "min_token_per_module": min_token_per_module
+                if min_token_per_module is not None
+                else getattr(config, "min_token_per_module", 1000),
                 "max_token_per_module": max_token_per_module
                 if max_token_per_module is not None
                 else config.max_token_per_module,

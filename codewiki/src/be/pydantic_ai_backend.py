@@ -28,14 +28,17 @@ from codewiki.src.be.api_usage import track_usage, record_response
 from codewiki.src.be.backend import AgentReply, LLMBackend, UsageLedger, usage_to_dict
 from codewiki.src.be.dependency_analyzer.models.core import Node
 from codewiki.src.be.llm_services import call_llm, create_fallback_models, pop_last_usage
-from codewiki.src.be.module_scope import complete_file_candidates, validate_module_file_coverage
+from codewiki.src.be.module_scope import (
+    can_split_module,
+    complete_file_candidates,
+    validate_module_file_coverage,
+)
 from codewiki.src.be.overview_support import reusable_overview, root_recovery_prompt
 from codewiki.src.be.prompt_template import (
     format_leaf_system_prompt,
     format_system_prompt,
     format_user_prompt,
 )
-from codewiki.src.be.utils import is_complex_module
 from codewiki.src.be.doc_layout import config_layout, find_doc
 from codewiki.src.config import MODULE_TREE_FILENAME, OVERVIEW_FILENAME, Config
 from codewiki.src.utils import file_manager
@@ -149,7 +152,7 @@ class PydanticAIBackend(LLMBackend):
 
         if not module_path:
             core_component_ids = complete_file_candidates(core_component_ids, components)
-        if is_complex_module(components, core_component_ids) and config.max_depth > 1:
+        if can_split_module(components, core_component_ids, config, 1):
             agent = Agent(
                 self._fallback_models,
                 name=module_name,

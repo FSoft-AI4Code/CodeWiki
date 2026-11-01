@@ -50,6 +50,7 @@ def _config(**overrides) -> Config:
         llm_api_key="key",
         main_model="m",
         cluster_model="m",
+        min_token_per_module=1,
     )
     return Config.from_cli(**kwargs, **overrides)
 

@@ -33,9 +33,8 @@ from codewiki.src.be.agent_tools.deps import CodeWikiDeps
 from codewiki.src.be.agent_tools.doc_guard import DocumentationWriteError, doc_written
 from codewiki.src.be.backend import AgentReply, LLMBackend
 from codewiki.src.be.module_scope import (
+    can_split_module,
     complete_file_candidates,
-    component_files,
-    get_module_token_count,
     validate_module_file_coverage,
 )
 from codewiki.src.be.dependency_analyzer.models.core import Node
@@ -44,7 +43,7 @@ from codewiki.src.be.prompt_template import (
     format_system_prompt,
     format_user_prompt,
 )
-from codewiki.src.be.utils import is_complex_module, set_main_loop
+from codewiki.src.be.utils import set_main_loop
 from codewiki.src.be.doc_layout import config_layout, find_doc, module_doc_file
 from codewiki.src.be.overview_support import reusable_overview, root_recovery_prompt
 from codewiki.src.config import MODULE_TREE_FILENAME, OVERVIEW_FILENAME, Config
@@ -409,19 +408,8 @@ class CawBackend(LLMBackend):
         if not module_path:
             core_component_ids = complete_file_candidates(core_component_ids, components)
 
-        # Whole-repository agents may optionally delegate even below the leaf
-        # token budget. Nested modules retain the cost gate and depth limit.
-        num_tokens = get_module_token_count(
-            components, component_files(core_component_ids, components)
-        )
-        can_delegate = (
-            is_complex_module(components, core_component_ids)
-            and start_depth < config.max_depth
-            and (not module_path or num_tokens >= config.max_token_per_leaf_module)
-        )
-        logger.info(
-            f"Module {module_name} can delegate: {can_delegate} - is_complex_module: {is_complex_module(components, core_component_ids)} - start_depth: {start_depth} - num_tokens: {num_tokens} - max_depth: {config.max_depth} - max_token_per_leaf_module: {config.max_token_per_leaf_module}"
-        )
+        can_delegate = can_split_module(components, core_component_ids, config, start_depth)
+        logger.info("Module %s can delegate: %s (depth %d)", module_name, can_delegate, start_depth)
 
         if can_delegate:
             system_prompt = format_system_prompt(

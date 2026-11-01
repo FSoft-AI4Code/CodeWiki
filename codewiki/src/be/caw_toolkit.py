@@ -30,7 +30,8 @@ from mcp.server.fastmcp import Context
 from codewiki.src.be.agent_tools.deps import CodeWikiDeps
 from codewiki.src.be.doc_layout import config_layout, module_doc_file
 from codewiki.src.be.module_naming import skipped_report, plan_sub_module_specs, sub_module_report
-from codewiki.src.be.module_scope import prepare_submodule_partition
+from codewiki.src.be.module_scope import can_split_module, prepare_sized_submodule_partition
+from codewiki.src.config import DEFAULT_MIN_TOKEN_PER_MODULE
 
 if TYPE_CHECKING:
     from codewiki.src.be.caw_backend import CawBackend
@@ -260,7 +261,9 @@ class CawToolKit(
             "Sub-module names must be unique across the whole wiki. A name already used by another "
             "module is prefixed with the current module name; a name that is already documented "
             "(plain or prefixed) is SKIPPED, not regenerated. The result reports the files actually "
-            "saved and every skipped request."
+            "saved and every skipped request. Children below the configured minimum code-token "
+            "size are merged into a nearby sibling. Partitions with fewer than two viable "
+            "children are rejected; document the module directly instead."
         )
     )
     async def generate_sub_module_documentation(
@@ -298,6 +301,23 @@ class CawToolKit(
     def _run_sub_modules(self, sub_module_specs: dict[str, list[str]]) -> str:
         deps = self._deps
         previous_module_name = deps.current_module_name
+        if not can_split_module(
+            deps.components,
+            deps.module_component_ids(),
+            deps.config,
+            deps.current_depth,
+            max_depth=deps.max_depth,
+        ):
+            return skipped_report(
+                {
+                    name: "module cannot delegate: file count, token threshold or depth limit; "
+                    "write this module directly"
+                    for name in sub_module_specs
+                },
+                module_doc_file(
+                    previous_module_name, deps.path_to_current_module, config_layout(deps.config)
+                ),
+            )
 
         # Resolve name collisions against the module tree and files already on
         # disk before touching the tree (issue #76): names are unique across the wiki.
@@ -326,12 +346,17 @@ class CawToolKit(
         value = deps.module_tree
         for key in deps.path_to_current_module:
             value = value[key]["children"]
-        final_specs = prepare_submodule_partition(
-            final_specs, deps.module_component_ids(), deps.components, value
+        final_specs, rejected = prepare_sized_submodule_partition(
+            final_specs,
+            deps.module_component_ids(),
+            deps.components,
+            value,
+            getattr(deps.config, "min_token_per_module", DEFAULT_MIN_TOKEN_PER_MODULE),
+            deps.config.max_token_per_module,
         )
         for requested, final_name in list(name_map.items()):
             if final_name not in final_specs:
-                plan.skipped[requested] = "no unassigned files in the current module scope"
+                plan.skipped[requested] = rejected[final_name]
                 del name_map[requested]
         if not final_specs:
             return skipped_report(

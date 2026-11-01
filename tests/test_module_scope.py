@@ -48,6 +48,8 @@ def _config(repo: Path, out: Path, threshold: int = 36369) -> Config:
         cluster_model="test",
         max_token_per_module=threshold,
         artifacts_enabled=False,
+        min_token_per_module=1,
+        max_token_per_leaf_module=1,
     )
 
 
@@ -341,8 +343,10 @@ def test_delegation_covers_parent_without_stealing_siblings():
 
 @pytest.mark.parametrize("backend_kind", ["pydantic", "caw"])
 @pytest.mark.parametrize("max_depth", [1, 2])
-def test_small_whole_repo_agent_has_all_files_and_optional_delegate(
-    tmp_path, monkeypatch, backend_kind, max_depth
+@pytest.mark.parametrize("file_tokens", [1, 1000, 2000])
+@pytest.mark.parametrize("leaf_budget", [1, 4000])
+def test_whole_repo_agent_has_all_files_and_shared_delegate_gate(
+    tmp_path, monkeypatch, backend_kind, max_depth, file_tokens, leaf_budget
 ):
     from codewiki.src.be.backend import UsageLedger
 
@@ -354,12 +358,14 @@ def test_small_whole_repo_agent_has_all_files_and_optional_delegate(
     for path, name in (("types.go", "Buffer"), ("methods.go", "Buffer.Read")):
         file = repo / path
         file.write_text("package tiny\n")
-        node = _node(f"{path}::{name}", "small")
+        node = _node(f"{path}::{name}", " x" * file_tokens)
         node.file_path = str(file)
         components[node.id] = node
     (out / "module_tree.json").write_text("{}")
     config = _config(repo, out)
     config.max_depth = max_depth
+    config.min_token_per_module = 1000
+    config.max_token_per_leaf_module = leaf_budget
     captured = {}
 
     if backend_kind == "pydantic":
@@ -405,7 +411,7 @@ def test_small_whole_repo_agent_has_all_files_and_optional_delegate(
 
     backend._config = config
     asyncio.run(backend.run_module_agent("tiny", components, ["types.go::Buffer"], [], str(out)))
-    assert captured["can_delegate"] == (max_depth > 1)
+    assert captured["can_delegate"] == (max_depth > 1 and 2 * file_tokens >= max(2000, leaf_budget))
     assert component_files(captured["ids"], components) == {"types.go", "methods.go"}
     assert json.loads((out / "module_tree.json").read_text()) == {}
 
@@ -434,7 +440,7 @@ def test_delegate_normalizes_files_before_running_subagents(tmp_path, monkeypatc
         custom_instructions="",
     )
     seen = []
-    specs = {"One": [ids[0]], "Two": [ids[1], ids[3]]}
+    specs = {"One": [ids[0]], "Two": [ids[1], ids[2], ids[3]]}
     if backend_kind == "pydantic":
 
         class FakeAgent:

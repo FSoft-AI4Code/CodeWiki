@@ -439,19 +439,19 @@ def test_ensure_artifact_module() -> None:
     art_ids = [i for i in leaves if i.startswith("ci/")]
     # 1/5 assigned -> module inserted with the other 4
     tree = {"Core": {"path": "src", "components": ["src/a.py::A", art_ids[0]], "children": {}}}
-    out = ensure_artifact_module(tree, leaves, comps)
+    out = ensure_artifact_module(tree, leaves, comps, min_tokens=1)
     assert ARTIFACT_MODULE_NAME in out
     mod = out[ARTIFACT_MODULE_NAME]
     assert set(mod["components"]) == set(art_ids[1:])
     assert mod["children"] == {} and mod["path"]
     # 4/5 assigned -> unchanged
     tree = {"Core": {"path": "src", "components": ["src/a.py::A", *art_ids[:4]], "children": {}}}
-    assert ARTIFACT_MODULE_NAME not in ensure_artifact_module(tree, leaves, comps)
+    assert ARTIFACT_MODULE_NAME not in ensure_artifact_module(tree, leaves, comps, min_tokens=1)
     # whole-repo mode -> unchanged
     assert ensure_artifact_module({}, leaves, comps) == {}
     # name collision -> unique variant
     tree = {ARTIFACT_MODULE_NAME: {"path": "", "components": ["src/a.py::A"], "children": {}}}
-    out = ensure_artifact_module(tree, leaves, comps)
+    out = ensure_artifact_module(tree, leaves, comps, min_tokens=1)
     inserted = [k for k in out if k != ARTIFACT_MODULE_NAME]
     assert len(inserted) == 1 and inserted[0].startswith(ARTIFACT_MODULE_NAME)
 
