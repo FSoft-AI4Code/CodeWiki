@@ -140,7 +140,7 @@ tokenizers==0.21.4
 tornado==6.5.1
 tqdm==4.67.1
 traitlets==5.14.3
-tree-sitter==0.23.2
+tree-sitter==0.26.0
 tree-sitter-c==0.21.4
 tree-sitter-c-sharp==0.23.1
 tree-sitter-cpp==0.23.4
