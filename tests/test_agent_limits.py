@@ -106,22 +106,31 @@ def test_sub_module_agents_get_limits_and_no_literal_none(tmp_path, monkeypatch)
         relative_path="b.py",
         source_code=source.read_text(),
     )
+    other = component.model_copy(
+        update={"id": "c.py::fc", "file_path": "c.py", "relative_path": "c.py"}
+    )
     deps = CodeWikiDeps(
         absolute_docs_path=str(tmp_path),
         absolute_repo_path=str(tmp_path),
         registry={},
-        components={component.id: component},
+        components={component.id: component, other.id: other},
         path_to_current_module=[],
         current_module_name="root",
         module_tree={},
         max_depth=2,
         current_depth=1,
-        config=SimpleNamespace(max_token_per_leaf_module=4000, agent_retries=7, request_limit=321),
+        config=SimpleNamespace(
+            min_token_per_module=1,
+            max_token_per_module=36369,
+            max_token_per_leaf_module=1,
+            agent_retries=7,
+            request_limit=321,
+        ),
         custom_instructions=None,
     )
     asyncio.run(
         sub_mod.generate_sub_module_documentation(
-            SimpleNamespace(deps=deps), {"billing": ["b.py::fb"]}
+            SimpleNamespace(deps=deps), {"billing": ["b.py::fb"], "other": [other.id]}
         )
     )
     assert seen["init"]["retries"] == 7

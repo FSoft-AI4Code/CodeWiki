@@ -138,9 +138,22 @@ Override the stored limits for one run.
 | Flag | Stored default | Meaning |
 | --- | --- | --- |
 | `--max-tokens N` | `32768` | Maximum output tokens per LLM response |
+| `--min-token-per-module N` | `1000` | Minimum code tokens per standalone module; smaller groups merge into nearby siblings |
 | `--max-token-per-module N` | `36369` | Input-token threshold that triggers module clustering |
-| `--max-token-per-leaf-module N` | `16000` | Input-token threshold for leaf modules |
+| `--max-token-per-leaf-module N` | `8000` | Base code-token threshold to allow an agent to delegate |
 | `--max-depth N` | `2` | Maximum depth of the hierarchical decomposition |
+
+Module sizes include all indexed components in the files a module owns, using
+the GPT-4 tokenizer. Both agent backends apply the minimum to new child pages
+and reject a partition that collapses to one child. Delegation requires at
+least `max(2 * min_token_per_module, max_token_per_leaf_module * depth)` code
+tokens, multiple files, and a depth below `max_depth`. Delegation depth starts
+at 1, so the default token gates are 8,000, 16,000, 24,000, and so on; reaching
+the gate allows delegation without requiring it. A small repository stays
+on one overview page. Whole files remain indivisible, so an oversized file
+can exceed the upper threshold, including nearby small files merged into it.
+Cached module trees are retained; generate into a fresh output directory to
+apply these rules throughout an existing tree.
 
 ### Examples
 
@@ -178,7 +191,7 @@ keys you pass are changed. Provider examples are in [Providers](providers.md).
 | `--azure-deployment NAME` | Azure OpenAI only |
 | `--google-project ID` | `google-vertex` only. Defaults to `GOOGLE_CLOUD_PROJECT` |
 | `--google-location LOC` | `google-vertex` only, e.g. `global`, `eu`, `us`. Defaults to `GOOGLE_CLOUD_LOCATION`, then `global` |
-| `--max-tokens N`, `--max-token-per-module N`, `--max-token-per-leaf-module N`, `--max-depth N` | Stored token limits, see the table above |
+| `--max-tokens N`, `--min-token-per-module N`, `--max-token-per-module N`, `--max-token-per-leaf-module N`, `--max-depth N` | Stored token limits, see the table above |
 | `--use-gitignore` / `--no-gitignore` | Stored default for Git ignore handling |
 | `--prompt-caching` / `--no-prompt-caching` | Stored default for prompt caching |
 

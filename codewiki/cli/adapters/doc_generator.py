@@ -20,7 +20,7 @@ from codewiki.cli.utils.progress import ProgressTracker
 # Import backend modules
 from codewiki.src.be.documentation_generator import DocumentationGenerator
 from codewiki.src.be.doc_layout import list_doc_files
-from codewiki.src.config import DEFAULT_LAYOUT
+from codewiki.src.config import DEFAULT_LAYOUT, DEFAULT_MAX_TOKEN_PER_LEAF_MODULE
 from codewiki.src.config import Config as BackendConfig
 from codewiki.src.config import set_cli_context
 
@@ -154,8 +154,11 @@ class CLIDocumentationGenerator:
                 google_project=self.config.get("google_project", ""),
                 google_location=self.config.get("google_location", ""),
                 max_tokens=self.config.get("max_tokens", 32768),
+                min_token_per_module=self.config.get("min_token_per_module", 1000),
                 max_token_per_module=self.config.get("max_token_per_module", 36369),
-                max_token_per_leaf_module=self.config.get("max_token_per_leaf_module", 16000),
+                max_token_per_leaf_module=self.config.get(
+                    "max_token_per_leaf_module", DEFAULT_MAX_TOKEN_PER_LEAF_MODULE
+                ),
                 max_leaf_nodes_per_cluster=self.config.get("max_leaf_nodes_per_cluster", 600),
                 max_depth=self.config.get("max_depth", 2),
                 request_limit=self.config.get("request_limit", 100),
@@ -341,7 +344,12 @@ class CLIDocumentationGenerator:
                 # Artifact nodes the clustering LLM dropped get a fixed module
                 # so build/CI/config coverage does not depend on the LLM.
                 if getattr(backend_config, "artifacts_enabled", True):
-                    module_tree = ensure_artifact_module(module_tree, leaf_nodes, components)
+                    module_tree = ensure_artifact_module(
+                        module_tree,
+                        leaf_nodes,
+                        components,
+                        min_tokens=backend_config.min_token_per_module,
+                    )
                 # Only freshly clustered trees are deduped: renaming a cached
                 # key whose .md already exists would orphan the doc.
                 from codewiki.src.be.module_naming import dedupe_module_tree_names

@@ -9,6 +9,11 @@ to the backend Config class when running documentation generation.
 from dataclasses import dataclass, field
 
 from codewiki.src.language import format_language_directive
+from codewiki.src.config import (
+    DEFAULT_MAX_TOKEN_PER_LEAF_MODULE,
+    DEFAULT_MIN_TOKEN_PER_MODULE,
+    validate_min_module_tokens,
+)
 from codewiki.cli.utils.validation import (
     validate_model_name,
     validate_url,
@@ -154,8 +159,9 @@ class Configuration:
         google_project: Google Cloud project for google-vertex
         google_location: Vertex AI location for google-vertex
         max_tokens: Maximum tokens for LLM response (default: 32768)
+        min_token_per_module: Minimum code tokens per standalone module (default: 1000)
         max_token_per_module: Maximum tokens per module for clustering (default: 36369)
-        max_token_per_leaf_module: Maximum tokens per leaf module (default: 16000)
+        max_token_per_leaf_module: Base token threshold to allow delegation (default: 8000)
         max_depth: Maximum depth for hierarchical decomposition (default: 2)
         request_limit: Maximum model requests per agent run (default: 100)
         agent_retries: Retries for a failing tool call (default: 3)
@@ -176,8 +182,9 @@ class Configuration:
     google_project: str = ""
     google_location: str = ""
     max_tokens: int = 32768
+    min_token_per_module: int = DEFAULT_MIN_TOKEN_PER_MODULE
     max_token_per_module: int = 36369
-    max_token_per_leaf_module: int = 16000
+    max_token_per_leaf_module: int = DEFAULT_MAX_TOKEN_PER_LEAF_MODULE
     max_depth: int = 2
     request_limit: int = 100
     agent_retries: int = 3
@@ -192,6 +199,7 @@ class Configuration:
 
         try:
             validate_pricing(self.pricing)
+            validate_min_module_tokens(self.min_token_per_module)
         except ValueError as exc:
             raise ConfigurationError(str(exc)) from exc
 
@@ -206,6 +214,8 @@ class Configuration:
             ConfigurationError: If validation fails
         """
         from codewiki.src.be.backend import is_caw_provider, needs_base_url
+
+        validate_min_module_tokens(self.min_token_per_module)
 
         if is_caw_provider(self.provider):
             validate_model_name(self.main_model)
@@ -230,6 +240,7 @@ class Configuration:
             "google_project": self.google_project,
             "google_location": self.google_location,
             "max_tokens": self.max_tokens,
+            "min_token_per_module": self.min_token_per_module,
             "max_token_per_module": self.max_token_per_module,
             "max_token_per_leaf_module": self.max_token_per_leaf_module,
             "max_depth": self.max_depth,
@@ -272,8 +283,11 @@ class Configuration:
             google_project=data.get("google_project", ""),
             google_location=data.get("google_location", ""),
             max_tokens=data.get("max_tokens", 32768),
+            min_token_per_module=data.get("min_token_per_module", DEFAULT_MIN_TOKEN_PER_MODULE),
             max_token_per_module=data.get("max_token_per_module", 36369),
-            max_token_per_leaf_module=data.get("max_token_per_leaf_module", 16000),
+            max_token_per_leaf_module=data.get(
+                "max_token_per_leaf_module", DEFAULT_MAX_TOKEN_PER_LEAF_MODULE
+            ),
             max_depth=data.get("max_depth", 2),
             request_limit=data.get("request_limit", 100),
             agent_retries=data.get("agent_retries", 3),
@@ -342,6 +356,7 @@ class Configuration:
             google_project=self.google_project,
             google_location=self.google_location,
             max_tokens=self.max_tokens,
+            min_token_per_module=self.min_token_per_module,
             max_token_per_module=self.max_token_per_module,
             max_token_per_leaf_module=self.max_token_per_leaf_module,
             max_depth=self.max_depth,

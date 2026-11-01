@@ -10,10 +10,12 @@ from codewiki.src.be.llm_services import call_llm
 from codewiki.src.be.module_naming import resolve_unique_name, sanitize_module_name
 from codewiki.src.be.module_scope import (
     complete_file_candidates,
+    coalesce_small_modules,
     component_files,
     file_token_counts,
     get_module_token_count,
     normalize_module_partition,
+    nearest_module,
     validate_module_file_coverage,
 )
 from codewiki.src.be.prompt_template import format_cluster_prompt, format_super_group_prompt
@@ -21,6 +23,7 @@ from codewiki.src.be.utils import count_tokens
 from codewiki.src.config import (
     DEFAULT_MAX_LEAF_NODES_PER_CLUSTER,
     DEFAULT_MIN_MODULES_FOR_SUPER_GROUPING,
+    DEFAULT_MIN_TOKEN_PER_MODULE,
     Config,
 )
 
@@ -271,9 +274,12 @@ def _batch_fallback_name(
 
 
 def _structural_fallback(
-    candidates: list[str], components: dict[str, Node], threshold: int
+    candidates: list[str],
+    components: dict[str, Node],
+    threshold: int,
+    min_tokens: int = DEFAULT_MIN_TOKEN_PER_MODULE,
 ) -> dict[str, Any]:
-    """Pack path-adjacent whole files by code size when the LLM cannot split."""
+    """Pack whole files by code size, or return {} when no split remains."""
     by_file = defaultdict(list)
     for cid in candidates:
         by_file[components[cid].relative_path].append(cid)
@@ -298,7 +304,8 @@ def _structural_fallback(
             "components": group,
             "children": {},
         }
-    return tree
+    tree, _ = coalesce_small_modules(tree, components, min_tokens, threshold)
+    return tree if len(tree) > 1 else {}
 
 
 def cluster_modules(
@@ -344,6 +351,7 @@ def cluster_modules(
     leaf_files = component_files(leaves, components)
     coverage = len(leaf_files) / len(scope_files) if scope_files else 1.0
     threshold = config.max_token_per_module
+    minimum = config.min_token_per_module
     module_label = current_module_name or "repository"
 
     logger.info(
@@ -370,10 +378,11 @@ def cluster_modules(
             len(candidates),
         )
 
-    if input_tokens <= threshold:
+    if input_tokens <= threshold or input_tokens < 2 * minimum:
         logger.info(
             "Skipping LLM module clustering for %s because %d code tokens fit within the "
-            "%d-token threshold; using whole-module documentation mode.",
+            "%d-token threshold or cannot form two minimum-sized modules; "
+            "using whole-module documentation mode.",
             module_label,
             input_tokens,
             threshold,
@@ -459,7 +468,16 @@ def cluster_modules(
             module_label,
             len(module_tree),
         )
-        module_tree = _structural_fallback(candidates, components, threshold)
+        module_tree = _structural_fallback(candidates, components, threshold, minimum)
+
+    module_tree, _ = coalesce_small_modules(module_tree, components, minimum, threshold)
+    if len(module_tree) < 2:
+        logger.info(
+            "Keeping %s intact: fewer than two modules remain after applying the %d-token minimum.",
+            module_label,
+            minimum,
+        )
+        return {}
 
     logger.info(
         "Module clustering for %s produced %d top-level modules.",
@@ -699,14 +717,16 @@ def ensure_artifact_module(
     leaf_nodes: list[str],
     components: dict[str, Node],
     min_share: float = ARTIFACT_MIN_SHARE,
+    min_tokens: int = DEFAULT_MIN_TOKEN_PER_MODULE,
 ) -> dict[str, Any]:
     """Guarantee that artifact leaf nodes are documented.
 
     Clustering is an LLM call and may drop or scatter artifact nodes despite
     the prompt. If fewer than ``min_share`` of the artifact leaf nodes landed
     in ``module_tree``, add a fixed top-level module holding every unassigned
-    artifact node. Returns ``module_tree`` unchanged in whole-repository mode
-    (empty tree: one agent documents all leaf nodes anyway).
+    artifact node, or merge a bundle below ``min_tokens`` into an existing
+    leaf. Returns ``module_tree`` unchanged in whole-repository mode (empty
+    tree: one agent documents all leaf nodes anyway).
     """
     if not module_tree:
         return module_tree
@@ -737,6 +757,53 @@ def ensure_artifact_module(
         return (rank, node.relative_path, node_id)
 
     unassigned.sort(key=_order)
+    # Resolve existing file owners first: an artifact entry point may share
+    # a file with a source component that the tree already lists.
+    leaves: dict[str, dict[str, Any]] = {}
+    ancestors: dict[str, list[dict[str, Any]]] = {}
+
+    def collect(level: dict[str, Any], parents: list[dict[str, Any]], prefix: str) -> None:
+        for name, info in level.items():
+            key = f"{prefix}/{name}"
+            if info.get("children"):
+                collect(info["children"], parents + [info], key)
+            else:
+                leaves[key] = info
+                ancestors[key] = parents
+
+    def attach(target: str, ids: list[str]) -> None:
+        # Ancestors aggregate their descendants' scope, including on resume.
+        for info in [*ancestors[target], leaves[target]]:
+            info["components"] = sorted(set(info["components"]) | set(ids))
+            info["path"] = _common_path_prefix(
+                sorted(component_files(info["components"], components))
+            )
+
+    collect(module_tree, [], "")
+    scopes = {
+        name: component_files(info["components"], components) for name, info in leaves.items()
+    }
+    owners = {path: name for name, paths in scopes.items() for path in paths}
+    new_files = []
+    for cid in unassigned:
+        owner = owners.get(components[cid].relative_path)
+        if owner is not None:
+            attach(owner, [cid])
+        else:
+            new_files.append(cid)
+    unassigned = new_files
+    if not unassigned:
+        return module_tree
+
+    unassigned_files = component_files(unassigned, components)
+    tokens = get_module_token_count(components, unassigned_files)
+    if tokens < min_tokens:
+        sizes = file_token_counts(components)
+        loads = {name: sum(sizes[path] for path in paths) for name, paths in scopes.items()}
+        target = nearest_module(unassigned_files, scopes, loads)
+        attach(target, unassigned)
+        logger.info("Merged %d artifact tokens into existing leaf '%s'", tokens, target)
+        return module_tree
     name = resolve_unique_name(ARTIFACT_MODULE_NAME, None, collect_module_tree_names(module_tree))
     module_tree[name] = {
         "path": _common_path_prefix([components[n].relative_path for n in unassigned]) or ".",

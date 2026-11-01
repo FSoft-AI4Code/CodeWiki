@@ -15,6 +15,7 @@ from typing import Any
 
 from codewiki.src.be.dependency_analyzer.models.core import Node
 from codewiki.src.be.utils import count_tokens
+from codewiki.src.config import DEFAULT_MIN_TOKEN_PER_MODULE, Config
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,104 @@ def get_module_token_count(components: dict[str, Node], scope_files: set[str] | 
         for node in components.values()
         if scope_files is None or node.relative_path in scope_files
     )
+
+
+def can_split_module(
+    components: dict[str, Node],
+    ids: list[str],
+    config: Config,
+    depth: int,
+    *,
+    max_depth: int | None = None,
+) -> bool:
+    """Use the same cost and depth gate for every documentation agent."""
+    files = component_files(ids, components)
+    limit = config.max_depth if max_depth is None else max_depth
+    minimum = getattr(config, "min_token_per_module", DEFAULT_MIN_TOKEN_PER_MODULE)
+    return (
+        len(files) > 1
+        and depth < limit
+        and get_module_token_count(components, files)
+        >= max(2 * minimum, config.max_token_per_leaf_module * depth)
+    )
+
+
+def _directory_proximity(left: str, right: str) -> int:
+    depth = 0
+    for a, b in zip(left.split("/")[:-1], right.split("/")[:-1]):
+        if a != b:
+            break
+        depth += 1
+    return depth
+
+
+def nearest_module(
+    files: set[str],
+    groups: dict[str, set[str]],
+    loads: dict[str, int],
+    *,
+    tokens: int = 0,
+    max_tokens: int | None = None,
+) -> str:
+    """Prefer a fitting sibling, then directory proximity, load and name."""
+    return min(
+        groups,
+        key=lambda name: (
+            max_tokens is not None and loads[name] + tokens > max_tokens,
+            -max(
+                (_directory_proximity(left, right) for left in files for right in groups[name]),
+                default=0,
+            ),
+            loads[name],
+            name,
+        ),
+    )
+
+
+def coalesce_small_modules(
+    tree: dict[str, Any],
+    components: dict[str, Node],
+    min_tokens: int,
+    max_tokens: int | None = None,
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """Coalesce a flat file partition before children or pages are created.
+
+    Returns the partition and reasons for removed names. A singleton is left
+    for the caller to reject as a non-split. No input dictionaries are mutated.
+    """
+    result = {name: {**info, "components": list(info["components"])} for name, info in tree.items()}
+    sizes = file_token_counts(components)
+    files = {name: component_files(info["components"], components) for name, info in result.items()}
+    loads = {name: sum(sizes[path] for path in paths) for name, paths in files.items()}
+    merged: dict[str, tuple[int, str]] = {}
+    while len(result) > 1:
+        donor = min(result, key=lambda name: (loads[name], name))
+        if loads[donor] >= min_tokens:
+            break
+        target = nearest_module(
+            files[donor],
+            {name: paths for name, paths in files.items() if name != donor},
+            loads,
+            tokens=loads[donor],
+            max_tokens=max_tokens,
+        )
+        merged[donor] = (loads[donor], target)
+        files[target].update(files.pop(donor))
+        loads[target] += loads.pop(donor)
+        result[target]["components"] = sorted(
+            set(result[target]["components"]) | set(result.pop(donor)["components"]),
+            key=lambda cid: (components[cid].relative_path, cid),
+        )
+        result[target]["path"] = posixpath.commonpath(sorted(files[target]))
+        logger.info(
+            "Merged undersized module '%s' into '%s' (minimum %d tokens)", donor, target, min_tokens
+        )
+    reasons = {}
+    for donor, (tokens, target) in merged.items():
+        while target in merged:
+            target = merged[target][1]
+        reasons[donor] = f"{tokens} code tokens below minimum {min_tokens}; merged into '{target}'"
+    return result, reasons
 
 
 def complete_file_candidates(
@@ -194,3 +293,37 @@ def prepare_submodule_partition(
         {name: {"components": ids} for name, ids in specs.items()}, candidates, components
     )
     return {name: info["components"] for name, info in normalized.items()}
+
+
+def prepare_sized_submodule_partition(
+    specs: dict[str, list[str]],
+    parent_ids: list[str],
+    components: dict[str, Node],
+    existing_children: dict[str, Any],
+    min_tokens: int,
+    max_tokens: int | None = None,
+) -> tuple[dict[str, list[str]], dict[str, str]]:
+    """Plan a meaningful delegation, including explanations before any mutation."""
+    partition = prepare_submodule_partition(specs, parent_ids, components, existing_children)
+    tree, reasons = coalesce_small_modules(
+        {name: {"components": ids} for name, ids in partition.items()},
+        components,
+        min_tokens,
+        max_tokens,
+    )
+    for name in specs.keys() - partition.keys():
+        reasons[name] = "no unassigned files in the current module scope"
+    if len(tree) < 2:
+        for name in partition:
+            tokens = get_module_token_count(
+                components, component_files(partition[name], components)
+            )
+            detail = (
+                f"{tokens} code tokens below minimum {min_tokens}; " if tokens < min_tokens else ""
+            )
+            reasons[name] = (
+                detail + "partition has fewer than two viable children after applying the "
+                f"{min_tokens}-token minimum; no child pages created, write these files directly in the parent"
+            )
+        return {}, reasons
+    return {name: info["components"] for name, info in tree.items()}, reasons

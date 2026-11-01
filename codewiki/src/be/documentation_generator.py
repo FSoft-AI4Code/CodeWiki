@@ -533,7 +533,12 @@ class DocumentationGenerator:
                 # Artifact nodes the clustering LLM dropped get a fixed module
                 # so build/CI/config coverage does not depend on the LLM.
                 if getattr(self.config, "artifacts_enabled", True):
-                    module_tree = ensure_artifact_module(module_tree, leaf_nodes, components)
+                    module_tree = ensure_artifact_module(
+                        module_tree,
+                        leaf_nodes,
+                        components,
+                        min_tokens=self.config.min_token_per_module,
+                    )
                 # Only freshly clustered trees are deduped: renaming a cached
                 # key whose .md already exists would orphan the doc.
                 module_tree = dedupe_module_tree_names(module_tree)

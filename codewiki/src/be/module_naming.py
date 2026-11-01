@@ -209,7 +209,9 @@ def skipped_report(skipped: dict[str, str], parent_doc: str) -> str:
     items = ", ".join(f"'{name}' ({reason})" for name, reason in skipped.items())
     return (
         f"Skipped sub-modules: {items}. Do NOT call generate_sub_module_documentation again "
-        f"for these; link the existing pages from `{parent_doc}` instead."
+        f"for these. Link existing pages only when reported as already documented; "
+        f"document undelegated files directly in `{parent_doc}`. "
+        "For merged requests, use the surviving module page reported above."
     )
 
 

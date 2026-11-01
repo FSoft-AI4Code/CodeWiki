@@ -42,6 +42,7 @@ Generate documentation following this structure:
 1. Analyze the provided code components and module structure, explore the not given dependencies between the components if needed
 2. Create the main `{doc_file}` file with overview and architecture in working directory
 3. Use `generate_sub_module_documentation` to generate detailed sub-modules documentation for COMPLEX modules which at least have more than 1 code file and are able to clearly split into sub-modules. Sub-module names must be unique across the whole wiki ({uniqueness_reason}) — prefer names prefixed with the current module name, e.g. `{module_name}_search`
+   The tool enforces minimum module sizes and rejects partitions with fewer than two viable children. Small groups may be merged into siblings; use only the final pages reported by the tool. If delegation is rejected, document the code directly in the current page.
 4. Include relevant Mermaid diagrams throughout the documentation
 5. After all sub-modules are documented, adjust `{doc_file}` with ONLY ONE STEP to ensure all generated files including sub-modules documentation are properly cross-refered, using the final file names reported by `generate_sub_module_documentation`
 </WORKFLOW>

@@ -147,6 +147,7 @@ class ConfigManager:
         use_gitignore: Optional[bool] = None,
         prompt_caching: Optional[bool] = None,
         pricing: Optional[dict] = None,
+        min_token_per_module: Optional[int] = None,
     ):
         """
         Save configuration to file and keyring.
@@ -159,6 +160,7 @@ class ConfigManager:
             fallback_model: Fallback model
             default_output: Default output directory
             max_tokens: Maximum tokens for LLM response
+            min_token_per_module: Minimum code tokens for a standalone module
             max_token_per_module: Maximum tokens per module for clustering
             max_token_per_leaf_module: Maximum tokens per leaf module
             max_depth: Maximum depth for hierarchical decomposition
@@ -220,6 +222,14 @@ class ConfigManager:
             self._config.default_output = default_output
         if max_tokens is not None:
             self._config.max_tokens = max_tokens
+        if min_token_per_module is not None:
+            from codewiki.src.config import validate_min_module_tokens
+
+            try:
+                validate_min_module_tokens(min_token_per_module)
+            except ValueError as exc:
+                raise ConfigurationError(str(exc)) from exc
+            self._config.min_token_per_module = min_token_per_module
         if max_token_per_module is not None:
             self._config.max_token_per_module = max_token_per_module
         if max_token_per_leaf_module is not None:

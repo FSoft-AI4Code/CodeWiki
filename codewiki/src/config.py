@@ -25,8 +25,9 @@ DEFAULT_LAYOUT = LAYOUT_HIERARCHICAL
 MAX_DEPTH = 2
 # Default max token settings
 DEFAULT_MAX_TOKENS = 32_768
+DEFAULT_MIN_TOKEN_PER_MODULE = 1_000
 DEFAULT_MAX_TOKEN_PER_MODULE = 36_369
-DEFAULT_MAX_TOKEN_PER_LEAF_MODULE = 4_000
+DEFAULT_MAX_TOKEN_PER_LEAF_MODULE = 8_000
 # pydantic-ai caps each agent run at 50 model requests by default; complex
 # modules that read many components and delegate sub-modules can need more.
 DEFAULT_REQUEST_LIMIT = 100
@@ -76,6 +77,11 @@ LLM_API_KEY = os.getenv("LLM_API_KEY", "sk-1234")
 ATLAS_CLOUD_BASE_URL = "https://api.atlascloud.ai/v1"
 
 
+def validate_min_module_tokens(value: int) -> None:
+    if type(value) is not int or value < 1:
+        raise ValueError("min_token_per_module must be a positive integer")
+
+
 @dataclass
 class Config:
     """Configuration class for CodeWiki."""
@@ -105,6 +111,7 @@ class Config:
     google_location: str = ""
     # Max token settings
     max_tokens: int = DEFAULT_MAX_TOKENS
+    min_token_per_module: int = DEFAULT_MIN_TOKEN_PER_MODULE
     max_token_per_module: int = DEFAULT_MAX_TOKEN_PER_MODULE
     max_token_per_leaf_module: int = DEFAULT_MAX_TOKEN_PER_LEAF_MODULE
     min_modules_for_super_grouping: int = DEFAULT_MIN_MODULES_FOR_SUPER_GROUPING
@@ -129,6 +136,9 @@ class Config:
     with_prose: bool = False
     # Docs layout (LAYOUT_HIERARCHICAL or LAYOUT_FLAT)
     layout: str = DEFAULT_LAYOUT
+
+    def __post_init__(self):
+        validate_min_module_tokens(self.min_token_per_module)
 
     @property
     def artifact_exclude(self) -> list[str] | None:
@@ -229,6 +239,9 @@ class Config:
             main_model=MAIN_MODEL,
             cluster_model=CLUSTER_MODEL,
             fallback_model=FALLBACK_MODEL_1,
+            min_token_per_module=getattr(
+                args, "min_token_per_module", DEFAULT_MIN_TOKEN_PER_MODULE
+            ),
             use_gitignore=getattr(args, "use_gitignore", True),
             layout=getattr(args, "layout", DEFAULT_LAYOUT),
         )
@@ -265,6 +278,7 @@ class Config:
         with_prose: bool = False,
         layout: str = DEFAULT_LAYOUT,
         pricing: dict | None = None,
+        min_token_per_module: int = DEFAULT_MIN_TOKEN_PER_MODULE,
     ) -> "Config":
         """
         Create configuration for CLI context.
@@ -285,6 +299,7 @@ class Config:
             google_project: Google Cloud project for the google-vertex provider
             google_location: Vertex AI location for the google-vertex provider
             max_tokens: Maximum tokens for LLM response
+            min_token_per_module: Minimum code tokens for a standalone module
             max_token_per_module: Maximum tokens per module for clustering
             max_token_per_leaf_module: Maximum tokens per leaf module
             min_modules_for_super_grouping: Super-group the top level into
@@ -330,6 +345,7 @@ class Config:
             google_project=google_project,
             google_location=google_location,
             max_tokens=max_tokens,
+            min_token_per_module=min_token_per_module,
             max_token_per_module=max_token_per_module,
             max_token_per_leaf_module=max_token_per_leaf_module,
             min_modules_for_super_grouping=min_modules_for_super_grouping,
