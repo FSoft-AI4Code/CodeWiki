@@ -18,6 +18,10 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
+# tree-sitter-language-pack 1.x downloads each grammar on first use. Fetch the
+# ones the analyzers load at build time, so the image runs offline.
+RUN python -c "import tree_sitter_language_pack as t; t.download(['dart', 'go', 'javascript', 'typescript', 'vue', 'zig'])"
+
 # Copy application code
 COPY codewiki ./codewiki
 COPY img ./img
