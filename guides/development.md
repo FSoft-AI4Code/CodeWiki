@@ -123,6 +123,8 @@ Analyzers are standalone classes, one file per language. Follow
    and `requirements.txt`, or take the grammar from
    `tree-sitter-language-pack` (already a dependency) with
    `get_parser("<lang>")`, as `analyzers/dart.py` and `analyzers/go.py` do.
+   The pack (1.x) downloads a grammar on first use, so also add the name to
+   the `t.download([...])` list in `docker/Dockerfile`.
 2. **Analyzer.** Create `analyzers/<lang>.py` with a
    `TreeSitter<Lang>Analyzer` class that extracts components and
    relationships, plus a module-level `analyze_<lang>_file(...)` function.
