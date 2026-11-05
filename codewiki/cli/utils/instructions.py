@@ -166,6 +166,7 @@ def display_post_generation_instructions(
     github_pages: bool = False,
     files_generated: list = None,
     statistics: dict = None,
+    techdocs=None,
 ):
     """
     Display post-generation instructions.
@@ -176,6 +177,7 @@ def display_post_generation_instructions(
         repo_url: GitHub repository URL (optional)
         branch_name: Git branch name (optional)
         github_pages: Whether GitHub Pages HTML was generated
+        techdocs: TechDocsResult of the --techdocs export, if one was written
         files_generated: List of generated files
         statistics: Generation statistics
     """
@@ -209,6 +211,14 @@ def display_post_generation_instructions(
             seconds = int(statistics["generation_time"] % 60)
             click.echo(f"  Generation time:   {minutes} minutes {seconds} seconds")
         _echo_usage(statistics)
+        click.echo()
+
+    if techdocs is not None:
+        from codewiki.cli.commands.techdocs import echo_techdocs_next_steps
+
+        click.secho("Backstage TechDocs:", fg="cyan", bold=True)
+        click.echo(f"  {techdocs.pages} pages in {techdocs.out_dir}")
+        echo_techdocs_next_steps(techdocs)
         click.echo()
 
     # Next steps

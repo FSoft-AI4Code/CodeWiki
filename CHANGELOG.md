@@ -8,6 +8,15 @@ uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Backstage TechDocs output.** `codewiki generate --techdocs` (or
+  `codewiki techdocs DOCS_DIR OUT_DIR` on existing docs, with no LLM calls)
+  writes an MkDocs project that `techdocs-cli generate` builds as is:
+  `mkdocs.yml` with the `techdocs-core` plugin and the module tree as the nav,
+  plus `docs/` with the overview as `index.md`. Each page gets front matter, a
+  provenance banner (commit, date, model) and a collapsible list of the
+  components it documents, linked to the source at the documented commit.
+  JSON files and `temp/` are left out
+  ([#145](https://github.com/FSoft-AI4Code/CodeWiki/issues/145)).
 - **Google provider.** `google` (Gemini API key) and `google-vertex` (Vertex AI
   with Google credentials: ADC or Workload Identity Federation, plus
   `--google-project` and `--google-location`) run on Gemini without a base

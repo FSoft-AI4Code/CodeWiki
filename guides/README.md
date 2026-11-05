@@ -14,6 +14,7 @@ CodeWiki's own generated documentation and is not edited by hand.
 | [Artifact-aware generation](artifact-aware-generation.md) | Understand how build, CI, container, and config files get documented, and how to tune or turn it off |
 | [Incremental updates](incremental-updates.md) | Keep documentation current with `--update` and understand what it will and will not touch |
 | [MCP / IDE-driven mode](mcp-ide-mode.md) | Run CodeWiki as an MCP server inside Cursor, Claude Desktop, Claude Code, or CodeBuddy, with no LLM configuration |
+| [Backstage TechDocs](backstage-techdocs.md) | Publish the generated docs in Backstage with `--techdocs` or `codewiki techdocs` |
 | [Development guide](development.md) | Change CodeWiki: project layout, pipeline, adding a language, tests, releasing |
 | [Docker setup](docker.md) | Run the web application in a container |
 

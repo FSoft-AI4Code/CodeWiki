@@ -238,6 +238,18 @@ def _invalidate_affected_modules(output_dir: Path, changed_files: list[str], log
     help="Generate index.html for GitHub Pages deployment",
 )
 @click.option(
+    "--techdocs",
+    is_flag=True,
+    help="Also export a Backstage TechDocs project (mkdocs.yml + docs/) to --techdocs-dir",
+)
+@click.option(
+    "--techdocs-dir",
+    type=click.Path(file_okay=False),
+    default="techdocs",
+    show_default=True,
+    help="Where --techdocs writes the TechDocs project (outside the --output directory)",
+)
+@click.option(
     "--no-cache",
     is_flag=True,
     help="Force full regeneration, ignoring cache",
@@ -459,6 +471,8 @@ def generate_command(
     output: str,
     create_branch: bool,
     github_pages: bool,
+    techdocs: bool,
+    techdocs_dir: str,
     no_cache: bool,
     include: str | None,
     exclude: str | None,
@@ -511,6 +525,10 @@ def generate_command(
     \b
     # With git branch creation and GitHub Pages
     $ codewiki generate --create-branch --github-pages
+
+    \b
+    # Also export a Backstage TechDocs project to ./techdocs
+    $ codewiki generate --techdocs
 
     \b
     # Force full regeneration
@@ -606,6 +624,16 @@ def generate_command(
         # Validate output directory
         output_dir = Path(output).expanduser().resolve()
         check_writable_output(output_dir.parent)
+        techdocs_out = None
+        if techdocs:
+            from codewiki.cli.techdocs_generator import check_output_dir
+
+            techdocs_out = Path(techdocs_dir).expanduser().resolve()
+            # Fail before the LLM run, not after it
+            try:
+                check_output_dir(techdocs_out, output_dir)
+            except ValueError as e:
+                raise ConfigurationError(f"--techdocs-dir: {e}") from e
 
         logger.success(f"Output directory: {output_dir}")
 
@@ -854,6 +882,7 @@ def generate_command(
             },
             verbose=verbose,
             generate_html=github_pages,
+            techdocs_dir=techdocs_out,
             commit_id=commit_id,
         )
 
@@ -883,6 +912,7 @@ def generate_command(
             repo_url=repo_url,
             branch_name=branch_name,
             github_pages=github_pages,
+            techdocs=generator.techdocs_result,
             files_generated=job.files_generated,
             statistics={
                 "module_count": job.module_count,

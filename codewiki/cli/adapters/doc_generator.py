@@ -48,6 +48,7 @@ class CLIDocumentationGenerator:
         verbose: bool = False,
         generate_html: bool = False,
         commit_id: str | None = None,
+        techdocs_dir: Path | None = None,
     ):
         """
         Initialize the CLI documentation generator.
@@ -58,6 +59,7 @@ class CLIDocumentationGenerator:
             config: LLM configuration
             verbose: Enable verbose output
             generate_html: Whether to generate HTML viewer
+            techdocs_dir: Export a Backstage TechDocs project here (None: don't)
             commit_id: Git commit SHA for incremental update tracking
         """
         self.repo_path = repo_path
@@ -65,6 +67,8 @@ class CLIDocumentationGenerator:
         self.config = config
         self.verbose = verbose
         self.generate_html = generate_html
+        self.techdocs_dir = techdocs_dir
+        self.techdocs_result = None
         self.commit_id = commit_id
         self.progress_tracker = ProgressTracker(total_stages=5, verbose=verbose)
         self.job = DocumentationJob()
@@ -180,6 +184,9 @@ class CLIDocumentationGenerator:
             # Stage 4: HTML Generation (optional)
             if self.generate_html:
                 self._run_html_generation()
+
+            if self.techdocs_dir is not None:
+                self._run_techdocs_generation()
 
             # Stage 5: Finalization (metadata already created by backend)
             self._finalize_job()
@@ -580,6 +587,39 @@ class CLIDocumentationGenerator:
 
         if self.verbose:
             self.progress_tracker.update_stage(1.0, "Generated index.html")
+
+        self.progress_tracker.complete_stage()
+
+    def _run_techdocs_generation(self):
+        """Export the docs as a Backstage TechDocs project (no LLM calls)."""
+        self.progress_tracker.start_stage(4, "TechDocs Export")
+
+        from codewiki.cli.techdocs_generator import detect_repo_url, generate_techdocs
+
+        try:
+            self.techdocs_result = generate_techdocs(
+                docs_dir=self.output_dir,
+                out_dir=self.techdocs_dir,
+                site_name=self.repo_path.name,
+                repo_url=detect_repo_url(str(self.repo_path)),
+            )
+        except (OSError, ValueError) as e:
+            # The docs are already written; a failed export must not fail the run
+            import click
+
+            click.secho(
+                f"⚠ TechDocs export failed: {e}\n"
+                f"  Retry with: codewiki techdocs {self.output_dir} {self.techdocs_dir}",
+                fg="yellow",
+                err=True,
+            )
+            self.progress_tracker.complete_stage()
+            return
+
+        if self.verbose:
+            self.progress_tracker.update_stage(
+                1.0, f"Wrote {self.techdocs_result.pages} pages to {self.techdocs_dir}"
+            )
 
         self.progress_tracker.complete_stage()
 

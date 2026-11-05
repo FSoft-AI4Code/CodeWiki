@@ -82,6 +82,7 @@ Atlas Cloud, and Codex are also supported. See [Providers and models](./guides/p
 cd /path/to/your/project
 codewiki generate                     # writes ./docs/
 codewiki generate --github-pages      # also writes an HTML viewer
+codewiki generate --techdocs          # also exports a Backstage TechDocs site to ./techdocs
 codewiki generate --update            # later: refresh after code changes
 ```
 
@@ -181,6 +182,12 @@ its sub-modules (`auth.md`, `auth/login.md`). `--flat` puts every page in
 `./docs` instead, which helps small models that get relative links wrong.
 `--update` keeps the layout the docs were generated with.
 
+`--techdocs` (or `codewiki techdocs` on existing docs) also writes a
+[Backstage TechDocs](https://backstage.io/docs/features/techdocs/) project,
+`./techdocs/mkdocs.yml` plus `./techdocs/docs/`, with `overview.md` as
+`index.md` and the module tree as the navigation. See
+[Backstage TechDocs](./guides/backstage-techdocs.md).
+
 This repository's own output is checked in under [`./docs/`](./docs/).
 
 ## Benchmark results
@@ -244,6 +251,7 @@ JavaScript, TypeScript). Artifacts lift the build and testing topics, which
 | [Artifact-aware generation](./guides/artifact-aware-generation.md) | what gets documented beyond code, and how to tune it |
 | [Incremental updates](./guides/incremental-updates.md) | how `--update` works, thresholds, the update record |
 | [MCP / IDE-driven mode](./guides/mcp-ide-mode.md) | Cursor, Claude Desktop, Claude Code, CodeBuddy |
+| [Backstage TechDocs](./guides/backstage-techdocs.md) | publish the docs in a Backstage developer portal |
 | [Development guide](./guides/development.md) | layout, pipeline, adding a language, tests, releasing |
 | [Docker setup](./guides/docker.md) | the web application in a container |
 | [CodeWikiBench](https://github.com/FSoft-AI4Code/CodeWikiBench) | the benchmark |
