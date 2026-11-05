@@ -52,6 +52,7 @@ tests/*
 !tests/test_min_module_size.py
 !tests/test_doc_write_guard.py
 !tests/test_overview_generation.py
+!tests/test_techdocs.py
 
 # Jupyter
 *.ipynb

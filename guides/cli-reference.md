@@ -30,6 +30,8 @@ the repository first.
 | `--output`, `-o PATH` | `docs` | Where the documentation is written |
 | `--create-branch` | off | Create a git branch for the documentation changes |
 | `--github-pages` | off | Also write `index.html`, a static viewer for GitHub Pages |
+| `--techdocs` | off | Also export a Backstage TechDocs project (`mkdocs.yml` + `docs/`) after generation. See [`codewiki techdocs`](#codewiki-techdocs) |
+| `--techdocs-dir PATH` | `techdocs` | Where `--techdocs` writes. Must be outside `--output` |
 | `--no-cache` | off | Ignore cached results and rebuild everything |
 | `--verbose`, `-v` | off | Show progress details and debug output |
 | `--prompt-caching` / `--no-prompt-caching` | enabled | Add prompt-cache breakpoints to agent calls. Falls back to normal calls if the provider rejects them |
@@ -160,6 +162,7 @@ apply these rules throughout an existing tree.
 ```bash
 codewiki generate                                   # plain build into ./docs
 codewiki generate --github-pages --create-branch    # with viewer, on a new branch
+codewiki generate --techdocs                        # also export ./techdocs for Backstage
 codewiki generate --update                          # refresh after code changes
 codewiki generate --compare-to abc1234              # refresh relative to a known commit
 codewiki generate --no-artifacts                    # code only, 1.x behaviour
@@ -170,6 +173,27 @@ codewiki generate --language ja                     # docs in Japanese
 codewiki generate --flat                            # all pages in ./docs, no folders
 codewiki generate --max-tokens 16384 --max-depth 3
 ```
+
+---
+
+## `codewiki techdocs`
+
+```bash
+codewiki techdocs [DOCS_DIR] [OUT_DIR]   # defaults: docs techdocs
+```
+
+Exports existing CodeWiki docs as a Backstage TechDocs (MkDocs) project. No
+LLM is called, so run it again after `codewiki generate --update`. The source
+docs are never modified, and the export only ever replaces an `OUT_DIR/docs`
+folder that an earlier export created.
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `--site-name TEXT` | repository folder name | `site_name` in `mkdocs.yml` |
+| `--repo-url URL` | the git `origin` remote | Repository link, and the base for source and commit links |
+| `--source-url-template TEXT` | detected for GitHub, GitLab, bitbucket.org | Source link format with `{repo}`, `{ref}` and `{path}`, e.g. `https://bb.example.com/projects/P/repos/R/browse/{path}?at={ref}` |
+
+See [Backstage TechDocs](backstage-techdocs.md).
 
 ---
 
