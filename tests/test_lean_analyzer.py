@@ -229,7 +229,7 @@ def last := top
 
 
 def test_masking_keeps_lines_and_byte_offsets() -> None:
-    source = 'def a := "-- not a comment" -- é comment\n/- block /- nested -/ -/ def b := \'x\'\n'
+    source = "def a := \"-- not a comment\" -- é comment\n/- block /- nested -/ -/ def b := 'x'\n"
     masked = mask_source(source)
     assert masked.text.count("\n") == source.count("\n")
     assert len(masked.text.encode("utf8")) == len(source.encode("utf8"))
