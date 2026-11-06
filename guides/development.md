@@ -122,7 +122,12 @@ Analyzers are standalone classes, one file per language. Follow
 1. **Grammar.** Add the `tree-sitter-<lang>` package to `pyproject.toml`
    and `requirements.txt`, or take the grammar from
    `tree-sitter-language-pack` (already a dependency) with
-   `get_parser("<lang>")`, as `analyzers/dart.py` and `analyzers/go.py` do.
+   `get_pack_parser("<lang>")` from `utils/grammars.py`, as
+   `analyzers/dart.py` and `analyzers/go.py` do. Add the language and its
+   grammars to `PACK_GRAMMARS_BY_LANGUAGE` in the same file. The pack (1.x) downloads a grammar on first
+   use, so also add the name to the `t.download([...])` list in
+   `docker/Dockerfile`. `tests/test_pack_grammars.py` checks that the two
+   lists match.
 2. **Analyzer.** Create `analyzers/<lang>.py` with a
    `TreeSitter<Lang>Analyzer` class that extracts components and
    relationships, plus a module-level `analyze_<lang>_file(...)` function.
@@ -138,8 +143,8 @@ Analyzers are standalone classes, one file per language. Follow
    snippets that check component and edge extraction. See
    `tests/test_scala_analyzer.py`, `tests/test_ruby_analyzer.py`,
    `tests/test_rust_analyzer.py`, `tests/test_dart_analyzer.py`,
-   `tests/test_go_analyzer.py`, `tests/test_zig_analyzer.py`, and
-   `tests/test_vue_analyzer.py`.
+   `tests/test_go_analyzer.py`, `tests/test_zig_analyzer.py`,
+   `tests/test_lean_analyzer.py`, and `tests/test_vue_analyzer.py`.
 6. **Docs.** Add the language to the README list.
 
 ## Tests and lint

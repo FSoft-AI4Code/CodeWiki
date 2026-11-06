@@ -171,6 +171,7 @@ def detect_supported_languages(directory: Path) -> list[tuple[str, int]]:
         "Dart": [".dart"],
         "Go": [".go"],
         "Zig": [".zig"],
+        "Lean": [".lean"],
         "Vue": [".vue"],
     }
 

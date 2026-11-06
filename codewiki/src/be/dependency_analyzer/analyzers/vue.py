@@ -37,7 +37,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 
-from tree_sitter_language_pack import get_parser
+from codewiki.src.be.dependency_analyzer.utils.grammars import get_pack_parser
 
 from codewiki.src.be.dependency_analyzer.models.core import CallRelationship, Node
 
@@ -107,7 +107,7 @@ _JS_KEYWORDS = {
 
 @lru_cache(maxsize=None)
 def _parser(language: str):
-    return get_parser(language)
+    return get_pack_parser(language)
 
 
 def _is_sfc(target: str) -> bool:

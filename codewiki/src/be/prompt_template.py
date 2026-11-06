@@ -400,6 +400,7 @@ EXTENSION_TO_LANGUAGE = {
     ".dart": "dart",
     ".go": "go",
     ".zig": "zig",
+    ".lean": "lean",
     ".vue": "vue",
     ".php": "php",
     ".phtml": "php",

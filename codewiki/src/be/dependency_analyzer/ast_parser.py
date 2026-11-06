@@ -230,6 +230,7 @@ class DependencyParser:
             ".dart",
             ".go",
             ".zig",
+            ".lean",
             ".vue",
         ]
         for ext in extensions:

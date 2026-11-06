@@ -5,6 +5,7 @@ from pathlib import Path
 PHP_TEMPLATE_PATTERNS = {".blade.php", ".phtml", ".twig.php"}
 PHP_TEMPLATE_DIRECTORIES = {"views", "templates", "resources/views"}
 ZIG_SKIPPED_DIRS = {"zig-cache", ".zig-cache", "zig-out"}
+LEAN_SKIPPED_DIRS = {".lake", "lake-packages"}
 
 
 def is_skipped_go_file(relative_path: str) -> bool:
@@ -15,6 +16,11 @@ def is_skipped_go_file(relative_path: str) -> bool:
 
 def is_skipped_zig_file(relative_path: str) -> bool:
     return any(part in ZIG_SKIPPED_DIRS for part in Path(relative_path).parts[:-1])
+
+
+def is_skipped_lean_file(relative_path: str) -> bool:
+    """Lake's build folder and its package checkouts are not project code."""
+    return any(part in LEAN_SKIPPED_DIRS for part in Path(relative_path).parts[:-1])
 
 
 def is_php_template_file(file_path: str) -> bool:
@@ -32,6 +38,8 @@ def is_skipped_source_file(file_info: dict, base_dir: str) -> bool:
         return is_skipped_go_file(file_info["path"])
     if language == "zig":
         return is_skipped_zig_file(file_info["path"])
+    if language == "lean":
+        return is_skipped_lean_file(file_info["path"])
     if language == "php":
         return is_php_template_file(str(Path(base_dir) / file_info["path"]))
     return False

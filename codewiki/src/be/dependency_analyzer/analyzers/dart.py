@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
-from tree_sitter_language_pack import get_parser
+from codewiki.src.be.dependency_analyzer.utils.grammars import get_pack_parser
 
 from codewiki.src.be.dependency_analyzer.analyzers.dart_flutter import (
     COMPOSITION_METHOD_RE,
@@ -212,7 +212,7 @@ def _local_declared_types(*roots) -> dict[str, str]:
 
 @lru_cache(maxsize=1)
 def _dart_parser():
-    return get_parser("dart")
+    return get_pack_parser("dart")
 
 
 def _text(node) -> str:
@@ -762,6 +762,17 @@ class TreeSitterDartAnalyzer:
             return
         caller, owner = target.caller, target.owner
         line = head.start_point[0] + 1
+        # `Foo<T>(x)` / `foo<T>(x)`: the type arguments sit in the call's
+        # argument_part (grammars that misparse it as a relational expression
+        # are handled by _handle_generic_invocation).
+        for token_kind, _, token_node in tokens:
+            if token_kind != "call":
+                continue
+            type_args = _first_child(token_node, "type_arguments")
+            if type_args is not None:
+                for ref in _descendants(type_args):
+                    if ref.type == "type_identifier":
+                        self._add_type_edge(caller, _text(ref), line)
         name = _text(head)
         if head.type == "identifier" and name in self.import_prefixes and tokens[0][0] == "member":
             name, tokens = tokens[0][1] or "", tokens[1:]

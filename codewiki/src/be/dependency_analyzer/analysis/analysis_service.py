@@ -365,6 +365,7 @@ class AnalysisService:
             "scala",
             "dart",
             "zig",
+            "lean",
             "vue",
         }
 
@@ -392,6 +393,7 @@ class AnalysisService:
             "dart",
             "go",
             "zig",
+            "lean",
             "vue",
         ]
 

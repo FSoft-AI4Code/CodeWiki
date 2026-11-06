@@ -37,6 +37,7 @@ SUPPORTED_EXTENSIONS = {
     ".dart",  # Dart
     ".go",  # Go
     ".zig",  # Zig
+    ".lean",  # Lean 4
     ".vue",  # Vue single-file components
 }
 
