@@ -93,6 +93,17 @@ uses [Semantic Versioning](https://semver.org/).
   `--update` keeps it, so existing flat docs stay flat. The GitHub Pages
   viewer, the web app and the MCP tools (`doc_path` in
   `processing_order.json`) follow the layout.
+- **tree-sitter-language-pack 1.x.** The pin moves from `>=0.8.0,<0.9.0` to
+  `>=1.23.1,<2.0.0`, which brings grammars 0.8 does not ship (Lean, among
+  others). 1.x downloads a grammar on first use and caches it under
+  `tree_sitter_language_pack.cache_dir()`, so the first run of the Dart, Go,
+  JavaScript/TypeScript-in-Vue, Vue and Zig analyzers needs network access;
+  the Docker image fetches them at build time. Without network access and
+  without a cached grammar, the analysis stops before the first file with one
+  error that names the grammar, the cache folder and the `t.download([...])`
+  command, instead of a traceback per file. The 1.x Dart grammar parses
+  `Foo<T>(x)` as a call instead of a relational expression, and the Dart
+  analyzer now takes the type-argument edges from that call too.
 
 ## [2.0.0] - 2026-09-18
 

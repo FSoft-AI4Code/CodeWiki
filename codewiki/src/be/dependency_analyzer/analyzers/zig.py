@@ -47,7 +47,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 
-from tree_sitter_language_pack import get_parser
+from codewiki.src.be.dependency_analyzer.utils.grammars import get_pack_parser
 
 from codewiki.src.be.dependency_analyzer.models.core import CallRelationship, Node
 from codewiki.src.be.dependency_analyzer.utils.file_selection import is_skipped_zig_file
@@ -107,7 +107,7 @@ def _build_zig_modules(repo_path: str) -> dict[str, str]:
 
 
 def _zig_parser():
-    return get_parser("zig")
+    return get_pack_parser("zig")
 
 
 def _alias_chain(var_decl) -> tuple[tuple[str, str], tuple[str, ...]] | None:
