@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
-from tree_sitter_language_pack import get_parser
+from codewiki.src.be.dependency_analyzer.utils.grammars import get_pack_parser
 
 from codewiki.src.be.dependency_analyzer.analyzers.dart_flutter import (
     COMPOSITION_METHOD_RE,
@@ -212,7 +212,7 @@ def _local_declared_types(*roots) -> dict[str, str]:
 
 @lru_cache(maxsize=1)
 def _dart_parser():
-    return get_parser("dart")
+    return get_pack_parser("dart")
 
 
 def _text(node) -> str:

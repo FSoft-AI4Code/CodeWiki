@@ -22,6 +22,7 @@ from codewiki.src.be.dependency_analyzer.utils.external_symbols import (
     is_external_symbol,
     is_macro_name,
 )
+from codewiki.src.be.dependency_analyzer.utils.grammars import ensure_pack_grammars
 from codewiki.src.be.dependency_analyzer.utils.patterns import CODE_EXTENSIONS
 from codewiki.src.be.dependency_analyzer.utils.security import safe_open_text
 
@@ -96,6 +97,9 @@ class CallGraphAnalyzer:
         self.functions = {}
         self.call_relationships = []
         code_files = self._route_contextual_headers(code_files, base_dir)
+        # Fail once, with a clear message, when a pack grammar cannot be
+        # downloaded, instead of once per file inside the per-file handlers.
+        ensure_pack_grammars(f["language"] for f in code_files)
         self._python_project_modules = self._collect_python_modules(code_files)
         self._python_external_import_roots = set()
         self._dart_directives = {}

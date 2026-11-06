@@ -98,7 +98,10 @@ uses [Semantic Versioning](https://semver.org/).
   others). 1.x downloads a grammar on first use and caches it under
   `tree_sitter_language_pack.cache_dir()`, so the first run of the Dart, Go,
   JavaScript/TypeScript-in-Vue, Vue and Zig analyzers needs network access;
-  the Docker image fetches them at build time. The 1.x Dart grammar parses
+  the Docker image fetches them at build time. Without network access and
+  without a cached grammar, the analysis stops before the first file with one
+  error that names the grammar, the cache folder and the `t.download([...])`
+  command, instead of a traceback per file. The 1.x Dart grammar parses
   `Foo<T>(x)` as a call instead of a relational expression, and the Dart
   analyzer now takes the type-argument edges from that call too.
 
