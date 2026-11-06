@@ -120,8 +120,8 @@ Full list in the [CHANGELOG](./CHANGELOG.md).
 ## Features
 
 **Languages.** Python, Java, JavaScript, TypeScript, C, C++, C#, Kotlin,
-PHP, Ruby, Scala, Rust, Dart (Flutter-aware), Go, Zig, Vue (single-file
-components).
+PHP, Ruby, Scala, Rust, Dart (Flutter-aware), Go, Zig, Lean 4, Vue
+(single-file components).
 
 **Hierarchical decomposition.** The dependency graph is clustered into a
 module tree, recursively, so a 1.4M-line repository gets the same treatment

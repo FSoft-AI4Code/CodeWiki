@@ -20,8 +20,8 @@ Files are classified by name, extension, and directory. Nine classes:
 
 | Class | Examples |
 | --- | --- |
-| `manifest` | `package.json`, `pyproject.toml`, `setup.py`, `setup.cfg`, `Cargo.toml`, `go.mod`, `build.zig.zon`, `Gemfile`, `pnpm-workspace.yaml` |
-| `build` | `Makefile`, `CMakeLists.txt`, `configure.ac`, `Makefile.am`, `m4/*.m4`, `build.zig`, `*.gradle`, `BUILD.gn`, `*.gni`, `DEPS`, `Rakefile`, `rakelib/*.rake`, `build/` |
+| `manifest` | `package.json`, `pyproject.toml`, `setup.py`, `setup.cfg`, `Cargo.toml`, `go.mod`, `build.zig.zon`, `lake-manifest.json`, `lean-toolchain`, `Gemfile`, `pnpm-workspace.yaml` |
+| `build` | `Makefile`, `CMakeLists.txt`, `configure.ac`, `Makefile.am`, `m4/*.m4`, `build.zig`, `lakefile.lean`, `lakefile.toml`, `*.gradle`, `BUILD.gn`, `*.gni`, `DEPS`, `Rakefile`, `rakelib/*.rake`, `build/` |
 | `container` | `Dockerfile*`, `Containerfile`, `docker-compose*.yml`, files under `docker/` |
 | `ci` | `.github/workflows/*.yml`, `.github/actions/*/action.yml`, `.gitlab-ci.yml`, `Jenkinsfile`, `ci/`, `.circleci/` |
 | `packaging` | `debian/`, `rpm/`, `pkg/`, `packages/`, `*.spec`, `*.service`, install and lifecycle scripts |

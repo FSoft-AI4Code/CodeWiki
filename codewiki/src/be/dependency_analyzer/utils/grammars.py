@@ -18,6 +18,7 @@ import tree_sitter_language_pack as tslp
 PACK_GRAMMARS_BY_LANGUAGE: dict[str, tuple[str, ...]] = {
     "dart": ("dart",),
     "go": ("go",),
+    "lean": ("lean",),
     "vue": ("vue", "javascript", "typescript"),
     "zig": ("zig",),
 }

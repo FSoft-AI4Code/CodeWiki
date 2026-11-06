@@ -65,6 +65,25 @@ uses [Semantic Versioning](https://semver.org/).
   `addModule`; `std`, `builtin`, and third-party packages are dropped. `test`
   blocks and `zig-cache/`, `.zig-cache/`, `zig-out/` are skipped, `build.zig`
   is also a build artifact, and `build.zig.zon` is a manifest.
+- **Lean 4 analyzer** ([#154](https://github.com/FSoft-AI4Code/CodeWiki/issues/154)).
+  `def`, `theorem`/`lemma`, `abbrev`, `instance`, `structure`, `class`,
+  `inductive`, `axiom` and `opaque` declarations become components, keyed by
+  their fully qualified name (`Geo.Point.add`). A header scanner reads the
+  structure from the source with comments and strings masked: declarations,
+  the `namespace`/`section`/`mutual`/`end` stack, `open` (also `open X in`),
+  `import`, spans and `/-- -/` docstrings. So a region that the tree-sitter
+  grammar cannot parse does not hide a declaration. References come from the
+  tree-sitter identifiers, without binders, `let`/`have`/`fun`/`intro` names
+  and match patterns. A reference resolves only to an exact name in the
+  declaration's namespaces, the root or the open namespaces, in a file that
+  the caller imports (transitively); `private` names stay in their file, and
+  a reference with no match or more than one is dropped. Constructor and
+  field names (`Point.mk`, `Point.x`, `Shape.dot`) link to their structure or
+  inductive, and `origin.x` links to `origin`. `structure` is a `struct`,
+  `class` an `interface`, `inductive` a `class`, and the rest are functions.
+  `.lake/` and `lake-packages/` are skipped, `lakefile.lean` and
+  `lakefile.toml` are build artifacts, and `lake-manifest.json` and
+  `lean-toolchain` are manifests.
 - **Vue single-file components.** Each `.vue` file becomes a component
   (`ArticleList.vue::ArticleList`), and its options-API members (`methods`,
   `computed`, `watch`, lifecycle hooks such as `mounted` or `setup`) become
