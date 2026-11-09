@@ -15,6 +15,7 @@ import traceback
 from collections import defaultdict
 from contextlib import contextmanager
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from codewiki.src.be.dependency_analyzer.models.core import CallRelationship, Node
 from codewiki.src.be.dependency_analyzer.utils.external_symbols import (
@@ -25,6 +26,10 @@ from codewiki.src.be.dependency_analyzer.utils.external_symbols import (
 from codewiki.src.be.dependency_analyzer.utils.grammars import ensure_pack_grammars
 from codewiki.src.be.dependency_analyzer.utils.patterns import CODE_EXTENSIONS
 from codewiki.src.be.dependency_analyzer.utils.security import safe_open_text
+
+if TYPE_CHECKING:
+    from codewiki.src.be.dependency_analyzer.analyzers.lean import LeanFile, LeanScope
+    from codewiki.src.be.dependency_analyzer.analyzers.lean_resolution import LeanNameResolver
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +81,7 @@ class CallGraphAnalyzer:
         self._dart_unscoped = False
         self._go_visible: dict[str, set[str]] = {}
         self._go_index = None
+        self._reset_lean_state()
         self.call_relationships: list[CallRelationship] = []
         self._python_project_modules: set = set()
         self._python_external_import_roots: set = set()
@@ -108,6 +114,7 @@ class CallGraphAnalyzer:
         self._dart_unscoped = False
         self._go_visible = {}
         self._go_index = None
+        self._reset_lean_state()
 
         files_analyzed = 0
         files_failed = 0
@@ -293,6 +300,8 @@ class CallGraphAnalyzer:
                     self._analyze_go_file(file_path, content, repo_dir)
                 elif language == "zig":
                     self._analyze_zig_file(file_path, content, repo_dir)
+                elif language == "lean":
+                    self._analyze_lean_file(file_path, content, repo_dir)
                 elif language == "vue":
                     self._analyze_vue_file(file_path, content, repo_dir)
                 # else:
@@ -668,6 +677,59 @@ class CallGraphAnalyzer:
         except Exception:
             logger.exception(f"Failed to analyze Vue file {file_path}")
 
+    def _reset_lean_state(self) -> None:
+        self._lean_files: dict[str, LeanFile] = {}
+        self._lean_scopes: dict[str, LeanScope] = {}
+        self._lean_aliases: dict[str, list[str]] = defaultdict(list)
+        self._lean_private: set[str] = set()
+        self._lean_protected: set[str] = set()
+        self._lean_resolver: LeanNameResolver | None = None
+
+    def _analyze_lean_file(self, file_path: str, content: str, repo_dir: str):
+        """
+        Analyze a Lean 4 file.
+
+        Besides components and references, records the file's imports, each
+        declaration's namespaces and open namespaces, and the constructor and
+        field names of its structures, for Lean resolution by exact name.
+
+        Args:
+            file_path: Path to the Lean file
+            content: File content string
+            repo_dir: Repository base directory
+        """
+        from codewiki.src.be.dependency_analyzer.analyzers.lean import TreeSitterLeanAnalyzer
+
+        try:
+            analyzer = TreeSitterLeanAnalyzer(str(file_path), content, repo_path=repo_dir)
+
+            for func in analyzer.nodes:
+                self.functions[func.id] = func
+
+            self.call_relationships.extend(analyzer.call_relationships)
+            self._lean_files[analyzer.relative_path] = analyzer.scan
+            self._lean_scopes.update(analyzer.scopes)
+            for alias, node_id in analyzer.aliases.items():
+                self._lean_aliases[alias].append(node_id)
+            self._lean_private.update(analyzer.private_ids)
+            self._lean_protected.update(analyzer.protected_ids)
+        except Exception:
+            logger.exception(f"Failed to analyze Lean file {file_path}")
+
+    def _resolve_lean_callee(self, callee: str, caller: Node) -> str | None:
+        from codewiki.src.be.dependency_analyzer.analyzers.lean_resolution import LeanNameResolver
+
+        if self._lean_resolver is None:
+            self._lean_resolver = LeanNameResolver(
+                self.functions,
+                self._lean_files,
+                self._lean_scopes,
+                self._lean_aliases,
+                self._lean_private,
+                self._lean_protected,
+            )
+        return self._lean_resolver.resolve(callee, caller)
+
     def _analyze_go_file(self, file_path: str, content: str, repo_dir: str):
         """
         Analyze Go file using tree-sitter based analyzer.
@@ -860,11 +922,11 @@ class CallGraphAnalyzer:
             self.call_relationships.extend(link_go_interfaces(self.functions))
 
     def _has_authoritative_resolution(self, relationship: CallRelationship) -> bool:
-        """A Dart or Go caller's callee that the language's scoped resolution
+        """A Dart, Go or Lean caller's callee that the language's scoped resolution
         rejected is external or invisible; drop it so ast_parser's name-only
         fallback cannot bind it to an unrelated component."""
         caller = self.functions.get(relationship.caller)
-        return caller is not None and caller.language in ("dart", "go")
+        return caller is not None and caller.language in ("dart", "go", "lean")
 
     def _dotted_project_packages(self) -> dict[str, set]:
         """Project packages/namespaces, partitioned by language. Java and C#
@@ -1007,6 +1069,9 @@ class CallGraphAnalyzer:
         if caller_language == "go" and caller is not None:
             # So is Go's: a name resolves only in the package it names.
             return self._resolve_go_callee(relationship.callee, caller)
+        if caller_language == "lean" and caller is not None:
+            # And Lean's: only an exact FQN in a visible file.
+            return self._resolve_lean_callee(relationship.callee, caller)
         if lang_indexes:
             match = self._resolve_callee_in(
                 relationship, lang_indexes["exact"], lang_indexes["simple"]
@@ -1152,6 +1217,8 @@ class CallGraphAnalyzer:
                 node_classes.append("lang-go")
             elif file_ext == ".zig":
                 node_classes.append("lang-zig")
+            elif file_ext == ".lean":
+                node_classes.append("lang-lean")
             elif file_ext == ".vue":
                 node_classes.append("lang-vue")
 

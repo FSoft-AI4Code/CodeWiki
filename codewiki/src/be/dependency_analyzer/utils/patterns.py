@@ -70,6 +70,11 @@ DEFAULT_IGNORE_PATTERNS = {
     "zig-cache/",
     "zig-out",
     "zig-out/",
+    # Lean: Lake build folder and package checkouts
+    ".lake",
+    ".lake/",
+    "lake-packages",
+    "lake-packages/",
     # IDEs and editors / Java
     ".project",
     # C/C++
@@ -184,6 +189,7 @@ DEFAULT_INCLUDE_PATTERNS = [
     "*.sc",
     "*.dart",
     "*.zig",
+    "*.lean",
     "*.vue",
     "*.clj",
     "*.hs",
@@ -250,6 +256,9 @@ DEFAULT_INCLUDE_PATTERNS = [
     "Procfile",
     "go.mod",
     "build.zig.zon",
+    "lakefile.toml",
+    "lake-manifest.json",
+    "lean-toolchain",
     ".editorconfig",
     ".pre-commit-config.yaml",
     ".eslintrc*",
@@ -321,6 +330,7 @@ CODE_EXTENSIONS = {
     ".dart": "dart",
     ".cs": "csharp",
     ".zig": "zig",
+    ".lean": "lean",
     ".vue": "vue",
 }
 
@@ -555,6 +565,15 @@ FUNCTION_DEFINITION_PATTERNS = {
         "const {name} = struct",
         "const {name} = enum",
         "const {name} = union",
+    ],
+    "lean": [
+        "def {name}",
+        "theorem {name}",
+        "lemma {name}",
+        "abbrev {name}",
+        "structure {name}",
+        "class {name}",
+        "inductive {name}",
     ],
     "c": ["void {name}", "int {name}", "{name}("],
     "cpp": ["void {name}", "int {name}", "{name}("],

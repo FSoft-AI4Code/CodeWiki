@@ -232,6 +232,7 @@ def _detect_via_mtime(
         ".dart",
         ".go",
         ".zig",
+        ".lean",
         ".vue",
     }
 

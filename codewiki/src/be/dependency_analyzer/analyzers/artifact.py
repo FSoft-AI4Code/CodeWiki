@@ -244,6 +244,8 @@ _MANIFEST_NAMES = {
     "build.sbt",
     "Package.swift",
     "build.zig.zon",
+    "lake-manifest.json",
+    "lean-toolchain",
     "pubspec.yaml",
     "Pipfile",
     "environment.yml",
@@ -296,6 +298,8 @@ _BUILD_NAMES = {
     "Gruntfile.js",
     "Herebyfile.mjs",
     "build.zig",
+    "lakefile.lean",
+    "lakefile.toml",
     # Autotools inputs; the generated configure, Makefile.in and aclocal.m4
     # are not build sources.
     "configure.ac",
@@ -451,6 +455,7 @@ def classify_artifact(
         ".scala",
         ".sc",
         ".zig",
+        ".lean",
         ".vue",
     }:
         if name in _TEST_INFRA_NAMES:
