@@ -10,7 +10,8 @@ uses two layers:
    and the Lean commands are read line by line: declarations (``def``,
    ``theorem``/``lemma``, ``abbrev``, ``instance``, ``structure``, ``class``,
    ``inductive``, ``axiom``, ``opaque``), the ``namespace``/``section``/
-   ``mutual``/``end`` stack, ``open`` (also ``open X in``), ``import``,
+   ``mutual``/``end`` stack, ``variable``, scoped/restricted ``open``
+   (also ``open X in``), ``export``, ``import``,
    ``/-- -/`` docstrings and spans. The scanner does not depend on the
    parse tree, so an ``ERROR`` region does not hide a declaration.
 2. **References, from tree-sitter.** Every ``identifier`` node in a
@@ -29,6 +30,11 @@ to an exact FQN only, in Lean's order: the namespaces of the declaration
 file itself and the files it imports (transitively) are visible, and a
 ``private`` name is visible only in its own file. A reference that matches
 no declaration, or more than one, is dropped. A bare name is never guessed.
+
+Open directives are bound in their command context and retain selection, hiding,
+renaming and protected-name rules. Scoped opens do not introduce ordinary names.
+Exports persist as aliases of their original components, including across imports;
+closing a section restores its open directives and variable bindings.
 
 Known limitations:
 - Generalized field notation (``v.norm`` for ``Vec.norm``) needs type
@@ -82,7 +88,9 @@ _NAMESPACE_RE = re.compile(rf"^\s*namespace\s+(?P<name>{IDENT})")
 _SECTION_RE = re.compile(rf"^\s*(?:noncomputable\s+)?section\b\s*(?P<name>{IDENT})?")
 _MUTUAL_RE = re.compile(r"^\s*mutual\b")
 _END_RE = re.compile(rf"^\s*end\b\s*(?P<name>{IDENT})?\s*$")
-_OPEN_RE = re.compile(r"^\s*(?:(?:public|scoped|local)\s+)*(?:open|export)\s+(?P<body>.*)$")
+_OPEN_RE = re.compile(r"^\s*open\b\s*(?P<body>.*)$")
+_EXPORT_RE = re.compile(r"^\s*export\b\s*(?P<body>.*)$")
+_VARIABLE_RE = re.compile(r"^\s*variable\b\s*(?P<body>.*)$")
 # Commands that end the span of the declaration before them.
 _COMMAND_RE = re.compile(
     r"^\s*(?:@\[|#|(?:"
@@ -101,12 +109,9 @@ _FIELD_RE = re.compile(rf"^\s*\(?\s*(?P<names>{IDENT}(?:\s+{IDENT})*)\s*(?::(?!=
 # Local names introduced in a declaration's text. Tree rules cover the parsed
 # parts; these also cover `ERROR` regions and tactic blocks.
 _LOCAL_RES = [
-    re.compile(r"\bfun\s+(?P<names>[^=]*?)=>"),
-    re.compile(r"(?:∀|∃|∃!|Σ|Π|λ)\s*(?P<names>[^,]*?),"),
     re.compile(rf"\blet\s+(?:mut\s+|rec\s+)?(?P<names>{IDENT})"),
     re.compile(rf"\bhave\s+(?P<names>{IDENT})\s*:"),
     re.compile(rf"\bfor\s+(?P<names>{IDENT})\s+in\b"),
-    re.compile(rf"[({{⦃\[]\s*(?P<names>{IDENT}(?:\s+{IDENT})*)\s*:(?!=)"),
     re.compile(rf"\(\s*(?P<names>{IDENT})\s*:="),
     re.compile(
         r"\b(?:intro|intros|rintro|rename_i|next|case|obtain|rcases|cases'|induction')\s+(?P<names>[^\n:=]*)"
@@ -240,6 +245,35 @@ def _clean_docstring(block: str) -> str:
 # ----------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class LeanOpen:
+    """An opening captured at its command, before entering any later scope."""
+
+    namespace: str
+    line: int
+    context: str
+    preceding: tuple[int, ...]
+    mode: str = "all"
+    names: tuple[str, ...] = ()
+    renames: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
+class LeanExport:
+    namespace: str
+    names: tuple[str, ...]
+    destination: str
+    line: int
+    opens: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class LeanScope:
+    namespaces: tuple[str, ...]
+    opens: tuple[int, ...]
+    line: int
+
+
 @dataclass
 class LeanDecl:
     fqn: str
@@ -250,17 +284,29 @@ class LeanDecl:
     indent: int
     private: bool
     namespaces: list[str]  # the declaration's namespace prefixes, innermost first
-    opens: list[str]
+    opens: list[int]
+    protected: bool = False
+    variables: frozenset[str] = frozenset()
     docstring: str = ""
     aliases: list[str] = field(default_factory=list)  # constructor and field FQNs
     bases: list[str] = field(default_factory=list)
 
 
 @dataclass
+class LeanFile:
+    declarations: list[LeanDecl] = field(default_factory=list)
+    imports: list[str] = field(default_factory=list)
+    opens: list[LeanOpen] = field(default_factory=list)
+    exports: list[LeanExport] = field(default_factory=list)
+    namespaces: list[tuple[int, str]] = field(default_factory=list)
+
+
+@dataclass
 class _Scope:
     kind: str  # "namespace", "section" or "mutual"
     name: str
-    opens: list[str] = field(default_factory=list)
+    opens: list[int] = field(default_factory=list)
+    variables: set[str] = field(default_factory=set)
 
 
 def _qualify(prefix: str, name: str) -> str:
@@ -271,29 +317,125 @@ def _strip_guillemets(name: str) -> str:
     return name.replace("«", "").replace("»", "")
 
 
-def _parse_open_names(body: str) -> list[str]:
-    """`open A B (x y) hiding z renaming p → q` -> ["A", "B"]."""
-    body = re.split(r"\b(?:hiding|renaming)\b", body)[0]
-    body = re.sub(r"\([^)]*\)", " ", body)
-    return [_strip_guillemets(m.group(0)) for m in _IDENT_RE.finditer(body)]
+_TOKEN_RE = re.compile(rf"{IDENT}|:=|=>|->|[^\s]")
+_DELIMITERS = {"(": ")", "{": "}", "⦃": "⦄", "[": "]"}
+
+
+def _tokens(text: str) -> list[str]:
+    return _TOKEN_RE.findall(text)
+
+
+def _group_end(tokens: list[str], start: int) -> int:
+    """Index after a balanced group, or the end of an incomplete group."""
+    stack = [_DELIMITERS[tokens[start]]]
+    for i in range(start + 1, len(tokens)):
+        token = tokens[i]
+        if token in _DELIMITERS:
+            stack.append(_DELIMITERS[token])
+        elif token == stack[-1]:
+            stack.pop()
+            if not stack:
+                return i + 1
+    return len(tokens)
+
+
+def _binder_names(tokens: list[str]) -> set[str]:
+    """Read binder names, never identifiers in their types or defaults."""
+    names: set[str] = set()
+    i = 0
+    while i < len(tokens):
+        token = tokens[i]
+        if token in (":", ":=", "=>", ",", "where", "extends", "deriving", "|"):
+            break
+        if token in _DELIMITERS:
+            end = _group_end(tokens, i)
+            body = tokens[i + 1 : end - 1]
+            # `[Class α]` binds an anonymous instance, not `Class` or `α`.
+            if token != "[" or (len(body) > 1 and _IDENT_RE.fullmatch(body[0]) and body[1] == ":"):
+                names.update(_binder_names(body))
+            i = end
+            continue
+        if _IDENT_RE.fullmatch(token) and "." not in token:
+            names.add(_strip_guillemets(token))
+        i += 1
+    return names - _KEYWORDS
+
+
+def _parse_open(body: str, line: int, context: str, preceding: list[int]) -> list[LeanOpen]:
+    tokens = _tokens(body)
+    mode = "all"
+    if tokens and tokens[0] == "scoped":
+        mode = tokens.pop(0)
+    if not tokens or not _IDENT_RE.fullmatch(tokens[0]):
+        return []
+    if len(tokens) > 1 and tokens[1] in ("(", "hiding", "renaming"):
+        namespace = _strip_guillemets(tokens[0])
+        shape = tokens[1]
+        names: tuple[str, ...] = ()
+        renames: tuple[tuple[str, str], ...] = ()
+        if shape == "(":
+            mode = "select"
+            if tokens[-1] != ")":
+                return []
+            names = tuple(_strip_guillemets(t) for t in tokens[2:-1] if _IDENT_RE.fullmatch(t))
+        elif shape == "hiding":
+            mode = "hiding"
+            names = tuple(_strip_guillemets(t) for t in tokens[2:] if _IDENT_RE.fullmatch(t))
+        else:
+            mode = "renaming"
+            pairs = []
+            rest = tokens[2:]
+            while rest:
+                if (
+                    len(rest) < 3
+                    or not _IDENT_RE.fullmatch(rest[0])
+                    or rest[1] not in ("→", "->")
+                    or not _IDENT_RE.fullmatch(rest[2])
+                ):
+                    return []
+                pairs.append((_strip_guillemets(rest[0]), _strip_guillemets(rest[2])))
+                rest = rest[3:]
+                if rest:
+                    if rest[0] != ",":
+                        return []
+                    rest = rest[1:]
+            renames = tuple(pairs)
+        return [LeanOpen(namespace, line, context, tuple(preceding), mode, names, renames)]
+    if any(not _IDENT_RE.fullmatch(t) for t in tokens):
+        return []
+    return [LeanOpen(_strip_guillemets(t), line, context, tuple(preceding), mode) for t in tokens]
 
 
 def scan_headers(masked: _Masked) -> tuple[list[LeanDecl], list[str]]:
-    """Return the declarations and the imported module names of a file."""
+    """Compatibility interface for callers that only need headers and imports."""
+    scanned = _scan_file(masked)
+    return scanned.declarations, scanned.imports
+
+
+def _scan_file(masked: _Masked) -> LeanFile:
     lines = masked.text.split("\n")
     docs = {end: text for end, text in masked.docstrings}
-    decls: list[LeanDecl] = []
-    imports: list[str] = []
+    scanned = LeanFile()
+    decls = scanned.declarations
     stack: list[_Scope] = []
-    file_opens: list[str] = []
-    pending_open_in: list[str] = []
+    root_scope = _Scope("section", "")
+    pending_open_in: list[int] = []
     attr_start: int | None = None
+    consumed_until = -1
 
     def namespace() -> str:
         return ".".join(s.name for s in stack if s.kind == "namespace")
 
-    def active_opens() -> list[str]:
-        return file_opens + [o for s in stack for o in s.opens]
+    def active_opens() -> list[int]:
+        return root_scope.opens + [o for s in stack for o in s.opens]
+
+    def add_decl(match, idx: int, start: int, extra_opens: list[int]) -> None:
+        decl = _decl_from_match(match, idx, start, namespace(), extra_opens)
+        if decl is not None:
+            decl.opens = active_opens() + decl.opens
+            decl.variables = frozenset(root_scope.variables.union(*(s.variables for s in stack)))
+            decl.docstring = _docstring_before(docs, lines, start)
+            decls.append(decl)
 
     def close_previous(line_idx: int, indent: int) -> None:
         if decls and decls[-1].end < 0 and indent <= decls[-1].indent:
@@ -302,67 +444,147 @@ def scan_headers(masked: _Masked) -> tuple[list[LeanDecl], list[str]]:
                 end -= 1
             decls[-1].end = end
 
+    def close_scope(name: str | None) -> None:
+        if not stack:
+            logger.warning("Unmatched Lean end %s", name or "")
+            return
+        if name is None:
+            if not stack[-1].name:
+                stack.pop()
+                return
+        else:
+            parts = _strip_guillemets(name).split(".")
+            kind = stack[-1].kind
+            if (
+                len(stack) >= len(parts)
+                and all(s.kind == kind for s in stack[-len(parts) :])
+                and [s.name for s in stack[-len(parts) :]] == parts
+            ):
+                del stack[-len(parts) :]
+                return
+        logger.warning("Mismatched Lean end %s; retaining scope", name or "")
+
+    def process_command(
+        command: str, idx: int, start: int, indent: int, temporary_opens: list[int]
+    ) -> list[int]:
+        # Peel right-associative `open ... in` wrappers without changing the
+        # spelling of the inner command (attributes and quoted names included).
+        temporary = bool(temporary_opens)
+        while m := _OPEN_RE.match(command):
+            body = m.group("body")
+            in_token = next((t for t in _TOKEN_RE.finditer(body) if t.group() == "in"), None)
+            opening_text = body[: in_token.start()] if in_token else body
+            preceding = active_opens() + temporary_opens
+            opening_ids = []
+            for opening in _parse_open(opening_text, idx, namespace(), preceding):
+                opening_id = len(scanned.opens)
+                scanned.opens.append(
+                    LeanOpen(
+                        opening.namespace,
+                        opening.line,
+                        opening.context,
+                        tuple(preceding),
+                        opening.mode,
+                        opening.names,
+                        opening.renames,
+                    )
+                )
+                opening_ids.append(opening_id)
+                preceding.append(opening_id)
+            if in_token is None:
+                if not temporary:
+                    (stack[-1] if stack else root_scope).opens.extend(opening_ids)
+                return []
+            temporary = True
+            temporary_opens = temporary_opens + opening_ids
+            command = " " * indent + body[in_token.end() :].strip()
+            if not command.strip():
+                return temporary_opens
+
+        if m := _DECL_RE.match(command):
+            add_decl(m, idx, start, temporary_opens)
+        elif m := _IMPORT_RE.match(command):
+            scanned.imports.extend(
+                _strip_guillemets(x.group(0)) for x in _IDENT_RE.finditer(m.group("mods"))
+            )
+        elif m := _NAMESPACE_RE.match(command):
+            for name in _strip_guillemets(m.group("name")).split("."):
+                stack.append(_Scope("namespace", name))
+                scanned.namespaces.append((idx, namespace()))
+            stack[-1].opens.extend(temporary_opens)
+        elif _MUTUAL_RE.match(command):
+            stack.append(_Scope("mutual", "", opens=temporary_opens))
+        elif m := _END_RE.match(command):
+            close_scope(m.group("name"))
+        elif m := _SECTION_RE.match(command):
+            for name in (m.group("name") or "").split("."):
+                stack.append(_Scope("section", _strip_guillemets(name)))
+            stack[-1].opens.extend(temporary_opens)
+        elif m := _VARIABLE_RE.match(command):
+            if not temporary:
+                (stack[-1] if stack else root_scope).variables.update(
+                    _binder_names(_tokens(m.group("body")))
+                )
+        elif m := _EXPORT_RE.match(command):
+            tokens = _tokens(m.group("body"))
+            if (
+                len(tokens) >= 3
+                and _IDENT_RE.fullmatch(tokens[0])
+                and tokens[1] == "("
+                and tokens[-1] == ")"
+                and all(_IDENT_RE.fullmatch(t) for t in tokens[2:-1])
+            ):
+                scanned.exports.append(
+                    LeanExport(
+                        _strip_guillemets(tokens[0]),
+                        tuple(_strip_guillemets(t) for t in tokens[2:-1]),
+                        namespace(),
+                        idx,
+                        tuple(active_opens() + temporary_opens),
+                    )
+                )
+        return []
+
     for idx, line in enumerate(lines):
-        if not line.strip():
+        if idx <= consumed_until or not line.strip():
             continue
         indent = len(line) - len(line.lstrip())
         if decls and decls[-1].end < 0 and indent > decls[-1].indent:
-            continue  # a body line of the open declaration, even if it looks like a command
+            continue
         decl_m = _DECL_RE.match(line)
         if decl_m is None and not _COMMAND_RE.match(line):
-            continue  # a continuation line at the declaration's indentation
+            continue
         close_previous(idx, indent)
-
         if _ATTR_ONLY_RE.match(line):
             if attr_start is None:
                 attr_start = idx
             continue
         start = attr_start if attr_start is not None else idx
         attr_start = None
-
         if decl_m is not None:
-            decl = _decl_from_match(decl_m, idx, start, namespace(), pending_open_in)
+            add_decl(decl_m, idx, start, pending_open_in)
             pending_open_in = []
-            if decl is None:
-                continue
-            decl.opens = active_opens() + decl.opens
-            decl.docstring = _docstring_before(docs, lines, start)
-            decls.append(decl)
             continue
 
-        # `open X in` covers only the next command, whatever it is.
-        pending_open_in = []
-        if m := _IMPORT_RE.match(line):
-            imports.extend(
-                _strip_guillemets(x.group(0)) for x in _IDENT_RE.finditer(m.group("mods"))
-            )
-        elif m := _NAMESPACE_RE.match(line):
-            stack.append(_Scope("namespace", _strip_guillemets(m.group("name"))))
-        elif _MUTUAL_RE.match(line):
-            stack.append(_Scope("mutual", ""))
-        elif m := _END_RE.match(line):
-            if stack:
-                stack.pop()
-        elif m := _SECTION_RE.match(line):
-            stack.append(_Scope("section", m.group("name") or ""))
-        elif m := _OPEN_RE.match(line):
-            body = m.group("body")
-            parts = re.split(r"\bin\b", body, maxsplit=1)
-            names = _parse_open_names(parts[0])
-            if len(parts) == 2:
-                pending_open_in = names
-                rest = parts[1]
-                if rest.strip() and (inner := _DECL_RE.match(" " * indent + rest.strip())):
-                    decl = _decl_from_match(inner, idx, start, namespace(), pending_open_in)
-                    pending_open_in = []
-                    if decl is not None:
-                        decl.opens = active_opens() + decl.opens
-                        decl.docstring = _docstring_before(docs, lines, start)
-                        decls.append(decl)
-            elif stack:
-                stack[-1].opens.extend(names)
-            else:
-                file_opens.extend(names)
+        # Gather indented continuations of directives, excluding a following command.
+        command = line
+        if _OPEN_RE.match(line) or _EXPORT_RE.match(line) or _VARIABLE_RE.match(line):
+            end = idx + 1
+            while end < len(lines):
+                continuation = lines[end]
+                if continuation.strip():
+                    continuation_indent = len(continuation) - len(continuation.lstrip())
+                    if (
+                        continuation_indent <= indent
+                        or _DECL_RE.match(continuation)
+                        or _COMMAND_RE.match(continuation)
+                    ):
+                        break
+                command += " " + continuation.strip()
+                consumed_until = end
+                end += 1
+
+        pending_open_in = process_command(command, idx, start, indent, pending_open_in)
 
     if decls and decls[-1].end < 0:
         end = len(lines) - 1
@@ -372,7 +594,7 @@ def scan_headers(masked: _Masked) -> tuple[list[LeanDecl], list[str]]:
     for decl in decls:
         if decl.kind in ("structure", "class", "inductive", "class inductive"):
             decl.aliases = _member_aliases(decl, lines)
-    return decls, imports
+    return scanned
 
 
 def _decl_from_match(m, idx, start, ns, open_in) -> LeanDecl | None:
@@ -411,6 +633,7 @@ def _decl_from_match(m, idx, start, ns, open_in) -> LeanDecl | None:
         end=-1,
         indent=len(m.group("indent")),
         private="private" in m.group("mods").split(),
+        protected="protected" in m.group("mods").split(),
         namespaces=namespaces,
         opens=list(open_in),
         bases=bases,
@@ -556,6 +779,41 @@ def _tokens_in(
 
 def _text_locals(text: str) -> set[str]:
     names: set[str] = set()
+    tokens = _tokens(text)
+    declaration_kinds = {
+        "def",
+        "theorem",
+        "lemma",
+        "abbrev",
+        "instance",
+        "structure",
+        "class",
+        "inductive",
+        "axiom",
+        "opaque",
+    }
+    for start, token in enumerate(tokens):
+        if token in declaration_kinds:
+            binder_start = start + 1
+            if token == "class" and tokens[binder_start : binder_start + 1] == ["inductive"]:
+                binder_start += 1
+            if binder_start < len(tokens) and _IDENT_RE.fullmatch(tokens[binder_start]):
+                binder_start += 1  # the declaration name, if present
+            names.update(_binder_names(tokens[binder_start:]))
+            break
+    for start, token in enumerate(tokens):
+        if token not in ("fun", "λ", "∀", "∃", "Σ", "Π"):
+            continue
+        end = start + 1
+        terminator = "=>" if token in ("fun", "λ") else ","
+        while end < len(tokens):
+            if tokens[end] == terminator:
+                names.update(_binder_names(tokens[start + 1 : end]))
+                break
+            if tokens[end] in _DELIMITERS:
+                end = _group_end(tokens, end)
+            else:
+                end += 1
     for regex in _LOCAL_RES:
         for m in regex.finditer(text):
             for ident in _IDENT_RE.finditer(m.group("names")):
@@ -590,11 +848,12 @@ class TreeSitterLeanAnalyzer:
         self.nodes: list[Node] = []
         self.call_relationships: list[CallRelationship] = []
         self.imports: list[str] = []
-        # node id -> (namespace prefixes innermost first, open namespaces)
-        self.scopes: dict[str, tuple[list[str], list[str]]] = {}
+        self.scopes: dict[str, LeanScope] = {}
+        self.scan = LeanFile()
         # constructor/field FQN -> node id of the structure or inductive
         self.aliases: dict[str, str] = {}
         self.private_ids: set[str] = set()
+        self.protected_ids: set[str] = set()
         self.relative_path = Path(self._relative_path()).as_posix()
         if is_skipped_lean_file(self.relative_path):
             return
@@ -616,7 +875,8 @@ class TreeSitterLeanAnalyzer:
 
     def _analyze(self) -> None:
         masked = mask_source(self.content)
-        decls, self.imports = scan_headers(masked)
+        self.scan = _scan_file(masked)
+        decls, self.imports = self.scan.declarations, self.scan.imports
         source_lines = self.content.split("\n")
         by_fqn: dict[str, Node] = {}
         owners: list[tuple[LeanDecl, Node]] = []
@@ -643,7 +903,7 @@ class TreeSitterLeanAnalyzer:
         masked_lines = masked.text.split("\n")
         for decl, node in owners:
             text = "\n".join(masked_lines[decl.keyword_line : decl.end + 1])
-            locals_by_decl[node.id] = _text_locals(text)
+            locals_by_decl[node.id] = _text_locals(text) | set(decl.variables)
         for line, name in tree_locals:
             if line in line_owner:
                 locals_by_decl[line_owner[line][1].id].add(name)
@@ -690,9 +950,13 @@ class TreeSitterLeanAnalyzer:
             qualified_name=decl.fqn,
         )
         self.nodes.append(node)
-        self.scopes[component_id] = (decl.namespaces, decl.opens)
+        self.scopes[component_id] = LeanScope(
+            tuple(decl.namespaces), tuple(decl.opens), decl.keyword_line
+        )
         if decl.private:
             self.private_ids.add(component_id)
+        if decl.protected:
+            self.protected_ids.add(component_id)
         return node
 
 
