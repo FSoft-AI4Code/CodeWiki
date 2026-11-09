@@ -48,7 +48,7 @@ from collections import defaultdict
 from functools import lru_cache
 from pathlib import Path
 
-from tree_sitter_language_pack import get_parser
+from codewiki.src.be.dependency_analyzer.utils.grammars import get_pack_parser
 
 from codewiki.src.be.dependency_analyzer.models.core import CallRelationship, Node
 from codewiki.src.be.dependency_analyzer.utils.file_selection import is_skipped_go_file
@@ -326,7 +326,7 @@ def _default_import_names(import_path: str) -> set[str]:
 
 @lru_cache(maxsize=1)
 def _go_parser():
-    return get_parser("go")
+    return get_pack_parser("go")
 
 
 class TreeSitterGoAnalyzer:
