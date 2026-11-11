@@ -25,7 +25,7 @@ import os
 import sys
 import time
 import shutil
-from typing import Any
+from typing import Any, Callable
 
 from codewiki.src.be.caw_compat import CawAgent, ToolGroup
 
@@ -460,16 +460,16 @@ class CawBackend(LLMBackend):
             scope_component_ids=core_component_ids,
         )
 
-        toolkit = CawToolKit(deps=deps, backend=self, allow_subagent=can_delegate)
-
-        agent = CawAgent(
-            provider=self._caw_provider,
-            model=self._model,
-            system_prompt=system_prompt,
-            tools=_agent_tool_group_for_provider(self._caw_provider),
-            tool_servers=[toolkit],
-            auto_wait=_CAW_AUTO_WAIT,
-        )
+        def agent_factory() -> Any:
+            toolkit = CawToolKit(deps=deps, backend=self, allow_subagent=can_delegate)
+            return CawAgent(
+                provider=self._caw_provider,
+                model=self._model,
+                system_prompt=system_prompt,
+                tools=_agent_tool_group_for_provider(self._caw_provider),
+                tool_servers=[toolkit],
+                auto_wait=_CAW_AUTO_WAIT,
+            )
 
         user_prompt = format_user_prompt(
             module_name=module_name,
@@ -524,7 +524,7 @@ class CawBackend(LLMBackend):
             os.chdir(run_cwd)
             try:
                 traj = self._complete_module_until_written(
-                    agent,
+                    agent_factory,
                     user_prompt,
                     deps=deps,
                     module_name=module_name,
@@ -571,7 +571,7 @@ class CawBackend(LLMBackend):
 
     @staticmethod
     def _complete_module_until_written(
-        agent: Any,
+        agent_factory: Callable[[], Any],
         user_prompt: str,
         *,
         deps: CodeWikiDeps,
@@ -580,14 +580,17 @@ class CawBackend(LLMBackend):
         layout: str | None,
     ) -> Any:
         """Continue a caw conversation when the agent returns without writing."""
-        prompt = user_prompt
+        doc_file = module_doc_file(module_name, module_path, layout)
         for attempt in range(DOC_WRITE_REMINDERS + 1):
+            agent = agent_factory()
+            prompt = user_prompt
+            if attempt:
+                prompt += "\n\n" + reminder_prompt(module_name, doc_file)
             trajectory = agent.completion(prompt)
             if doc_written(deps.absolute_docs_path, module_name, module_path, deps.module_tree):
                 return trajectory
             if attempt == DOC_WRITE_REMINDERS:
                 return trajectory
-            doc_file = module_doc_file(module_name, module_path, layout)
             logger.warning(
                 "Agent for %s finished without writing %s; requesting write reminder %d/%d",
                 module_name,
@@ -595,4 +598,3 @@ class CawBackend(LLMBackend):
                 attempt + 1,
                 DOC_WRITE_REMINDERS,
             )
-            prompt = reminder_prompt(module_name, doc_file)
