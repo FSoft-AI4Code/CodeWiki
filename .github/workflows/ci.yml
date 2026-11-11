@@ -47,6 +47,35 @@ jobs:
       - name: Run tests
         run: pytest -p no:cacheprovider -o addopts="" tests/ -q
 
+  test-windows:
+    name: Test (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install pytest pytest-asyncio pytest-cov ruff
+          python -m pip install -e . --no-deps
+
+      - name: Run Windows-compatible tests
+        shell: pwsh
+        run: |
+          python -m pytest -p no:cacheprovider -o addopts="" `
+            tests/test_caw_windows_compat.py `
+            tests/test_gitignore_filtering.py `
+            tests/test_parse_timeout.py -q
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
