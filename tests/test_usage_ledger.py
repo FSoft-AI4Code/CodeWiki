@@ -135,18 +135,25 @@ def test_caw_module_agent_retries_when_page_is_missing(tmp_path):
     from codewiki.src.be.caw_backend import CawBackend
 
     class FakeAgent:
-        def __init__(self):
+        def __init__(self, writes):
             self.prompts = []
+            self.writes = writes
 
         def completion(self, prompt):
             self.prompts.append(prompt)
-            if len(self.prompts) == 2:
+            if self.writes:
                 (tmp_path / "repo.md").write_text("# repo\n", encoding="utf-8")
             return SimpleNamespace(total_usage=None, model="test")
 
-    agent = FakeAgent()
+    agents = []
+
+    def agent_factory():
+        agent = FakeAgent(bool(agents))
+        agents.append(agent)
+        return agent
+
     trajectory = CawBackend._complete_module_until_written(
-        agent,
+        agent_factory,
         "generate documentation",
         deps=SimpleNamespace(absolute_docs_path=str(tmp_path), module_tree={}),
         module_name="repo",
@@ -155,8 +162,10 @@ def test_caw_module_agent_retries_when_page_is_missing(tmp_path):
     )
 
     assert trajectory.model == "test"
-    assert len(agent.prompts) == 2
-    assert 'command="create"' in agent.prompts[1]
+    assert len(agents) == 2
+    assert len(agents[0].prompts) == 1
+    assert len(agents[1].prompts) == 1
+    assert 'command="create"' in agents[1].prompts[0]
 
 
 class _StubBackend(LLMBackend):
