@@ -492,9 +492,12 @@ class CawBackend(LLMBackend):
             user_prompt = root_recovery_prompt(user_prompt, working_dir, module_name)
         target_doc = module_doc_file(module_name, list(module_path), config_layout(config))
         user_prompt += (
-            f"\n\nIMPORTANT: The documentation file must be written at the exact path "
-            f"`{os.path.join(working_dir, target_doc)}`. If the CodeWiki MCP editor "
-            "is unavailable, use Claude Code Write or Edit with this absolute path."
+            f"\n\nIMPORTANT: Use the CodeWiki MCP `str_replace_editor` as the preferred "
+            f"writer. For that tool, write the documentation at relative path "
+            f"`{target_doc}` with `working_dir=\"docs\"`; never pass an absolute path "
+            f"as `working_dir`. If the CodeWiki MCP editor is unavailable, use Claude "
+            f"Code Write or Edit with the absolute path "
+            f"`{os.path.join(working_dir, target_doc)}`."
         )
 
         # caw forks claude / codex via subprocess.Popen without a cwd, so the
