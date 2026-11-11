@@ -69,6 +69,11 @@ _CLI_BINARY = {
 # documentation correctness.
 _AGENT_TOOL_GROUP = ToolGroup.READER | ToolGroup.PARALLEL
 
+# caw's default usage-limit detector relies on provider response text and can
+# misclassify normal documentation as a limit, then sleep for 60 minutes.
+# CodeWiki must surface the turn and let its caller decide how to handle it.
+_CAW_AUTO_WAIT = False
+
 
 def _agent_tool_group_for_provider(provider: str) -> ToolGroup:
     """Return the caw tool group needed for a module-agent session."""
@@ -278,6 +283,7 @@ class CawBackend(LLMBackend):
             model=effective_model,
             tools=ToolGroup.READER,
             system_prompt=system_prompt,
+            auto_wait=_CAW_AUTO_WAIT,
         )
         started = time.time()
         traj = agent.completion(prompt)
@@ -318,6 +324,7 @@ class CawBackend(LLMBackend):
             system_prompt=system_prompt,
             tools=_agent_tool_group_for_provider(self._caw_provider),
             tool_servers=[toolkit],
+            auto_wait=_CAW_AUTO_WAIT,
         )
         original_cwd = os.getcwd()
         run_cwd = deps.absolute_docs_path if self._caw_provider == "codex" else self._repo_root
@@ -456,6 +463,7 @@ class CawBackend(LLMBackend):
             system_prompt=system_prompt,
             tools=_agent_tool_group_for_provider(self._caw_provider),
             tool_servers=[toolkit],
+            auto_wait=_CAW_AUTO_WAIT,
         )
 
         user_prompt = format_user_prompt(

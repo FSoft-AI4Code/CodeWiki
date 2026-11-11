@@ -89,9 +89,12 @@ def _caw_backend(monkeypatch, usage):
     from codewiki.src.be import caw_backend
     from codewiki.src.be.caw_backend import CawBackend
 
+    captured = {}
+
     class FakeCawAgent:
         def __init__(self, **kwargs):
             self.model = kwargs.get("model")
+            captured.update(kwargs)
 
         def completion(self, prompt):
             return SimpleNamespace(
@@ -106,16 +109,17 @@ def _caw_backend(monkeypatch, usage):
     backend = object.__new__(CawBackend)  # skip the CLI-on-PATH check
     backend._caw_provider = "claude_code"
     backend._model = None
-    return backend
+    return backend, captured
 
 
 def test_caw_complete_records_usage(monkeypatch):
     usage = _usage(input_tokens=1000, output_tokens=200, cache_read_tokens=50, cost_usd=0.12)
-    backend = _caw_backend(monkeypatch, usage)
+    backend, captured = _caw_backend(monkeypatch, usage)
 
     with backend.usage_ledger.in_phase("overview", target="repo"):
         assert backend.complete("prompt") == "ok"
 
+    assert captured["auto_wait"] is False
     assert backend.last_usage["cost_usd"] == 0.12
     (call,) = backend.usage_ledger.summary()["calls"]
     assert call["phase"] == "overview"
