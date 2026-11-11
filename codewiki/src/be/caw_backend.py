@@ -22,12 +22,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import sys
 import time
 import shutil
 from typing import Any
 
-from caw import Agent as CawAgent
-from caw import ToolGroup
+from codewiki.src.be.caw_compat import CawAgent, ToolGroup
 
 from codewiki.src.be.agent_tools.deps import CodeWikiDeps
 from codewiki.src.be.agent_tools.doc_guard import DocumentationWriteError, doc_written
@@ -199,7 +199,20 @@ def _patch_claude_allowed_tools() -> None:
 
         @staticmethod
         def Popen(cmd, *args, **kwargs):
-            return subprocess.Popen(_with_allowed_tools(cmd), *args, **kwargs)
+            command = _with_allowed_tools(cmd)
+            if sys.platform == "win32" and command and command[0] == "claude":
+                claude_cmd = shutil.which("claude.cmd")
+                if claude_cmd:
+                    command = [
+                        "cmd.exe",
+                        "/d",
+                        "/s",
+                        "/c",
+                        subprocess.list2cmdline([claude_cmd, *command[1:]]),
+                    ]
+                if kwargs.get("text") and "encoding" not in kwargs:
+                    kwargs["encoding"] = "utf-8"
+            return subprocess.Popen(command, *args, **kwargs)
 
         def __getattr__(self, name):
             return getattr(subprocess, name)
