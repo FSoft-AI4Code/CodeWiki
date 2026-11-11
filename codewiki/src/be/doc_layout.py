@@ -73,6 +73,11 @@ def module_doc_relpath(module_path: list[str], layout: str | None) -> str:
     return posixpath.join(*module_path[:-1], f"{module_path[-1]}.md")
 
 
+def _join_doc_relpath(docs_dir: str, relative_path: str) -> str:
+    """Join a repository-style POSIX path using the host OS separator."""
+    return os.path.join(docs_dir, *relative_path.split("/"))
+
+
 def module_doc_file(module_name: str, module_path: list[str] | None, layout: str | None) -> str:
     """Docs-relative file the agent documenting ``module_name`` must write.
 
@@ -168,7 +173,7 @@ def find_doc(
     if module_tree is None:
         module_tree = load_module_tree(docs_dir)
     for rel in _candidate_relpaths(name, module_tree):
-        path = os.path.join(docs_dir, rel)
+        path = _join_doc_relpath(docs_dir, rel)
         if os.path.isfile(path):
             return path
     if search and name != OVERVIEW_STEM:
@@ -199,7 +204,7 @@ def list_doc_files(docs_dir: str, module_tree: dict[str, Any] | None = None) -> 
         module_tree = load_module_tree(docs_dir)
     for path in iter_tree_paths(module_tree):
         rel = module_doc_relpath(path, LAYOUT_HIERARCHICAL)
-        if "/" in rel and os.path.isfile(os.path.join(docs_dir, rel)):
+        if "/" in rel and os.path.isfile(_join_doc_relpath(docs_dir, rel)):
             pages[path[-1]] = rel
     return pages
 
@@ -223,7 +228,7 @@ def target_doc_path(
         module_tree = load_module_tree(docs_dir)
     for path in iter_tree_paths(module_tree):
         if path[-1] == name:
-            return os.path.join(docs_dir, module_doc_relpath(path, layout))
+            return _join_doc_relpath(docs_dir, module_doc_relpath(path, layout))
     return os.path.join(docs_dir, f"{name}.md")
 
 
@@ -271,14 +276,14 @@ def relocate_docs(docs_dir: str, module_tree: dict[str, Any], layout: str | None
     moved = []
     for path in iter_tree_paths(module_tree):
         target_rel = module_doc_relpath(path, layout)
-        target = os.path.join(docs_dir, target_rel)
+        target = _join_doc_relpath(docs_dir, target_rel)
         if os.path.isfile(target):
             continue
         for rel in (
             module_doc_relpath(path, LAYOUT_HIERARCHICAL),
             module_doc_relpath(path, LAYOUT_FLAT),
         ):
-            source = os.path.join(docs_dir, rel)
+            source = _join_doc_relpath(docs_dir, rel)
             if rel != target_rel and os.path.isfile(source):
                 os.makedirs(os.path.dirname(target), exist_ok=True)
                 os.replace(source, target)
@@ -304,7 +309,7 @@ def organize_docs(
     for stem, rel in list_doc_files(docs_dir, module_tree).items():
         relpaths.setdefault(stem, rel)
     for rel in sorted(set(list_doc_files(docs_dir, module_tree).values())):
-        path = os.path.join(docs_dir, rel)
+        path = _join_doc_relpath(docs_dir, rel)
         try:
             with open(path, encoding="utf-8") as f:
                 text = f.read()
