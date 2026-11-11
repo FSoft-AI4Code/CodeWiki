@@ -150,8 +150,10 @@ _patch_codex_tool_timeout()
 #   https://code.claude.com/docs/en/settings#permission-rule-syntax
 #   `--allowedTools` flag: https://code.claude.com/docs/en/cli-reference
 # caw's ClaudeCodeSession only ever emits `--disallowedTools`, so rewrite its
-# `claude` command to add `--allowedTools mcp__<server>` for every server in
-# the --mcp-config.  The patch swaps the `subprocess` module reference INSIDE
+# `claude` command to add explicit `mcp__<server>__<tool>` rules for every
+# CodeWiki toolkit tool.  A server-only rule does not expose the tools to
+# Claude Code's non-interactive permission resolver.  The patch swaps the
+# `subprocess` module reference INSIDE
 # caw.providers.claude_code for a thin proxy — the global subprocess.Popen
 # class stays untouched (isinstance / subclass safe) and no other claude
 # invocation in this process is affected.  Belongs upstream in caw; remove
@@ -160,7 +162,7 @@ _CLAUDE_ALLOWED_PATCH_APPLIED = False
 
 
 def _with_allowed_tools(cmd):
-    """Append ``--allowedTools mcp__<server>,...`` to a ``claude`` command.
+    """Append explicit CodeWiki MCP tool rules to a ``claude`` command.
 
     Pure ``list -> list`` transform.  Applies only when *cmd* is a claude
     invocation carrying ``--mcp-config`` and no explicit allow-list already;
@@ -185,7 +187,12 @@ def _with_allowed_tools(cmd):
             servers = list(json.load(f).get("mcpServers", {}).keys())
         if not servers:
             return cmd
-        allowed = ",".join(f"mcp__{s}" for s in servers)
+        tool_names = (
+            "read_code_components",
+            "str_replace_editor",
+            "generate_sub_module_documentation",
+        )
+        allowed = ",".join(f"mcp__{server}__{tool}" for server in servers for tool in tool_names)
         logger.info("Injected --allowedTools for MCP servers: %s", servers)
         return list(cmd) + ["--allowedTools", allowed]
     except Exception as e:  # noqa: BLE001 — never break the spawn on a patch hiccup

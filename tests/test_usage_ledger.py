@@ -131,6 +131,26 @@ def test_caw_complete_records_usage(monkeypatch):
     assert call["cost_usd"] == 0.12
 
 
+def test_caw_allowed_tools_names_each_mcp_tool(tmp_path):
+    import json
+
+    from codewiki.src.be.caw_backend import _with_allowed_tools
+
+    config_path = tmp_path / "mcp.json"
+    config_path.write_text(
+        json.dumps({"mcpServers": {"codewiki_tools_abc123": {"url": "http://127.0.0.1"}}}),
+        encoding="utf-8",
+    )
+    command = _with_allowed_tools(["claude", "--mcp-config", str(config_path), "--print", "prompt"])
+
+    allowed = command[-1]
+    assert allowed == (
+        "mcp__codewiki_tools_abc123__read_code_components,"
+        "mcp__codewiki_tools_abc123__str_replace_editor,"
+        "mcp__codewiki_tools_abc123__generate_sub_module_documentation"
+    )
+
+
 def test_caw_module_agent_retries_when_page_is_missing(tmp_path):
     from codewiki.src.be.caw_backend import CawBackend
 
