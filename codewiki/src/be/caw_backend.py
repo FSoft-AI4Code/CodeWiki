@@ -192,7 +192,10 @@ def _with_allowed_tools(cmd):
         )
         allowed = ",".join(f"mcp__{server}__{tool}" for server in servers for tool in tool_names)
         logger.info("Injected --allowedTools for MCP servers: %s", servers)
-        return list(cmd) + ["--allowedTools", allowed]
+        # caw's temporary config is the complete CodeWiki tool surface for
+        # this session. Ignore user/project MCP registrations so Claude's
+        # deferred-tool index cannot be polluted by unrelated connectors.
+        return list(cmd) + ["--strict-mcp-config", "--allowedTools", allowed]
     except Exception as e:  # noqa: BLE001 — never break the spawn on a patch hiccup
         logger.warning("claude allowedTools patch skipped: %s", e)
         return cmd
