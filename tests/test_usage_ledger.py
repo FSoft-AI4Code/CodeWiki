@@ -144,11 +144,21 @@ def test_caw_allowed_tools_names_each_mcp_tool(tmp_path):
     command = _with_allowed_tools(["claude", "--mcp-config", str(config_path), "--print", "prompt"])
 
     allowed = command[-1]
+    assert "--strict-mcp-config" in command
     assert allowed == (
         "mcp__codewiki_tools_abc123__read_code_components,"
         "mcp__codewiki_tools_abc123__str_replace_editor,"
         "mcp__codewiki_tools_abc123__generate_sub_module_documentation"
     )
+
+
+def test_caw_module_agents_do_not_enable_native_writers():
+    from codewiki.src.be.caw_backend import _agent_tool_group_for_provider
+    from codewiki.src.be.caw_compat import ToolGroup
+
+    tools = _agent_tool_group_for_provider("claude_code")
+
+    assert not tools & ToolGroup.WRITER
 
 
 def test_caw_module_agent_retries_when_page_is_missing(tmp_path):
