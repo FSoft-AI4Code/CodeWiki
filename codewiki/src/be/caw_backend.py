@@ -67,13 +67,9 @@ _CLI_BINARY = {
     "codex": "codex",
 }
 
-# Keep WRITER available as a fallback for Claude Code sessions where the
-# custom MCP toolkit is not exposed by the CLI. Agents are still instructed to
-# prefer CodeWiki's str_replace_editor so Mermaid validation runs. INTERACTION
-# (AskUserQuestion)
-# and WEB (WebFetch/WebSearch) are also off.  PARALLEL (Task) stays enabled:
-# Claude Code can fan out Read-heavy exploration without affecting
-# documentation correctness.
+# INTERACTION (AskUserQuestion) and WEB (WebFetch/WebSearch) are off.
+# PARALLEL (Task) stays enabled so Claude Code can fan out Read-heavy
+# exploration without affecting documentation correctness.
 _AGENT_TOOL_GROUP = ToolGroup.READER | ToolGroup.PARALLEL
 
 # caw's default usage-limit detector relies on provider response text and can
@@ -94,7 +90,7 @@ def _agent_tool_group_for_provider(provider: str) -> ToolGroup:
         # finer-grained built-in tool restrictions anyway, so prompts still
         # direct the agent to use CodeWiki's str_replace_editor for writes.
         return _AGENT_TOOL_GROUP | ToolGroup.EXEC
-    return _AGENT_TOOL_GROUP | ToolGroup.WRITER
+    return _AGENT_TOOL_GROUP
 
 
 def _resolve_caw_provider(provider: str) -> str:
@@ -495,9 +491,7 @@ class CawBackend(LLMBackend):
             f"\n\nIMPORTANT: Use the CodeWiki MCP `str_replace_editor` as the preferred "
             f"writer. For that tool, write the documentation at relative path "
             f"`{target_doc}` with `working_dir=\"docs\"`; never pass an absolute path "
-            f"as `working_dir`. If the CodeWiki MCP editor is unavailable, use Claude "
-            f"Code Write or Edit with the absolute path "
-            f"`{os.path.join(working_dir, target_doc)}`."
+            f"as `working_dir`. Do not use native Claude Code file-writing tools."
         )
 
         # caw forks claude / codex via subprocess.Popen without a cwd, so the

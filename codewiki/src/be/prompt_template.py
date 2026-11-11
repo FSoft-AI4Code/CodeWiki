@@ -48,8 +48,7 @@ Generate documentation following this structure:
 </WORKFLOW>
 
 <AVAILABLE_TOOLS>
-- `str_replace_editor`: Preferred file system operations for creating and editing documentation files; use it whenever available so Mermaid validation runs
-- Claude Code `Write`/`Edit`: Fallback file-writing tools only if `str_replace_editor` is not exposed in the session
+- `str_replace_editor`: File system operations for creating and editing documentation files; use it so Mermaid validation runs
 - `read_code_components`: Explore additional code dependencies not included in the provided components
 - `generate_sub_module_documentation`: Generate detailed documentation for individual sub-modules via sub-agents
 </AVAILABLE_TOOLS>
@@ -82,8 +81,7 @@ Generate documentation following the following requirements:
 </WORKFLOW>
 
 <AVAILABLE_TOOLS>
-- `str_replace_editor`: Preferred file system operations for creating and editing documentation files; use it whenever available so Mermaid validation runs
-- Claude Code `Write`/`Edit`: Fallback file-writing tools only if `str_replace_editor` is not exposed in the session
+- `str_replace_editor`: File system operations for creating and editing documentation files; use it so Mermaid validation runs
 - `read_code_components`: Explore additional code dependencies not included in the provided components
 </AVAILABLE_TOOLS>
 {custom_instructions}
