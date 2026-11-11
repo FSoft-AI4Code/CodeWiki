@@ -30,7 +30,12 @@ from typing import Any
 from codewiki.src.be.caw_compat import CawAgent, ToolGroup
 
 from codewiki.src.be.agent_tools.deps import CodeWikiDeps
-from codewiki.src.be.agent_tools.doc_guard import DocumentationWriteError, doc_written
+from codewiki.src.be.agent_tools.doc_guard import (
+    DOC_WRITE_REMINDERS,
+    DocumentationWriteError,
+    doc_written,
+    reminder_prompt,
+)
 from codewiki.src.be.backend import AgentReply, LLMBackend
 from codewiki.src.be.module_scope import (
     can_split_module,
@@ -518,7 +523,14 @@ class CawBackend(LLMBackend):
         try:
             os.chdir(run_cwd)
             try:
-                traj = agent.completion(user_prompt)
+                traj = self._complete_module_until_written(
+                    agent,
+                    user_prompt,
+                    deps=deps,
+                    module_name=module_name,
+                    module_path=list(module_path),
+                    layout=config_layout(config),
+                )
             finally:
                 os.chdir(original_cwd)
                 file_manager.save_json(deps.module_tree, module_tree_path)
@@ -556,3 +568,31 @@ class CawBackend(LLMBackend):
         except Exception as e:
             logger.error("Error processing module %s via caw: %s", module_name, e)
             raise
+
+    @staticmethod
+    def _complete_module_until_written(
+        agent: Any,
+        user_prompt: str,
+        *,
+        deps: CodeWikiDeps,
+        module_name: str,
+        module_path: list[str],
+        layout: str | None,
+    ) -> Any:
+        """Continue a caw conversation when the agent returns without writing."""
+        prompt = user_prompt
+        for attempt in range(DOC_WRITE_REMINDERS + 1):
+            trajectory = agent.completion(prompt)
+            if doc_written(deps.absolute_docs_path, module_name, module_path, deps.module_tree):
+                return trajectory
+            if attempt == DOC_WRITE_REMINDERS:
+                return trajectory
+            doc_file = module_doc_file(module_name, module_path, layout)
+            logger.warning(
+                "Agent for %s finished without writing %s; requesting write reminder %d/%d",
+                module_name,
+                doc_file,
+                attempt + 1,
+                DOC_WRITE_REMINDERS,
+            )
+            prompt = reminder_prompt(module_name, doc_file)
