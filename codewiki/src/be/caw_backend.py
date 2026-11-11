@@ -67,8 +67,10 @@ _CLI_BINARY = {
     "codex": "codex",
 }
 
-# Disable WRITER (Write/Edit/NotebookEdit) so the agent must use CodeWiki's
-# str_replace_editor and Mermaid validation runs.  INTERACTION (AskUserQuestion)
+# Keep WRITER available as a fallback for Claude Code sessions where the
+# custom MCP toolkit is not exposed by the CLI. Agents are still instructed to
+# prefer CodeWiki's str_replace_editor so Mermaid validation runs. INTERACTION
+# (AskUserQuestion)
 # and WEB (WebFetch/WebSearch) are also off.  PARALLEL (Task) stays enabled:
 # Claude Code can fan out Read-heavy exploration without affecting
 # documentation correctness.
@@ -92,7 +94,7 @@ def _agent_tool_group_for_provider(provider: str) -> ToolGroup:
         # finer-grained built-in tool restrictions anyway, so prompts still
         # direct the agent to use CodeWiki's str_replace_editor for writes.
         return _AGENT_TOOL_GROUP | ToolGroup.EXEC
-    return _AGENT_TOOL_GROUP
+    return _AGENT_TOOL_GROUP | ToolGroup.WRITER
 
 
 def _resolve_caw_provider(provider: str) -> str:
