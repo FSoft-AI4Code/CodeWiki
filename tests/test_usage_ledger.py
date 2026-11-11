@@ -198,6 +198,33 @@ def test_caw_module_agent_retries_when_page_is_missing(tmp_path):
     assert 'command="create"' in agents[1].prompts[0]
 
 
+def test_caw_module_agent_stops_when_mcp_writer_is_unavailable(tmp_path):
+    from codewiki.src.be.caw_backend import CawBackend
+
+    agents = []
+
+    class UnavailableAgent:
+        def completion(self, prompt):
+            agents.append(prompt)
+            return SimpleNamespace(
+                result="The CodeWiki MCP str_replace_editor is not available.",
+                total_usage=None,
+                model="test",
+            )
+
+    trajectory = CawBackend._complete_module_until_written(
+        UnavailableAgent,
+        "generate documentation",
+        deps=SimpleNamespace(absolute_docs_path=str(tmp_path), module_tree={}),
+        module_name="repo",
+        module_path=[],
+        layout=None,
+    )
+
+    assert trajectory.model == "test"
+    assert len(agents) == 1
+
+
 class _StubBackend(LLMBackend):
     def complete(self, prompt, *, model=None, system_prompt=None):
         self._record_usage("complete", "", _usage(input_tokens=10, cost_usd=0.25))

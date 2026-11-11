@@ -604,6 +604,19 @@ class CawBackend(LLMBackend):
             trajectory = agent.completion(prompt)
             if doc_written(deps.absolute_docs_path, module_name, module_path, deps.module_tree):
                 return trajectory
+            result = " ".join((getattr(trajectory, "result", None) or "").split()).lower()
+            if (
+                "no matching deferred tools found" in result
+                or "mcp" in result
+                and "not available" in result
+            ):
+                logger.error(
+                    "Agent for %s cannot access the CodeWiki MCP writer; "
+                    "stopping retries to avoid repeated provider charges. Final answer: %s",
+                    module_name,
+                    result[:300] or "<empty>",
+                )
+                return trajectory
             if attempt == DOC_WRITE_REMINDERS:
                 return trajectory
             logger.warning(
