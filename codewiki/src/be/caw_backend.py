@@ -490,6 +490,12 @@ class CawBackend(LLMBackend):
         )
         if not module_path:
             user_prompt = root_recovery_prompt(user_prompt, working_dir, module_name)
+        target_doc = module_doc_file(module_name, list(module_path), config_layout(config))
+        user_prompt += (
+            f"\n\nIMPORTANT: The documentation file must be written at the exact path "
+            f"`{os.path.join(working_dir, target_doc)}`. If the CodeWiki MCP editor "
+            "is unavailable, use Claude Code Write or Edit with this absolute path."
+        )
 
         # caw forks claude / codex via subprocess.Popen without a cwd, so the
         # child CLI inherits Python's cwd — typically the repo root where the
