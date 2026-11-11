@@ -117,7 +117,7 @@ class DependencyParser:
         component_id_mapping = {}
 
         for func_dict in functions:
-            component_id = func_dict.get("id", "")
+            component_id = self._normalize_component_id(func_dict.get("id", ""))
             if not component_id:
                 continue
 
@@ -128,7 +128,7 @@ class DependencyParser:
                     "component_type", func_dict.get("node_type", "function")
                 ),
                 file_path=func_dict.get("file_path", ""),
-                relative_path=func_dict.get("relative_path", ""),
+                relative_path=self._normalize_relative_path(func_dict.get("relative_path", "")),
                 source_code=func_dict.get("source_code", func_dict.get("code_snippet", "")),
                 start_line=func_dict.get("start_line", 0),
                 end_line=func_dict.get("end_line", 0),
@@ -147,7 +147,10 @@ class DependencyParser:
             self.components[component_id] = node
 
             component_id_mapping[component_id] = component_id
-            legacy_id = f"{func_dict.get('file_path', '')}:{func_dict.get('name', '')}"
+            legacy_id = (
+                f"{self._normalize_relative_path(func_dict.get('file_path', ''))}:"
+                f"{func_dict.get('name', '')}"
+            )
             if legacy_id and legacy_id != component_id:
                 component_id_mapping[legacy_id] = component_id
 
@@ -163,8 +166,8 @@ class DependencyParser:
 
         processed_relationships = 0
         for rel_dict in relationships:
-            caller_id = rel_dict.get("caller", "")
-            callee_id = rel_dict.get("callee", "")
+            caller_id = self._normalize_component_id(rel_dict.get("caller", ""))
+            callee_id = self._normalize_component_id(rel_dict.get("callee", ""))
 
             caller_component_id = component_id_mapping.get(caller_id)
 
@@ -182,6 +185,16 @@ class DependencyParser:
             ):
                 self.components[caller_component_id].depends_on.add(callee_component_id)
                 processed_relationships += 1
+
+    @staticmethod
+    def _normalize_relative_path(path: str) -> str:
+        """Keep repository-relative paths stable across operating systems."""
+        return str(path or "").replace("\\", "/")
+
+    @classmethod
+    def _normalize_component_id(cls, component_id: str) -> str:
+        """Normalize the path portion of a component ID without changing symbols."""
+        return cls._normalize_relative_path(component_id)
 
     def _determine_component_type(self, func_dict: dict) -> str:
         if func_dict.get("is_method", False):
