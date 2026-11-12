@@ -101,6 +101,14 @@ uses [Semantic Versioning](https://semver.org/).
   `AC_ARG_WITH` option and links to the `Makefile.am`s that `AC_CONFIG_FILES`
   generates.
 
+### Security
+
+- **Dependency security updates.** The pinned Python dependencies and the
+  Mermaid frontend asset were refreshed to versions that address known
+  advisories. `pip-audit -r requirements.txt` and `npm audit` in
+  `tests/mermaid` now report no findings, and the Mermaid parser fixtures
+  still pass after the upgrade.
+
 ### Changed
 
 - **Docs mirror the module tree** ([#125](https://github.com/FSoft-AI4Code/CodeWiki/issues/125)).
