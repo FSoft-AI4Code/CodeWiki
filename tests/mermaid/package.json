@@ -6,7 +6,7 @@
     "test": "node check.mjs"
   },
   "devDependencies": {
-    "mermaid": "11.9.0",
+    "mermaid": "12.3.0",
     "jsdom": "26.1.0"
   }
 }
