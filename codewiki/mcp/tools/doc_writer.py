@@ -99,7 +99,7 @@ async def handle_write_doc_file(
             {"error": f"File already exists: {filename}. Use edit_doc_file to modify it."}
         )
 
-    await asyncio.to_thread(doc_path.write_text, content, "utf-8")
+    await asyncio.to_thread(doc_path.write_text, content, encoding="utf-8", newline="\n")
     session.docs_written += 1
 
     # Mermaid validation
@@ -143,7 +143,7 @@ async def handle_edit_doc_file(
         old_content = path_history.pop()
         history[str(doc_path)] = path_history
         session.registry["file_history"] = history
-        await asyncio.to_thread(doc_path.write_text, old_content, "utf-8")
+        await asyncio.to_thread(doc_path.write_text, old_content, encoding="utf-8", newline="\n")
 
         # Validate Mermaid after undo
         mermaid_result = await _validate_mermaid(str(doc_path), filename, repair=False)
@@ -181,7 +181,7 @@ async def handle_edit_doc_file(
         # Save history only for edits that actually happen, so undo never
         # pops a no-op entry left behind by a failed/rejected command.
         _save_history(session, doc_path, current_content)
-        await asyncio.to_thread(doc_path.write_text, new_content, "utf-8")
+        await asyncio.to_thread(doc_path.write_text, new_content, encoding="utf-8", newline="\n")
 
         # Snippet around the edit
         replacement_line = current_content.split(old_str)[0].count("\n")
@@ -202,7 +202,7 @@ async def handle_edit_doc_file(
         lines = lines[:insert_line] + new_str_lines + lines[insert_line:]
         new_content = "\n".join(lines)
         _save_history(session, doc_path, current_content)
-        await asyncio.to_thread(doc_path.write_text, new_content, "utf-8")
+        await asyncio.to_thread(doc_path.write_text, new_content, encoding="utf-8", newline="\n")
 
         start = max(0, insert_line - 4)
         end = min(len(lines), start + len(new_str_lines) + 8)
