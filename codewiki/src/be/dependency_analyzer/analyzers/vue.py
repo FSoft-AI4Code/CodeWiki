@@ -253,11 +253,22 @@ class TreeSitterVueAnalyzer:
         for node in nodes:
             if node.id == self.component_id:
                 continue
+            node.id = self._normalize_component_id(node.id)
+            node.component_id = self._normalize_component_id(node.component_id)
+            node.relative_path = Path(node.relative_path).as_posix()
             self.nodes.append(node)
             self.script_names.setdefault(node.name.split(".")[-1], node.id)
         for rel in relationships:
+            rel.caller = self._normalize_component_id(rel.caller)
+            rel.callee = self._normalize_component_id(rel.callee)
             if rel.caller != self.component_id:
                 self.call_relationships.append(rel)
+
+    @staticmethod
+    def _normalize_component_id(component_id: str | None) -> str | None:
+        if component_id is None:
+            return None
+        return component_id.replace("\\", "/")
 
     def _collect_imports(self, root):
         for stmt in root.children:
