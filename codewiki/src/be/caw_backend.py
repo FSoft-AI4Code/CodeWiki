@@ -219,10 +219,25 @@ def _patch_claude_allowed_tools() -> None:
         def Popen(cmd, *args, **kwargs):
             command = _with_allowed_tools(cmd)
             if sys.platform == "win32" and command and command[0] == "claude":
-                claude_cmd = shutil.which("claude.cmd")
-                if claude_cmd:
-                    command = [claude_cmd, *command[1:]]
-                    kwargs["shell"] = True
+                claude_exe = shutil.which("claude.exe")
+                if not claude_exe:
+                    claude_cmd = shutil.which("claude.cmd")
+                    if claude_cmd:
+                        candidate = (
+                            Path(claude_cmd).parent
+                            / "node_modules"
+                            / "@anthropic-ai"
+                            / "claude-code"
+                            / "bin"
+                            / "claude.exe"
+                        )
+                        if candidate.is_file():
+                            claude_exe = str(candidate)
+                        else:
+                            command = [claude_cmd, *command[1:]]
+                            kwargs["shell"] = True
+                if claude_exe:
+                    command = [claude_exe, *command[1:]]
                 if kwargs.get("text") and "encoding" not in kwargs:
                     kwargs["encoding"] = "utf-8"
             return subprocess.Popen(command, *args, **kwargs)
