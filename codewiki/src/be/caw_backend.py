@@ -223,6 +223,8 @@ def _patch_claude_allowed_tools() -> None:
                 if not claude_exe:
                     claude_cmd = shutil.which("claude.cmd")
                     if claude_cmd:
+                        from pathlib import Path
+
                         candidate = (
                             Path(claude_cmd).parent
                             / "node_modules"
