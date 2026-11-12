@@ -221,13 +221,8 @@ def _patch_claude_allowed_tools() -> None:
             if sys.platform == "win32" and command and command[0] == "claude":
                 claude_cmd = shutil.which("claude.cmd")
                 if claude_cmd:
-                    command = [
-                        "cmd.exe",
-                        "/d",
-                        "/s",
-                        "/c",
-                        subprocess.list2cmdline([claude_cmd, *command[1:]]),
-                    ]
+                    command = [claude_cmd, *command[1:]]
+                    kwargs["shell"] = True
                 if kwargs.get("text") and "encoding" not in kwargs:
                     kwargs["encoding"] = "utf-8"
             return subprocess.Popen(command, *args, **kwargs)
