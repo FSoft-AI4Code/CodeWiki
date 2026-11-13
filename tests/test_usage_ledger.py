@@ -133,7 +133,9 @@ def test_caw_complete_records_usage(monkeypatch):
 
 def test_caw_allowed_tools_names_each_mcp_tool(tmp_path):
     import json
+    import pytest
 
+    pytest.importorskip("caw")
     from codewiki.src.be.caw_backend import _with_allowed_tools
 
     config_path = tmp_path / "mcp.json"
@@ -153,6 +155,9 @@ def test_caw_allowed_tools_names_each_mcp_tool(tmp_path):
 
 
 def test_caw_module_agents_do_not_enable_native_writers():
+    import pytest
+
+    pytest.importorskip("caw")
     from codewiki.src.be.caw_backend import _agent_tool_group_for_provider
     from codewiki.src.be.caw_compat import ToolGroup
 
@@ -162,6 +167,9 @@ def test_caw_module_agents_do_not_enable_native_writers():
 
 
 def test_caw_module_agent_retries_when_page_is_missing(tmp_path):
+    import pytest
+
+    pytest.importorskip("caw")
     from codewiki.src.be.caw_backend import CawBackend
 
     class FakeAgent:
@@ -199,6 +207,9 @@ def test_caw_module_agent_retries_when_page_is_missing(tmp_path):
 
 
 def test_caw_module_agent_stops_when_mcp_writer_is_unavailable(tmp_path):
+    import pytest
+
+    pytest.importorskip("caw")
     from codewiki.src.be.caw_backend import CawBackend
 
     agents = []
