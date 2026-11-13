@@ -6,7 +6,6 @@ Background worker for processing documentation generation jobs.
 import os
 import time
 import threading
-import subprocess
 import asyncio
 from datetime import datetime
 from pathlib import Path
