@@ -116,8 +116,8 @@ def test_hierarchical_export(tmp_path):
     assert (out_docs / MARKER_FILENAME).is_file()
 
     # Links to the overview point at index.md, relative to each page
-    assert "[Overview](../index.md)" in (out_docs / "auth/login.md").read_text()
-    auth = (out_docs / "auth.md").read_text()
+    assert "[Overview](../index.md)" in (out_docs / "auth/login.md").read_text(encoding="utf-8")
+    auth = (out_docs / "auth.md").read_text(encoding="utf-8")
     assert "[Shop](index.md)" in auth
     # Links labelled with the module name show the page title
     assert "[Login](auth/login.md)" in auth
@@ -130,13 +130,13 @@ def test_hierarchical_export(tmp_path):
     assert "on 2026-11-01 with `test-model`" in auth
     assert '??? abstract "Documented components (2)"' in auth
     assert f"[`login`]({REPO}/blob/{COMMIT}/src/auth.py) — `src/auth.py`" in auth
-    billing = (out_docs / "billing.md").read_text()
+    billing = (out_docs / "billing.md").read_text(encoding="utf-8")
     assert f"[`billing.py`]({REPO}/blob/{COMMIT}/src/billing.py)" in billing
     # The overview documents no components
-    assert "Documented components" not in (out_docs / "index.md").read_text()
+    assert "Documented components" not in (out_docs / "index.md").read_text(encoding="utf-8")
 
     # The source docs are untouched
-    assert (docs / "overview.md").read_text().startswith("# Shop\n")
+    assert (docs / "overview.md").read_text(encoding="utf-8").startswith("# Shop\n")
 
 
 def test_flat_export(tmp_path):
@@ -149,9 +149,11 @@ def test_flat_export(tmp_path):
     assert config["nav"][1] == {
         "Authentication": [{"Authentication": "auth.md"}, {"Login": "login.md"}]
     }
-    assert "[Overview](index.md)" in (out / "docs/login.md").read_text()
+    assert "[Overview](index.md)" in (out / "docs/login.md").read_text(encoding="utf-8")
     # No repository URL: components are listed without links
-    assert "- `LoginForm` — `src/login.py`" in (out / "docs/login.md").read_text()
+    assert "- `LoginForm` — `src/login.py`" in (
+        out / "docs/login.md"
+    ).read_text(encoding="utf-8")
     assert "repo_url" not in config
 
 

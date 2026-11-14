@@ -210,7 +210,7 @@ def _backend(tmp_path, monkeypatch, kind, run):
     return backend
 
 
-@pytest.mark.parametrize("kind,expected_calls", [("pydantic", 3), ("caw", 1)])
+@pytest.mark.parametrize("kind,expected_calls", [("pydantic", 3), ("caw", 3)])
 def test_backend_failure_is_explicit_and_preserves_reserved_children(
     tmp_path, monkeypatch, kind, expected_calls
 ):

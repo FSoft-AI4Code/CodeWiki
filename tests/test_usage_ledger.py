@@ -89,9 +89,12 @@ def _caw_backend(monkeypatch, usage):
     from codewiki.src.be import caw_backend
     from codewiki.src.be.caw_backend import CawBackend
 
+    captured = {}
+
     class FakeCawAgent:
         def __init__(self, **kwargs):
             self.model = kwargs.get("model")
+            captured.update(kwargs)
 
         def completion(self, prompt):
             return SimpleNamespace(
@@ -106,16 +109,17 @@ def _caw_backend(monkeypatch, usage):
     backend = object.__new__(CawBackend)  # skip the CLI-on-PATH check
     backend._caw_provider = "claude_code"
     backend._model = None
-    return backend
+    return backend, captured
 
 
 def test_caw_complete_records_usage(monkeypatch):
     usage = _usage(input_tokens=1000, output_tokens=200, cache_read_tokens=50, cost_usd=0.12)
-    backend = _caw_backend(monkeypatch, usage)
+    backend, captured = _caw_backend(monkeypatch, usage)
 
     with backend.usage_ledger.in_phase("overview", target="repo"):
         assert backend.complete("prompt") == "ok"
 
+    assert captured["auto_wait"] is False
     assert backend.last_usage["cost_usd"] == 0.12
     (call,) = backend.usage_ledger.summary()["calls"]
     assert call["phase"] == "overview"
@@ -125,6 +129,111 @@ def test_caw_complete_records_usage(monkeypatch):
     assert call["input_tokens"] == 1050  # normalized inclusive input, including cache reads
     assert call["total_tokens"] == 1250
     assert call["cost_usd"] == 0.12
+
+
+def test_caw_allowed_tools_names_each_mcp_tool(tmp_path):
+    import json
+    import pytest
+
+    pytest.importorskip("caw")
+    from codewiki.src.be.caw_backend import _with_allowed_tools
+
+    config_path = tmp_path / "mcp.json"
+    config_path.write_text(
+        json.dumps({"mcpServers": {"codewiki_tools_abc123": {"url": "http://127.0.0.1"}}}),
+        encoding="utf-8",
+    )
+    command = _with_allowed_tools(["claude", "--mcp-config", str(config_path), "--print", "prompt"])
+
+    allowed = command[-1]
+    assert "--strict-mcp-config" in command
+    assert allowed == (
+        "mcp__codewiki_tools_abc123__read_code_components,"
+        "mcp__codewiki_tools_abc123__str_replace_editor,"
+        "mcp__codewiki_tools_abc123__generate_sub_module_documentation"
+    )
+
+
+def test_caw_module_agents_do_not_enable_native_writers():
+    import pytest
+
+    pytest.importorskip("caw")
+    from codewiki.src.be.caw_backend import _agent_tool_group_for_provider
+    from codewiki.src.be.caw_compat import ToolGroup
+
+    tools = _agent_tool_group_for_provider("claude_code")
+
+    assert not tools & ToolGroup.WRITER
+
+
+def test_caw_module_agent_retries_when_page_is_missing(tmp_path):
+    import pytest
+
+    pytest.importorskip("caw")
+    from codewiki.src.be.caw_backend import CawBackend
+
+    class FakeAgent:
+        def __init__(self, writes):
+            self.prompts = []
+            self.writes = writes
+
+        def completion(self, prompt):
+            self.prompts.append(prompt)
+            if self.writes:
+                (tmp_path / "repo.md").write_text("# repo\n", encoding="utf-8")
+            return SimpleNamespace(total_usage=None, model="test")
+
+    agents = []
+
+    def agent_factory():
+        agent = FakeAgent(bool(agents))
+        agents.append(agent)
+        return agent
+
+    trajectory = CawBackend._complete_module_until_written(
+        agent_factory,
+        "generate documentation",
+        deps=SimpleNamespace(absolute_docs_path=str(tmp_path), module_tree={}),
+        module_name="repo",
+        module_path=[],
+        layout=None,
+    )
+
+    assert trajectory.model == "test"
+    assert len(agents) == 2
+    assert len(agents[0].prompts) == 1
+    assert len(agents[1].prompts) == 1
+    assert 'command="create"' in agents[1].prompts[0]
+
+
+def test_caw_module_agent_stops_when_mcp_writer_is_unavailable(tmp_path):
+    import pytest
+
+    pytest.importorskip("caw")
+    from codewiki.src.be.caw_backend import CawBackend
+
+    agents = []
+
+    class UnavailableAgent:
+        def completion(self, prompt):
+            agents.append(prompt)
+            return SimpleNamespace(
+                result="The CodeWiki MCP str_replace_editor is not available.",
+                total_usage=None,
+                model="test",
+            )
+
+    trajectory = CawBackend._complete_module_until_written(
+        UnavailableAgent,
+        "generate documentation",
+        deps=SimpleNamespace(absolute_docs_path=str(tmp_path), module_tree={}),
+        module_name="repo",
+        module_path=[],
+        layout=None,
+    )
+
+    assert trajectory.model == "test"
+    assert len(agents) == 1
 
 
 class _StubBackend(LLMBackend):

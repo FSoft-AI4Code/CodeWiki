@@ -7,7 +7,6 @@ import json
 import logging
 import os
 import re
-import shlex
 import subprocess
 import sys
 from collections import defaultdict
@@ -229,9 +228,15 @@ def flake8(file_path: str) -> str:
     """Run flake8 on a given file and return the output as a string"""
     if Path(file_path).suffix != ".py":
         return ""
-    cmd = "flake8 --isolated --select=F821,F822,F831,E111,E112,E113,E999,E902 {file_path}"
     out = subprocess.run(
-        cmd.format(file_path=file_path), shell=True, check=False, capture_output=True
+        [
+            "flake8",
+            "--isolated",
+            "--select=F821,F822,F831,E111,E112,E113,E999,E902",
+            str(file_path),
+        ],
+        check=False,
+        capture_output=True,
     )
     # Use errors="replace" so non-UTF-8 bytes (e.g. GBK-encoded paths on Windows) don't crash decoding.
     return out.stdout.decode("utf-8", errors="replace")
@@ -560,21 +565,29 @@ class EditTool:
 
             # Hidden entries are skipped except `.github` (CI workflows are
             # documentation-relevant artifacts the agent must be able to find).
-            out = subprocess.run(
-                rf"find {shlex.quote(str(path))} -maxdepth 2 "
-                r"\( -not -path '*/.*' -o -name .github -o -path '*/.github/*' \)",
-                shell=True,
-                check=False,
-                capture_output=True,
-            )
-            # Use errors="replace" so non-UTF-8 bytes (e.g. GBK-encoded filenames on Windows) don't crash decoding.
-            stdout = out.stdout.decode("utf-8", errors="replace")
-            stderr = out.stderr.decode("utf-8", errors="replace")
+            display_root = self._get_display_path(path)
+            entries = [display_root]
+            try:
+                for child in sorted(path.iterdir(), key=lambda p: p.name):
+                    if child.name.startswith(".") and child.name != ".github":
+                        continue
+                    entries.append(f"{display_root}/{child.name}")
+                    if child.is_dir():
+                        try:
+                            for grandchild in sorted(child.iterdir(), key=lambda p: p.name):
+                                if grandchild.name.startswith(".") and child.name != ".github":
+                                    continue
+                                entries.append(f"{display_root}/{child.name}/{grandchild.name}")
+                        except OSError:
+                            pass
+            except OSError as exc:
+                self.logs.append(f"Error listing directory {display_root}: {exc}")
+                return
 
-            if not stderr:
-                stdout = stdout.replace(str(path), self._get_display_path(path))
-                stdout = f"Here's the files and directories up to 2 levels deep in {self._get_display_path(path)}, excluding hidden items (except .github):\n{stdout}\n"
-                self.logs.append(stdout)
+            stdout = "\n".join(entries)
+            self.logs.append(
+                f"Here's the files and directories up to 2 levels deep in {display_root}, excluding hidden items (except .github):\n{stdout}\n"
+            )
             return
 
         file_content = self.read_file(path)

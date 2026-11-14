@@ -22,15 +22,20 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import sys
 import time
 import shutil
-from typing import Any
+from typing import Any, Callable
 
-from caw import Agent as CawAgent
-from caw import ToolGroup
+from codewiki.src.be.caw_compat import CawAgent, ToolGroup
 
 from codewiki.src.be.agent_tools.deps import CodeWikiDeps
-from codewiki.src.be.agent_tools.doc_guard import DocumentationWriteError, doc_written
+from codewiki.src.be.agent_tools.doc_guard import (
+    DOC_WRITE_REMINDERS,
+    DocumentationWriteError,
+    doc_written,
+    reminder_prompt,
+)
 from codewiki.src.be.backend import AgentReply, LLMBackend
 from codewiki.src.be.module_scope import (
     can_split_module,
@@ -62,12 +67,15 @@ _CLI_BINARY = {
     "codex": "codex",
 }
 
-# Disable WRITER (Write/Edit/NotebookEdit) so the agent must use CodeWiki's
-# str_replace_editor and Mermaid validation runs.  INTERACTION (AskUserQuestion)
-# and WEB (WebFetch/WebSearch) are also off.  PARALLEL (Task) stays enabled:
-# Claude Code can fan out Read-heavy exploration without affecting
-# documentation correctness.
+# INTERACTION (AskUserQuestion) and WEB (WebFetch/WebSearch) are off.
+# PARALLEL (Task) stays enabled so Claude Code can fan out Read-heavy
+# exploration without affecting documentation correctness.
 _AGENT_TOOL_GROUP = ToolGroup.READER | ToolGroup.PARALLEL
+
+# caw's default usage-limit detector relies on provider response text and can
+# misclassify normal documentation as a limit, then sleep for 60 minutes.
+# CodeWiki must surface the turn and let its caller decide how to handle it.
+_CAW_AUTO_WAIT = False
 
 
 def _agent_tool_group_for_provider(provider: str) -> ToolGroup:
@@ -140,8 +148,10 @@ _patch_codex_tool_timeout()
 #   https://code.claude.com/docs/en/settings#permission-rule-syntax
 #   `--allowedTools` flag: https://code.claude.com/docs/en/cli-reference
 # caw's ClaudeCodeSession only ever emits `--disallowedTools`, so rewrite its
-# `claude` command to add `--allowedTools mcp__<server>` for every server in
-# the --mcp-config.  The patch swaps the `subprocess` module reference INSIDE
+# `claude` command to add explicit `mcp__<server>__<tool>` rules for every
+# CodeWiki toolkit tool.  A server-only rule does not expose the tools to
+# Claude Code's non-interactive permission resolver.  The patch swaps the
+# `subprocess` module reference INSIDE
 # caw.providers.claude_code for a thin proxy — the global subprocess.Popen
 # class stays untouched (isinstance / subclass safe) and no other claude
 # invocation in this process is affected.  Belongs upstream in caw; remove
@@ -150,7 +160,7 @@ _CLAUDE_ALLOWED_PATCH_APPLIED = False
 
 
 def _with_allowed_tools(cmd):
-    """Append ``--allowedTools mcp__<server>,...`` to a ``claude`` command.
+    """Append explicit CodeWiki MCP tool rules to a ``claude`` command.
 
     Pure ``list -> list`` transform.  Applies only when *cmd* is a claude
     invocation carrying ``--mcp-config`` and no explicit allow-list already;
@@ -175,9 +185,17 @@ def _with_allowed_tools(cmd):
             servers = list(json.load(f).get("mcpServers", {}).keys())
         if not servers:
             return cmd
-        allowed = ",".join(f"mcp__{s}" for s in servers)
+        tool_names = (
+            "read_code_components",
+            "str_replace_editor",
+            "generate_sub_module_documentation",
+        )
+        allowed = ",".join(f"mcp__{server}__{tool}" for server in servers for tool in tool_names)
         logger.info("Injected --allowedTools for MCP servers: %s", servers)
-        return list(cmd) + ["--allowedTools", allowed]
+        # caw's temporary config is the complete CodeWiki tool surface for
+        # this session. Ignore user/project MCP registrations so Claude's
+        # deferred-tool index cannot be polluted by unrelated connectors.
+        return list(cmd) + ["--strict-mcp-config", "--allowedTools", allowed]
     except Exception as e:  # noqa: BLE001 — never break the spawn on a patch hiccup
         logger.warning("claude allowedTools patch skipped: %s", e)
         return cmd
@@ -199,7 +217,32 @@ def _patch_claude_allowed_tools() -> None:
 
         @staticmethod
         def Popen(cmd, *args, **kwargs):
-            return subprocess.Popen(_with_allowed_tools(cmd), *args, **kwargs)
+            command = _with_allowed_tools(cmd)
+            if sys.platform == "win32" and command and command[0] == "claude":
+                claude_exe = shutil.which("claude.exe")
+                if not claude_exe:
+                    claude_cmd = shutil.which("claude.cmd")
+                    if claude_cmd:
+                        from pathlib import Path
+
+                        candidate = (
+                            Path(claude_cmd).parent
+                            / "node_modules"
+                            / "@anthropic-ai"
+                            / "claude-code"
+                            / "bin"
+                            / "claude.exe"
+                        )
+                        if candidate.is_file():
+                            claude_exe = str(candidate)
+                        else:
+                            command = [claude_cmd, *command[1:]]
+                            kwargs["shell"] = True
+                if claude_exe:
+                    command = [claude_exe, *command[1:]]
+                if kwargs.get("text") and "encoding" not in kwargs:
+                    kwargs["encoding"] = "utf-8"
+            return subprocess.Popen(command, *args, **kwargs)
 
         def __getattr__(self, name):
             return getattr(subprocess, name)
@@ -265,6 +308,7 @@ class CawBackend(LLMBackend):
             model=effective_model,
             tools=ToolGroup.READER,
             system_prompt=system_prompt,
+            auto_wait=_CAW_AUTO_WAIT,
         )
         started = time.time()
         traj = agent.completion(prompt)
@@ -305,6 +349,7 @@ class CawBackend(LLMBackend):
             system_prompt=system_prompt,
             tools=_agent_tool_group_for_provider(self._caw_provider),
             tool_servers=[toolkit],
+            auto_wait=_CAW_AUTO_WAIT,
         )
         original_cwd = os.getcwd()
         run_cwd = deps.absolute_docs_path if self._caw_provider == "codex" else self._repo_root
@@ -435,15 +480,16 @@ class CawBackend(LLMBackend):
             scope_component_ids=core_component_ids,
         )
 
-        toolkit = CawToolKit(deps=deps, backend=self, allow_subagent=can_delegate)
-
-        agent = CawAgent(
-            provider=self._caw_provider,
-            model=self._model,
-            system_prompt=system_prompt,
-            tools=_agent_tool_group_for_provider(self._caw_provider),
-            tool_servers=[toolkit],
-        )
+        def agent_factory() -> Any:
+            toolkit = CawToolKit(deps=deps, backend=self, allow_subagent=can_delegate)
+            return CawAgent(
+                provider=self._caw_provider,
+                model=self._model,
+                system_prompt=system_prompt,
+                tools=_agent_tool_group_for_provider(self._caw_provider),
+                tool_servers=[toolkit],
+                auto_wait=_CAW_AUTO_WAIT,
+            )
 
         user_prompt = format_user_prompt(
             module_name=module_name,
@@ -455,6 +501,13 @@ class CawBackend(LLMBackend):
         )
         if not module_path:
             user_prompt = root_recovery_prompt(user_prompt, working_dir, module_name)
+        target_doc = module_doc_file(module_name, list(module_path), config_layout(config))
+        user_prompt += (
+            f"\n\nIMPORTANT: Use the CodeWiki MCP `str_replace_editor` as the preferred "
+            f"writer. For that tool, write the documentation at relative path "
+            f"`{target_doc}` with `working_dir=\"docs\"`; never pass an absolute path "
+            f"as `working_dir`. Do not use native Claude Code file-writing tools."
+        )
 
         # caw forks claude / codex via subprocess.Popen without a cwd, so the
         # child CLI inherits Python's cwd — typically the repo root where the
@@ -497,7 +550,14 @@ class CawBackend(LLMBackend):
         try:
             os.chdir(run_cwd)
             try:
-                traj = agent.completion(user_prompt)
+                traj = self._complete_module_until_written(
+                    agent_factory,
+                    user_prompt,
+                    deps=deps,
+                    module_name=module_name,
+                    module_path=list(module_path),
+                    layout=config_layout(config),
+                )
             finally:
                 os.chdir(original_cwd)
                 file_manager.save_json(deps.module_tree, module_tree_path)
@@ -535,3 +595,46 @@ class CawBackend(LLMBackend):
         except Exception as e:
             logger.error("Error processing module %s via caw: %s", module_name, e)
             raise
+
+    @staticmethod
+    def _complete_module_until_written(
+        agent_factory: Callable[[], Any],
+        user_prompt: str,
+        *,
+        deps: CodeWikiDeps,
+        module_name: str,
+        module_path: list[str],
+        layout: str | None,
+    ) -> Any:
+        """Continue a caw conversation when the agent returns without writing."""
+        doc_file = module_doc_file(module_name, module_path, layout)
+        for attempt in range(DOC_WRITE_REMINDERS + 1):
+            agent = agent_factory()
+            prompt = user_prompt
+            if attempt:
+                prompt += "\n\n" + reminder_prompt(module_name, doc_file)
+            trajectory = agent.completion(prompt)
+            if doc_written(deps.absolute_docs_path, module_name, module_path, deps.module_tree):
+                return trajectory
+            result = " ".join((getattr(trajectory, "result", None) or "").split()).lower()
+            if (
+                "no matching deferred tools found" in result
+                or "mcp" in result
+                and "not available" in result
+            ):
+                logger.error(
+                    "Agent for %s cannot access the CodeWiki MCP writer; "
+                    "stopping retries to avoid repeated provider charges. Final answer: %s",
+                    module_name,
+                    result[:300] or "<empty>",
+                )
+                return trajectory
+            if attempt == DOC_WRITE_REMINDERS:
+                return trajectory
+            logger.warning(
+                "Agent for %s finished without writing %s; requesting write reminder %d/%d",
+                module_name,
+                doc_file,
+                attempt + 1,
+                DOC_WRITE_REMINDERS,
+            )

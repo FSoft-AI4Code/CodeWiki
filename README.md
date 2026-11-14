@@ -46,6 +46,22 @@ overview, with Mermaid diagrams. It works on codebases from a few thousand to
 over a million lines, in 11 languages. It needs an LLM API key, or a Claude or
 Codex subscription, or an AI IDE that speaks MCP.
 
+## Windows support
+
+CodeWiki supports Windows 11 with Python 3.12 or newer. In PowerShell, create
+and activate a virtual environment with:
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e .
+```
+
+Git must be installed and available on `PATH` for repository-aware filtering.
+The `claude-code` provider also requires the Claude CLI and its normal
+authentication. CodeWiki adapts the subscription backend's POSIX file locking
+on Windows; no `fcntl` package or Unix shell is required.
+
 ## Quick start
 
 **1. Install**
