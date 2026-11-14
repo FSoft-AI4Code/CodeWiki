@@ -40,7 +40,7 @@ https://github.com/user-attachments/assets/951d5d3c-fd6e-4734-8b16-445d880f95d3
 
 ---
 
-CodeWiki reads a repository, builds its dependency graph, splits the graph into
+CodeWiki reads a codebase repository, builds its dependency graph, splits the graph into
 a hierarchy of modules, and has agents write one page per module plus an
 overview, with Mermaid diagrams. It works on codebases from a few thousand to
 over a million lines, in 11 languages. It needs an LLM API key, or a Claude or
