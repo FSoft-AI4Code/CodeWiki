@@ -5,7 +5,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from codewiki.cli.commands.generate import _read_stored_language
+from codewiki.cli.commands.generate import (
+    _read_stored_language,
+    _read_stored_language_state,
+)
 from codewiki.cli.html_generator import HTMLGenerator
 from codewiki.cli.models.config import AgentInstructions, Configuration
 from codewiki.src.be.documentation_generator import DocumentationGenerator
@@ -185,3 +188,147 @@ def test_metadata_tolerates_config_stub_without_language(tmp_path):
     gen.commit_id = None
     gen.create_documentation_metadata(str(tmp_path), {}, 0)
     assert _read_stored_language(tmp_path) is None
+
+
+def test_read_stored_language_state_distinguishes_recorded_vs_missing(tmp_path):
+    assert _read_stored_language_state(tmp_path) == (False, None)
+
+    (tmp_path / "metadata.json").write_text(json.dumps({"usage": {"incomplete": True}}))
+    assert _read_stored_language_state(tmp_path) == (False, None)
+
+    (tmp_path / "metadata.json").write_text(json.dumps({"generation_info": {"commit_id": "abc"}}))
+    assert _read_stored_language_state(tmp_path) == (False, None)
+
+    (tmp_path / "metadata.json").write_text(json.dumps({"generation_info": {"language": None}}))
+    assert _read_stored_language_state(tmp_path) == (True, None)
+
+    (tmp_path / "metadata.json").write_text(
+        json.dumps({"generation_info": {"language": "Spanish"}})
+    )
+    assert _read_stored_language_state(tmp_path) == (True, "Spanish")
+
+
+def test_resolve_update_language_unknown_metadata():
+    assert resolve_update_language(None, "es", known=False) == "Spanish"
+    assert resolve_update_language(None, "en", known=False) is None
+    assert resolve_update_language(None, None, known=False) is None
+
+
+def test_generate_update_language_handling(tmp_path, monkeypatch):
+    from click.testing import CliRunner
+    import codewiki.cli.commands.generate as gen
+
+    class Stop(Exception):
+        pass
+
+    seen = {}
+    saved_agent = AgentInstructions()
+    cfg = SimpleNamespace(
+        main_model="m",
+        cluster_model="m",
+        fallback_model="m",
+        base_url="http://x",
+        provider="openai-compatible",
+        aws_region="us-east-1",
+        agent_instructions=saved_agent,
+        max_tokens=1,
+        min_token_per_module=1000,
+        max_token_per_module=1,
+        max_token_per_leaf_module=1,
+        max_depth=1,
+        request_limit=1,
+        agent_retries=1,
+        use_gitignore=True,
+        prompt_caching=False,
+    )
+
+    class FakeManager:
+        def load(self):
+            return True
+
+        def is_configured(self):
+            return True
+
+        def get_config(self):
+            return cfg
+
+        def get_api_key(self):
+            return "k"
+
+    def fake_generator(**kwargs):
+        seen.clear()
+        seen.update(kwargs["config"])
+        raise Stop
+
+    monkeypatch.setattr(gen, "ConfigManager", FakeManager)
+    monkeypatch.setattr(gen, "CLIDocumentationGenerator", fake_generator)
+    (tmp_path / "a.py").write_text("def f():\n    return 1\n")
+    out = tmp_path / "out"
+    out.mkdir()
+    monkeypatch.chdir(tmp_path)
+
+    # Incomplete metadata (no generation_info): --update --language es is accepted
+    (out / "metadata.json").write_text(json.dumps({"usage": {"incomplete": True}}))
+    CliRunner().invoke(gen.generate_command, ["--update", "--language", "es", "-o", str(out)])
+    assert seen["agent_instructions"]["language"] == "Spanish"
+
+    # Metadata without language key: saved config language is preserved when --language omitted
+    saved_agent.language = "es"
+    (out / "metadata.json").write_text(json.dumps({"generation_info": {"commit_id": "abc"}}))
+    CliRunner().invoke(gen.generate_command, ["--update", "-o", str(out)])
+    assert seen["agent_instructions"]["language"] == "es"
+    saved_agent.language = None
+
+    # Explicit English metadata still rejects --update --language es
+    (out / "metadata.json").write_text(json.dumps({"generation_info": {"language": None}}))
+    res = CliRunner().invoke(
+        gen.generate_command, ["--update", "--language", "es", "-o", str(out)]
+    )
+    assert res.exit_code != 0
+    assert "generated in English, but --language asks for Spanish" in res.output
+
+    # Explicit Spanish metadata accepts --language es and rejects --language fr
+    (out / "metadata.json").write_text(json.dumps({"generation_info": {"language": "Spanish"}}))
+    CliRunner().invoke(gen.generate_command, ["--update", "--language", "es", "-o", str(out)])
+    assert seen["agent_instructions"]["language"] == "Spanish"
+
+    res = CliRunner().invoke(
+        gen.generate_command, ["--update", "--language", "fr", "-o", str(out)]
+    )
+    assert res.exit_code != 0
+    assert "generated in Spanish, but --language asks for French" in res.output
+
+
+def test_incomplete_run_records_language_and_layout(tmp_path, monkeypatch):
+    from codewiki.cli.adapters.doc_generator import CLIDocumentationGenerator
+    from codewiki.cli.utils.errors import APIError
+    from codewiki.src.be.backend import UsageLedger
+
+    out = tmp_path / "docs"
+    out.mkdir()
+    (out / "module_tree.json").write_text("{}")
+
+    instance = CLIDocumentationGenerator(
+        tmp_path,
+        out,
+        {
+            "main_model": "m",
+            "cluster_model": "m",
+            "base_url": "http://x",
+            "api_key": "k",
+            "agent_instructions": {"language": "es"},
+            "layout": "hierarchical",
+        },
+    )
+
+    async def fail(cfg):
+        instance._usage_ledger = UsageLedger()
+        raise APIError("module failed")
+
+    monkeypatch.setattr(instance, "_run_backend_generation", fail)
+    with pytest.raises(APIError):
+        instance.generate()
+
+    metadata = json.loads((out / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["usage"]["incomplete"] is True
+    assert metadata["generation_info"] == {"language": "Spanish", "layout": "hierarchical"}

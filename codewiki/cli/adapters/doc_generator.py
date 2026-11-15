@@ -664,6 +664,18 @@ class CLIDocumentationGenerator:
                 metadata = {}
             if not isinstance(metadata, dict):
                 metadata = {}
+            if "generation_info" not in metadata and (
+                (self.output_dir / "module_tree.json").exists()
+                or list_doc_files(str(self.output_dir))
+            ):
+                from codewiki.src.be.doc_layout import normalize_layout
+                from codewiki.src.language import normalize_language
+
+                instructions = self.config.get("agent_instructions") or {}
+                metadata["generation_info"] = {
+                    "language": normalize_language(instructions.get("language")),
+                    "layout": normalize_layout(self.config.get("layout")),
+                }
             metadata["usage"] = report
             record = getattr(self, "_last_update_record", None)
             if record is not None:

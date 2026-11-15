@@ -587,6 +587,14 @@ class DocumentationGenerator:
                 metadata = file_manager.load_json(path) if os.path.exists(path) else {}
                 if not isinstance(metadata, dict):
                     metadata = {}
+                if "generation_info" not in metadata and (
+                    os.path.exists(os.path.join(self.config.docs_dir, MODULE_TREE_FILENAME))
+                    or list_doc_files(self.config.docs_dir)
+                ):
+                    metadata["generation_info"] = {
+                        "language": getattr(self.config, "language", None),
+                        "layout": config_layout(self.config),
+                    }
                 metadata["usage"] = self.usage_ledger.summary()
                 file_manager.ensure_directory(self.config.docs_dir)
                 file_manager.save_json(metadata, path)
