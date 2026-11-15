@@ -12,6 +12,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
+from codewiki.src.be.cluster_batch_cache import delete_clustering_batch_cache
 from codewiki.src.be.cluster_modules import (
     _batch_fallback_name,
     _cluster_batch_fits,
@@ -24,6 +27,15 @@ from codewiki.src.be.cluster_modules import (
 from codewiki.src.be.dependency_analyzer.models.core import Node
 from codewiki.src.be.llm_services import _extract_content
 from codewiki.src.config import Config
+
+_TEST_DOCS_DIR = "/tmp/out"
+
+
+@pytest.fixture(autouse=True)
+def _clear_clustering_batch_cache():
+    delete_clustering_batch_cache(_TEST_DOCS_DIR)
+    yield
+    delete_clustering_batch_cache(_TEST_DOCS_DIR)
 
 
 def _make_node(component_id: str, source_code: str = "code") -> Node:
