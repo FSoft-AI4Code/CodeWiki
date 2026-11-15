@@ -17,6 +17,7 @@ DEPENDENCY_GRAPHS_DIR = "dependency_graphs"
 DOCS_DIR = "docs"
 FIRST_MODULE_TREE_FILENAME = "first_module_tree.json"
 MODULE_TREE_FILENAME = "module_tree.json"
+CLUSTERING_BATCH_CACHE_FILENAME = "clustering_batch_cache.json"
 OVERVIEW_FILENAME = "overview.md"
 SEARCH_INDEX_FILENAME = "search_index.json"
 # Helper script `generate` copies into the docs folder (generated output, never analysed)
@@ -155,6 +156,8 @@ class Config:
     layout: str = DEFAULT_LAYOUT
     # Post-generation pass that repairs and adds wiki cross-links between pages
     crosslinks_enabled: bool = True
+    # Persist each successful LLM clustering batch under docs/temp for resume after failures.
+    cluster_batch_cache: bool = True
 
     def __post_init__(self):
         validate_min_module_tokens(self.min_token_per_module)

@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 from openai import APIConnectionError
 
+from codewiki.src.be.cluster_batch_cache import ClusterBatchCache, clustering_cache_scope
 from codewiki.src.be.context_budget import prompt_budget
 from codewiki.src.be.dependency_analyzer.models.core import Node
 from codewiki.src.be.dependency_analyzer.utils.paths import normalize_module_tree_ids
@@ -376,6 +377,9 @@ def _cluster_batches(
     module_label: str,
     completer: Completer | None,
     split: bool = False,
+    *,
+    batch_cache: ClusterBatchCache | None = None,
+    cache_scope: str = "__root__",
 ) -> dict[str, Any]:
     """Cluster each batch with one LLM call and merge the results.
 
@@ -389,8 +393,23 @@ def _cluster_batches(
     fallback module.
     """
     module_tree: dict[str, Any] = {}
+    cache_hits = 0
+    if batch_cache is not None and len(batches) > 1:
+        logger.info(
+            "Clustering batch cache for %r: %d on-disk entries (%d for this scope), %d batches to run.",
+            cache_scope,
+            batch_cache.entry_count(),
+            batch_cache.scope_entry_count(cache_scope),
+            len(batches),
+        )
     for i, batch in enumerate(batches, 1):
         label = module_label if len(batches) == 1 else f"{module_label} (batch {i}/{len(batches)})"
+        if batch_cache is not None:
+            cached = batch_cache.lookup(cache_scope, i, batch)
+            if cached is not None:
+                cache_hits += 1
+                _merge_module_trees(module_tree, cached)
+                continue
         if _transport_failures["count"] >= MAX_TRANSPORT_FAILURES:
             _merge_module_trees(
                 module_tree, _directory_modules(batch, components, config, module_tree)
@@ -456,6 +475,8 @@ def _cluster_batches(
                     label,
                     completer,
                     split=True,
+                    batch_cache=batch_cache,
+                    cache_scope=f"{cache_scope}@batch{i}-split",
                 )
         if not partial and len(batches) > 1:
             name = _batch_fallback_name(batch, components, module_tree)
@@ -473,7 +494,17 @@ def _cluster_batches(
                 len(batch),
                 name,
             )
+        if batch_cache is not None and partial:
+            batch_cache.store(cache_scope, i, batch, partial)
         _merge_module_trees(module_tree, partial)
+    if batch_cache is not None and len(batches) > 1:
+        logger.info(
+            "Clustering batch cache for %r: %d/%d batches from cache, %d LLM batch call(s) this pass.",
+            cache_scope,
+            cache_hits,
+            len(batches),
+            len(batches) - cache_hits,
+        )
     return module_tree
 
 
@@ -624,6 +655,9 @@ def cluster_modules(
             module_label,
             len(batches),
         )
+    batch_cache: ClusterBatchCache | None = None
+    if getattr(config, "cluster_batch_cache", True) and config.docs_dir:
+        batch_cache = ClusterBatchCache(config.docs_dir)
     module_tree = _cluster_batches(
         batches,
         components,
@@ -632,6 +666,8 @@ def cluster_modules(
         current_module_name,
         module_label,
         completer,
+        batch_cache=batch_cache,
+        cache_scope=clustering_cache_scope(current_module_path),
     )
     # An empty or one-module answer falls through to the structural file partition below.
     module_tree = normalize_module_partition(module_tree, candidates, components)
