@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import tempfile
+from copy import deepcopy
 from typing import Any
 
 from codewiki.src.config import CLUSTERING_BATCH_CACHE_FILENAME
@@ -14,7 +15,7 @@ from codewiki.src.utils import file_manager
 
 logger = logging.getLogger(__name__)
 
-CACHE_VERSION = 1
+CACHE_VERSION = 2
 
 
 def clustering_cache_scope(module_path: list[str]) -> str:
@@ -69,7 +70,7 @@ def _valid_entry(entry: Any) -> bool:
             and isinstance(info, dict)
             and isinstance(info.get("path", ""), str)
             and isinstance(info.get("components"), list)
-            and all(isinstance(cid, str) for cid in info["components"])
+            and all(isinstance(cid, str) and cid in ids for cid in info["components"])
             for name, info in partial.items()
         )
     )
@@ -145,7 +146,7 @@ class ClusterBatchCache:
             return None
         key = batch_entry_key(scope, batch_index, node_ids)
         entry = self._data["entries"].get(key)
-        if not entry:
+        if not _valid_entry(entry):
             return None
         stored_ids = entry.get("node_ids")
         if stored_ids != sorted(node_ids):
@@ -159,7 +160,7 @@ class ClusterBatchCache:
             batch_index,
             len(node_ids),
         )
-        return partial
+        return deepcopy(partial)
 
     def store(
         self,
@@ -171,12 +172,15 @@ class ClusterBatchCache:
         if not self._enabled or not partial_tree:
             return
         key = batch_entry_key(scope, batch_index, node_ids)
-        self._data["entries"][key] = {
+        entry = {
             "scope": scope,
             "batch_index": batch_index,
             "node_ids": sorted(node_ids),
-            "partial_tree": partial_tree,
+            "partial_tree": deepcopy(partial_tree),
         }
+        if not _valid_entry(entry):
+            return
+        self._data["entries"][key] = entry
         if not self._save():
             return
         module_names = list(partial_tree.keys())

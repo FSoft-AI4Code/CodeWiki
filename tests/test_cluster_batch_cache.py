@@ -191,3 +191,77 @@ def test_disabled_cache_never_writes(tmp_path):
         ids, components, config, completer=lambda p: _response(_prompt_ids(p)[0], _prompt_ids(p))
     )
     assert not Path(clustering_batch_cache_path(config.docs_dir)).exists()
+
+
+def test_store_and_lookup_do_not_share_mutable_trees(tmp_path):
+    cache = ClusterBatchCache(str(tmp_path))
+    proposed = _tree()
+    cache.store("__root__", 1, ["a"], proposed)
+    proposed["Module"]["components"].append("outside")
+    cached = cache.lookup("__root__", 1, ["a"])
+    assert cached == _tree()
+    cached["Module"]["components"].append("another")
+    # A subsequent store persists the cache's own snapshot, not either mutated view.
+    cache.store("__root__", 2, ["b"], _tree("b"))
+    assert cache.lookup("__root__", 1, ["a"]) == _tree()
+    assert ClusterBatchCache(str(tmp_path)).lookup("__root__", 1, ["a"]) == _tree()
+
+
+def test_cached_components_must_belong_to_the_recorded_batch(tmp_path):
+    cache = ClusterBatchCache(str(tmp_path))
+    cache.store("__root__", 1, ["a"], _tree())
+    path = Path(clustering_batch_cache_path(str(tmp_path)))
+    data = json.loads(path.read_text())
+    entry = next(iter(data["entries"].values()))
+    entry["partial_tree"]["Module"]["components"].append("outside")
+    path.write_text(json.dumps(data))
+    assert ClusterBatchCache(str(tmp_path)).lookup("__root__", 1, ["a"]) is None
+
+
+def test_collisions_do_not_pollute_saved_batches_or_changed_input(tmp_path):
+    ids, components, config = _inputs(tmp_path, ("alpha", "beta", "gamma", "omega"))
+
+    def first(prompt):
+        batch = _prompt_ids(prompt)
+        if batch[0].startswith("omega/"):
+            raise RuntimeError("network failed")
+        name = "A" if batch[0].startswith(("alpha/", "beta/")) else "Gamma"
+        return _response(name, batch)
+
+    with pytest.raises(RuntimeError, match="network failed"):
+        cluster_modules(ids, components, config, completer=first)
+    cache = ClusterBatchCache(config.docs_dir)
+    saved = cache.lookup("__root__", 1, ids[:2])
+    assert saved["A"]["components"] == ids[:2]
+
+    # Adding a file changes beta's batches, while alpha's cache key still matches.
+    cid = "beta/f-1.py::New"
+    ids.append(cid)
+    components[cid] = Node(
+        id=cid,
+        name="New",
+        component_type="class",
+        file_path="beta/f-1.py",
+        relative_path="beta/f-1.py",
+        source_code="code",
+    )
+
+    def retry(prompt):
+        batch = _prompt_ids(prompt)
+        name = "A" if batch[0].startswith("alpha/") else "Z" + batch[0].split("/")[0]
+        return _response(name, batch)
+
+    resumed = cluster_modules(ids, components, config, completer=retry)
+    config.cluster_batch_cache = False
+    fresh = cluster_modules(ids, components, config, completer=retry)
+    assert resumed["A"]["components"] == fresh["A"]["components"] == ids[:2]
+
+
+def test_pre_fix_cache_versions_are_not_reused(tmp_path):
+    cache = ClusterBatchCache(str(tmp_path))
+    cache.store("__root__", 1, ["a"], _tree())
+    path = Path(clustering_batch_cache_path(str(tmp_path)))
+    data = json.loads(path.read_text())
+    data["version"] = CACHE_VERSION - 1
+    path.write_text(json.dumps(data))
+    assert ClusterBatchCache(str(tmp_path)).lookup("__root__", 1, ["a"]) is None
