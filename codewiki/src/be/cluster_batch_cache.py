@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
+import tempfile
 from typing import Any
 
 from codewiki.src.config import CLUSTERING_BATCH_CACHE_FILENAME
@@ -38,15 +40,38 @@ def delete_clustering_batch_cache(docs_dir: str) -> None:
     if not docs_dir:
         return
     path = clustering_batch_cache_path(docs_dir)
-    if not os.path.isfile(path):
+    try:
+        os.remove(path)
+    except FileNotFoundError:
         return
-    raw = file_manager.load_json(path)
-    entry_count = len((raw or {}).get("entries") or {})
-    os.remove(path)
-    logger.info(
-        "Removed clustering batch cache (%d entries) at %s",
-        entry_count,
-        path,
+    except OSError as exc:
+        logger.warning("Could not remove clustering batch cache at %s: %s", path, exc)
+        return
+    logger.info("Removed clustering batch cache at %s", path)
+
+
+def _valid_entry(entry: Any) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    ids = entry.get("node_ids")
+    partial = entry.get("partial_tree")
+    return (
+        isinstance(entry.get("scope"), str)
+        and isinstance(entry.get("batch_index"), int)
+        and not isinstance(entry["batch_index"], bool)
+        and entry["batch_index"] > 0
+        and isinstance(ids, list)
+        and all(isinstance(cid, str) for cid in ids)
+        and isinstance(partial, dict)
+        and bool(partial)
+        and all(
+            isinstance(name, str)
+            and isinstance(info, dict)
+            and isinstance(info.get("path", ""), str)
+            and isinstance(info.get("components"), list)
+            and all(isinstance(cid, str) for cid in info["components"])
+            for name, info in partial.items()
+        )
     )
 
 
@@ -61,22 +86,49 @@ class ClusterBatchCache:
             self._load()
 
     def _load(self) -> None:
-        raw = file_manager.load_json(self._path)
-        if not raw or raw.get("version") != CACHE_VERSION:
-            if os.path.isfile(self._path):
-                logger.info(
-                    "Ignoring clustering batch cache at %s (missing or unsupported version).",
-                    self._path,
-                )
+        try:
+            raw = file_manager.load_json(self._path)
+        except (OSError, ValueError, UnicodeError) as exc:
+            logger.warning("Ignoring unreadable clustering batch cache at %s: %s", self._path, exc)
+            return
+        if not isinstance(raw, dict) or raw.get("version") != CACHE_VERSION:
             return
         entries = raw.get("entries")
         if isinstance(entries, dict):
+            entries = {key: entry for key, entry in entries.items() if _valid_entry(entry)}
             self._data = {"version": CACHE_VERSION, "entries": entries}
             logger.info(
                 "Loaded clustering batch cache: %d entries from %s",
                 len(entries),
                 self._path,
             )
+
+    def _save(self) -> bool:
+        """Publish a complete checkpoint while keeping the previous one on interruption."""
+        temporary_path = None
+        try:
+            directory = os.path.dirname(self._path)
+            file_manager.ensure_directory(directory)
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=directory, prefix=".clustering-cache-", delete=False
+            ) as stream:
+                temporary_path = stream.name
+                json.dump(self._data, stream, indent=4, ensure_ascii=False)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary_path, self._path)
+            return True
+        except OSError as exc:
+            logger.warning("Could not save clustering batch cache at %s: %s", self._path, exc)
+            return False
+        finally:
+            if temporary_path is not None:
+                try:
+                    os.remove(temporary_path)
+                except FileNotFoundError:
+                    pass
+                except OSError as exc:
+                    logger.warning("Could not remove temporary clustering cache: %s", exc)
 
     def entry_count(self) -> int:
         entries = self._data.get("entries")
@@ -125,8 +177,8 @@ class ClusterBatchCache:
             "node_ids": sorted(node_ids),
             "partial_tree": partial_tree,
         }
-        file_manager.ensure_directory(os.path.dirname(self._path))
-        file_manager.save_json(self._data, self._path)
+        if not self._save():
+            return
         module_names = list(partial_tree.keys())
         logger.info(
             "Stored clustering batch cache for scope %s batch %d (%d components, %d modules: %s); "
