@@ -9,15 +9,19 @@ import re
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from updater_toy import OAUTH, USER, graph_r1, graph_r2, node, tracked_r2, tree_r1, write_pages
 
 from codewiki.src.be.agent_tools.str_replace_editor import str_replace_editor
 from codewiki.src.be.backend import AgentReply
 from codewiki.src.be.documentation_generator import DocumentationGenerator
+from codewiki.src.be.cluster_batch_cache import ClusterBatchCache, clustering_batch_cache_path
 from codewiki.src.be.updater.graph_store import save_graph
 from codewiki.src.be.updater.options import UpdateOptions
 from codewiki.src.be.updater.orchestrator import IncrementalUpdater
 from codewiki.src.be.updater.record import RECORD_FILENAME
+from codewiki.src.utils import file_manager
 
 
 class FakeBackend:
@@ -383,3 +387,76 @@ def test_ownership_closure_switched_off(tmp_path):
     backend = FakeBackend(route_to="api")
     docs, rec = _run_untracked(tmp_path / "r1", backend, UpdateOptions.from_rung(1))
     assert backend.routing_prompts == [] and rec.ownership == [] and rec.active == []
+
+
+class BatchedReclusterBackend(FakeBackend):
+    def __init__(self, *, fail_second=False):
+        super().__init__()
+        self.cluster_calls = 0
+        self.fail_second = fail_second
+
+    def complete(self, prompt, *, model=None, system_prompt=None):
+        if "<POTENTIAL_CORE_COMPONENTS>" not in prompt:
+            return super().complete(prompt, model=model, system_prompt=system_prompt)
+        self.cluster_calls += 1
+        if self.fail_second and self.cluster_calls == 2:
+            raise RuntimeError("recluster interrupted")
+        section = prompt.split("<POTENTIAL_CORE_COMPONENTS>")[1].split(
+            "</POTENTIAL_CORE_COMPONENTS>"
+        )[0]
+        ids = [line.strip() for line in section.splitlines() if line.startswith("\t")]
+        tree = {f"Cluster{self.cluster_calls}": {"components": ids}}
+        return f"<GROUPED_COMPONENTS>{tree!r}</GROUPED_COMPONENTS>"
+
+
+def _batched_update_setup(tmp_path):
+    docs, config, prev = _setup(tmp_path)
+    config.min_token_per_module = 1
+    config.max_token_per_module = 1
+    config.max_leaf_nodes_per_cluster = 2
+    config.max_tokens = 32768
+    opts = UpdateOptions(tau_full=2.0, tau_tree=100.0, tau_grow=0.01, use_stale_scan=False)
+    return docs, config, prev, opts
+
+
+def test_incremental_recluster_cleans_only_committed_scopes(tmp_path):
+    docs, config, prev, opts = _batched_update_setup(tmp_path)
+    cache = ClusterBatchCache(str(docs))
+    cache.store(
+        "failed", 1, ["a"], {"A": {"components": ["a"]}}, request_fingerprint="test-request"
+    )
+    backend = BatchedReclusterBackend()
+    rec = _run(docs, config, prev, backend, opts)
+    assert rec.outcome == "incremental"
+    assert rec.reclustered == [["core"]]
+    assert not rec.errors
+    assert backend.cluster_calls >= 2
+    resumed = ClusterBatchCache(str(docs))
+    assert resumed.scope_entry_count("core") == 0
+    assert resumed.scope_entry_count("failed") == resumed.entry_count() == 1
+    assert (docs / "module_tree.json").exists()
+
+
+def test_failed_incremental_recluster_keeps_successful_batch_checkpoints(tmp_path):
+    docs, config, prev, opts = _batched_update_setup(tmp_path)
+    rec = _run(docs, config, prev, BatchedReclusterBackend(fail_second=True), opts)
+    assert rec.outcome == "incremental"
+    assert any("recluster interrupted" in error for error in rec.errors)
+    assert rec.reclustered == []
+    assert ClusterBatchCache(str(docs)).scope_entry_count("core") == 1
+
+
+def test_incremental_tree_save_failure_retains_checkpoints(tmp_path, monkeypatch):
+    docs, config, prev, opts = _batched_update_setup(tmp_path)
+    original_save = file_manager.save_json
+
+    def fail_tree_save(data, path):
+        if Path(path).name == "module_tree.json":
+            raise PermissionError("tree save failed")
+        original_save(data, path)
+
+    monkeypatch.setattr(file_manager, "save_json", fail_tree_save)
+    with pytest.raises(PermissionError, match="tree save failed"):
+        _run(docs, config, prev, BatchedReclusterBackend(), opts)
+    assert Path(clustering_batch_cache_path(str(docs))).exists()
+    assert ClusterBatchCache(str(docs)).scope_entry_count("core") >= 2

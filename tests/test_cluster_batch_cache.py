@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import asyncio
+import importlib
 from pathlib import Path
 
 import pytest
@@ -18,6 +20,7 @@ from codewiki.src.be.cluster_modules import cluster_modules, format_potential_co
 from codewiki.src.be.prompt_template import format_cluster_prompt
 from codewiki.src.be.dependency_analyzer.models.core import Node
 from codewiki.src.config import Config
+from codewiki.src.be.documentation_generator import DocumentationGenerator
 from codewiki.src.utils import file_manager
 
 
@@ -450,3 +453,86 @@ def test_request_fingerprint_and_component_set_must_match(tmp_path):
     assert cache.lookup("__root__", 1, ["b", "a"], request_fingerprint="request-one") == _tree()
     assert cache.lookup("__root__", 1, ["a", "b"], request_fingerprint="request-two") is None
     assert cache.lookup("__root__", 1, ["a", "c"], request_fingerprint="request-one") is None
+
+
+def test_scoped_cleanup_preserves_failed_and_unrelated_scopes(tmp_path):
+    cache = ClusterBatchCache(str(tmp_path))
+    scopes = ["core", "core/child", "core_extra", "failed", "failed/child", "__root__"]
+    for scope in scopes:
+        cache.store(scope, 1, ["a"], _tree(), request_fingerprint="test-request")
+    delete_clustering_batch_cache(str(tmp_path), scopes=["core"])
+    resumed = ClusterBatchCache(str(tmp_path))
+    assert resumed.entry_count() == 4
+    for scope in scopes:
+        result = resumed.lookup(scope, 1, ["a"], request_fingerprint="test-request")
+        assert (result is None) == (scope in {"core", "core/child"})
+    delete_clustering_batch_cache(str(tmp_path), scopes=scopes[2:])
+    assert not Path(clustering_batch_cache_path(str(tmp_path))).exists()
+
+
+def test_empty_scope_cleanup_keeps_checkpoints(tmp_path):
+    cache = ClusterBatchCache(str(tmp_path))
+    cache.store("failed", 1, ["a"], _tree(), request_fingerprint="test-request")
+    delete_clustering_batch_cache(str(tmp_path), scopes=[])
+    assert ClusterBatchCache(str(tmp_path)).entry_count() == 1
+
+
+def test_failed_scoped_cleanup_preserves_disk_checkpoints(tmp_path, monkeypatch):
+    cache = ClusterBatchCache(str(tmp_path))
+    for scope in ["core", "failed"]:
+        cache.store(scope, 1, ["a"], _tree(), request_fingerprint="test-request")
+
+    def denied(*args):
+        raise PermissionError("replace denied")
+
+    monkeypatch.setattr("codewiki.src.be.cluster_batch_cache.os.replace", denied)
+    delete_clustering_batch_cache(str(tmp_path), scopes=["core"])
+    assert ClusterBatchCache(str(tmp_path)).entry_count() == 2
+
+
+@pytest.mark.parametrize("failed_save", [None, "first_module_tree.json", "module_tree.json"])
+def test_full_build_cleanup_follows_both_tree_writes(tmp_path, monkeypatch, failed_save):
+    ids, components, config = _inputs(tmp_path)
+    cache = ClusterBatchCache(config.docs_dir)
+    cache.store("__root__", 1, ["a"], _tree(), request_fingerprint="test-request")
+    cache_path = Path(clustering_batch_cache_path(config.docs_dir))
+    tree = {
+        name: {"components": ids[i : i + 2], "children": {}}
+        for name, i in [("Alpha", 0), ("Beta", 2), ("Gamma", 4)]
+    }
+    generator = DocumentationGenerator(config, backend=object())
+    monkeypatch.setattr(
+        generator.graph_builder, "build_dependency_graph", lambda: (components, ids)
+    )
+    module = importlib.import_module("codewiki.src.be.documentation_generator")
+    monkeypatch.setattr(module, "cluster_modules", lambda *args, **kwargs: tree)
+
+    async def generate_pages(*args):
+        for name in ["overview", *tree]:
+            (Path(config.docs_dir) / (name + ".md")).write_text(
+                f"# {name}\n\nSmoke documentation.\n"
+            )
+        return config.docs_dir
+
+    monkeypatch.setattr(generator, "generate_module_documentation", generate_pages)
+    original_save = file_manager.save_json
+    writes = []
+
+    def save(data, path):
+        filename = Path(path).name
+        if filename in {"first_module_tree.json", "module_tree.json"}:
+            assert cache_path.exists()
+            writes.append(filename)
+            if filename == failed_save:
+                raise PermissionError("tree save failed")
+        original_save(data, path)
+
+    monkeypatch.setattr(file_manager, "save_json", save)
+    if failed_save:
+        with pytest.raises(PermissionError, match="tree save failed"):
+            asyncio.run(generator.run())
+        assert cache_path.exists()
+    else:
+        asyncio.run(generator.run())
+        assert writes == ["first_module_tree.json", "module_tree.json"]
+        assert not cache_path.exists()

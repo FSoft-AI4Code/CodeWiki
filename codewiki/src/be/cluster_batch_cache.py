@@ -71,11 +71,18 @@ def clustering_batch_cache_path(docs_dir: str) -> str:
     return os.path.join(os.path.abspath(docs_dir), "temp", CLUSTERING_BATCH_CACHE_FILENAME)
 
 
-def delete_clustering_batch_cache(docs_dir: str) -> None:
-    """Remove the on-disk batch cache after clustering finished successfully."""
+def delete_clustering_batch_cache(docs_dir: str, *, scopes: list[str] | None = None) -> None:
+    """Remove committed scopes and descendants, or the whole cache after a full build."""
     if not docs_dir:
         return
-    path = clustering_batch_cache_path(docs_dir)
+    if scopes is not None:
+        if scopes:
+            ClusterBatchCache(docs_dir).delete_scopes(scopes)
+        return
+    _delete_cache_file(clustering_batch_cache_path(docs_dir))
+
+
+def _delete_cache_file(path: str) -> None:
     try:
         os.remove(path)
     except FileNotFoundError:
@@ -177,6 +184,26 @@ class ClusterBatchCache:
         if not isinstance(entries, dict):
             return 0
         return sum(1 for entry in entries.values() if entry.get("scope") == scope)
+
+    def delete_scopes(self, scopes: list[str]) -> None:
+        """Keep checkpoints for failed or unrelated subtrees available for retry."""
+        if not self._enabled or not scopes:
+            return
+        selected = set(scopes)
+        prefixes = tuple(scope + "/" for scope in selected)
+        entries = self._data["entries"]
+        remaining = {
+            key: entry
+            for key, entry in entries.items()
+            if entry["scope"] not in selected and not entry["scope"].startswith(prefixes)
+        }
+        if len(remaining) == len(entries):
+            return
+        self._data["entries"] = remaining
+        if remaining:
+            self._save()
+        else:
+            _delete_cache_file(self._path)
 
     def lookup(
         self, scope: str, batch_index: int, node_ids: list[str], *, request_fingerprint: str

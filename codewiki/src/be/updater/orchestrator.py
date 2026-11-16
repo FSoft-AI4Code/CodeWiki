@@ -9,6 +9,10 @@ import traceback
 from typing import Any
 
 from codewiki.src.be.backend import LLMBackend
+from codewiki.src.be.cluster_batch_cache import (
+    clustering_cache_scope,
+    delete_clustering_batch_cache,
+)
 from codewiki.src.be.cluster_modules import cluster_modules, get_clustering_input_token_count
 from codewiki.src.be.module_scope import get_module_token_count
 from codewiki.src.be.dependency_analyzer.models.core import Node
@@ -381,6 +385,10 @@ class IncrementalUpdater:
         # Persist the repaired tree so the normal pipeline and the agents see it.
         if not self.whole_repo:
             file_manager.save_json(new_tree, os.path.join(self.docs_dir, MODULE_TREE_FILENAME))
+            delete_clustering_batch_cache(
+                self.docs_dir,
+                scopes=[clustering_cache_scope(path) for path in rec.reclustered],
+            )
 
         # ---- Step 5: sequential leaf agents
         order = order_active(active, new_tree, new_graph)
