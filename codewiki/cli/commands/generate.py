@@ -43,15 +43,30 @@ def parse_patterns(patterns_str: str) -> list[str]:
     return [p.strip() for p in patterns_str.split(",") if p.strip()]
 
 
-def _read_stored_language(output_dir: Path) -> str | None:
-    """Language recorded in metadata.json by the previous generation (None = English)."""
+def _read_stored_language_state(output_dir: Path) -> tuple[bool, str | None]:
+    """Return ``(known, language)`` recorded in ``metadata.json``.
+
+    ``known`` is False when ``metadata.json`` has no ``generation_info`` or no
+    ``language`` key (e.g., legacy docs or an incomplete run that only
+    persisted usage stats), so ``--update`` does not misread an unknown
+    language as English.
+    """
     import json
 
     try:
         metadata = json.loads((output_dir / "metadata.json").read_text(encoding="utf-8"))
-        return (metadata.get("generation_info") or {}).get("language")
+        info = metadata.get("generation_info")
+        if not isinstance(info, dict) or "language" not in info:
+            return False, None
+        return True, info.get("language")
     except (OSError, json.JSONDecodeError, AttributeError):
-        return None
+        return False, None
+
+
+def _read_stored_language(output_dir: Path) -> str | None:
+    """Language recorded in metadata.json by the previous generation (None = English)."""
+    _, stored = _read_stored_language_state(output_dir)
+    return stored
 
 
 def _detect_changed_files(
@@ -644,12 +659,14 @@ def generate_command(
         # Incremental update: detect changed files and selectively regenerate
         changed_files = None
         update_language = None
+        stored_language_known = False
         updating_existing_docs = update and (output_dir / "metadata.json").exists()
         if updating_existing_docs:
             # Keep updated pages in the language of the existing docs
+            stored_language_known, stored_language = _read_stored_language_state(output_dir)
             try:
                 update_language = resolve_update_language(
-                    _read_stored_language(output_dir), language
+                    stored_language, language, known=stored_language_known
                 )
             except ValueError as e:
                 raise ConfigurationError(str(e)) from None
@@ -802,16 +819,16 @@ def generate_command(
         elif config.agent_instructions and not config.agent_instructions.is_empty():
             agent_instructions_dict = config.agent_instructions.to_dict()
 
-        if updating_existing_docs:
-            # The stored language overrides the saved `config agent --language` default
+        if updating_existing_docs and (stored_language_known or update_language is not None):
+            # The stored language (or explicit --language when metadata has none)
+            # overrides the saved `config agent --language` default
             agent_instructions_dict = dict(agent_instructions_dict or {})
             agent_instructions_dict.pop("language", None)
             if update_language:
                 agent_instructions_dict["language"] = update_language
             if verbose:
-                logger.debug(
-                    f"Output language (from metadata.json): {update_language or 'English'}"
-                )
+                source = "metadata.json" if stored_language_known else "--language"
+                logger.debug(f"Output language (from {source}): {update_language or 'English'}")
 
         # Create generator
         # Get commit_id early so it can be stored in metadata.json for --update support

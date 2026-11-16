@@ -84,6 +84,13 @@ def test_read_layout_defaults_to_flat_for_old_docs(tmp_path):
     assert L.read_layout(str(tmp_path)) == "hierarchical"
 
 
+def test_read_layout_detects_nested_docs_when_metadata_lacks_generation_info(tmp_path):
+    (tmp_path / "module_tree.json").write_text(json.dumps(TREE))
+    _write(tmp_path, "auth/login.md")
+    (tmp_path / "metadata.json").write_text(json.dumps({"usage": {"incomplete": True}}))
+    assert L.read_layout(str(tmp_path)) == "hierarchical"
+
+
 def test_docs_layout_defaults_to_hierarchical_for_new_docs(tmp_path):
     assert L.docs_layout(str(tmp_path)) == "hierarchical"
 

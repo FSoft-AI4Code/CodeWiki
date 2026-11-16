@@ -84,14 +84,20 @@ def format_language_directive(language: str | None) -> str:
     return LANGUAGE_DIRECTIVE.format(language=name) if name else ""
 
 
-def resolve_update_language(stored: str | None, requested: str | None) -> str | None:
+def resolve_update_language(
+    stored: str | None, requested: str | None, *, known: bool = True
+) -> str | None:
     """
     Language for an incremental update of docs generated in `stored`.
 
     The stored language wins over any saved default, so updated pages match
     the existing ones. An explicit `requested` language that differs raises
-    ValueError: switching language needs a full regeneration.
+    ValueError: switching language needs a full regeneration. When `known` is
+    False (the previous metadata did not record a language), any explicit
+    `requested` language is accepted rather than assumed to conflict with English.
     """
+    if not known:
+        return normalize_language(requested) if requested is not None else None
     stored_name = normalize_language(stored)
     if requested is not None and normalize_language(requested) != stored_name:
         raise ValueError(

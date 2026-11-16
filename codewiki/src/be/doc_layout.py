@@ -124,12 +124,17 @@ def read_layout(docs_dir: str) -> str:
     """Layout recorded in ``metadata.json``.
 
     Docs without a recorded layout predate hierarchical output, so they are
-    flat.
+    flat—unless nested module pages already exist on disk (e.g., an incomplete
+    run whose metadata.json only persisted usage stats).
     """
     metadata = _load_json(os.path.join(docs_dir, METADATA_FILENAME))
     info = metadata.get("generation_info") if isinstance(metadata, dict) else None
     layout = info.get("layout") if isinstance(info, dict) else None
-    return layout if layout in LAYOUTS else LAYOUT_FLAT
+    if layout in LAYOUTS:
+        return layout
+    if any("/" in rel for rel in list_doc_files(docs_dir).values()):
+        return LAYOUT_HIERARCHICAL
+    return LAYOUT_FLAT
 
 
 def docs_layout(docs_dir: str) -> str:

@@ -68,7 +68,7 @@ loguru==0.7.3
 markdown-it-py==3.0.0
 MarkupSafe==3.0.2
 matplotlib-inline==0.1.7
-mcp==1.12.3
+mcp==1.30.0
 mdurl==0.1.2
 mermaid-parser-py==0.0.2
 mermaid-py==0.8.0
