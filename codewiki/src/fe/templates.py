@@ -337,7 +337,7 @@ DOCS_VIEW_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ title }}</title>
     <link rel="icon" type="image/png" href="https://fsoft-ai4code.github.io/CodeWiki/img/icon.png">
-    <script src="https://cdn.jsdelivr.net/npm/mermaid@11.9.0/dist/mermaid.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@12.3.0/dist/mermaid.min.js"></script>
     <style>
         :root {
             --primary-color: #d95f00;

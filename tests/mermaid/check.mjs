@@ -21,4 +21,4 @@ for (const fixture of fixtures) {
     assert.ok(await mermaid.parse(fixture.repaired), `${fixture.name}: repaired`);
   }
 }
-console.log(`${fixtures.length} Mermaid 11.9.0 parser fixtures passed`);
+console.log(`${fixtures.length} Mermaid parser fixtures passed`);
