@@ -15,7 +15,7 @@ from codewiki.src.utils import file_manager
 
 logger = logging.getLogger(__name__)
 
-CACHE_VERSION = 2
+CACHE_VERSION = 3
 
 
 def clustering_cache_scope(module_path: list[str]) -> str:

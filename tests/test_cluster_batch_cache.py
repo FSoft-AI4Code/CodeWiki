@@ -265,3 +265,48 @@ def test_pre_fix_cache_versions_are_not_reused(tmp_path):
     data["version"] = CACHE_VERSION - 1
     path.write_text(json.dumps(data))
     assert ClusterBatchCache(str(tmp_path)).lookup("__root__", 1, ["a"]) is None
+
+
+@pytest.mark.parametrize(
+    "failed_response",
+    [
+        None,
+        "",
+        "missing tags",
+        "<GROUPED_COMPONENTS>{broken</GROUPED_COMPONENTS>",
+        "<GROUPED_COMPONENTS>[]</GROUPED_COMPONENTS>",
+        "<GROUPED_COMPONENTS>{'Unknown': {'components': ['missing::ID']}}</GROUPED_COMPONENTS>",
+    ],
+)
+def test_retry_requeries_failed_responses_but_reuses_successes(tmp_path, failed_response):
+    ids, components, config = _inputs(tmp_path)
+
+    def first(prompt):
+        batch = _prompt_ids(prompt)
+        if batch[0].startswith("alpha/"):
+            return failed_response
+        if batch[0].startswith("gamma/"):
+            raise RuntimeError("network failed")
+        return _response("Beta", batch)
+
+    with pytest.raises(RuntimeError, match="network failed"):
+        cluster_modules(ids, components, config, completer=first)
+    cache = ClusterBatchCache(config.docs_dir)
+    assert cache.entry_count() == 1
+    calls = []
+
+    def retry(prompt):
+        batch = _prompt_ids(prompt)
+        calls.append(batch)
+        return _response(batch[0].split("/")[0].title(), batch)
+
+    tree = cluster_modules(ids, components, config, completer=retry)
+    assert calls == [ids[:2], ids[4:6]]
+    assert set(tree) == {"Alpha", "Beta", "Gamma"}
+
+
+def test_structural_fallback_is_still_available_without_a_later_failure(tmp_path):
+    ids, components, config = _inputs(tmp_path)
+    tree = cluster_modules(ids, components, config, completer=lambda p: None)
+    assert {cid for info in tree.values() for cid in info["components"]} == set(ids)
+    assert not Path(clustering_batch_cache_path(config.docs_dir)).exists()

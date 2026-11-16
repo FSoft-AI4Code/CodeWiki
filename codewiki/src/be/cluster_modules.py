@@ -463,6 +463,10 @@ def cluster_modules(
                 batch_label,
                 completer,
             )
+            # Only validated LLM responses are resumable. A structural fallback
+            # keeps this pass usable but must be retried after a later failure.
+            if batch_cache is not None and partial:
+                batch_cache.store(cache_scope, i, batch, partial)
             if not partial:
                 name = _batch_fallback_name(batch, components, module_tree)
                 partial = {
@@ -479,8 +483,6 @@ def cluster_modules(
                     len(batch),
                     name,
                 )
-            if batch_cache is not None and partial:
-                batch_cache.store(cache_scope, i, batch, partial)
             _merge_module_trees(module_tree, partial)
         if batch_cache is not None:
             logger.info(
