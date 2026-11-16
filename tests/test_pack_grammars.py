@@ -64,7 +64,9 @@ def test_analysis_stops_before_the_first_file(offline, tmp_path, monkeypatch):
     (tmp_path / "main.go").write_text("package main\n\nfunc main() {}\n", encoding="utf-8")
     analyzed = []
     monkeypatch.setattr(
-        CallGraphAnalyzer, "_analyze_code_file", lambda self, base, info: analyzed.append(info)
+        CallGraphAnalyzer,
+        "_analyze_code_file",
+        lambda self, base, info, timeout_s: analyzed.append(info),
     )
     with pytest.raises(GrammarUnavailableError, match="'go'"):
         CallGraphAnalyzer().analyze_code_files(

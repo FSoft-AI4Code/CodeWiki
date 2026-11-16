@@ -180,8 +180,24 @@ The multi-language orchestrator. Given a list of code files (already filtered to
    - `python` → `analyzers/python.py::analyze_python_file`
    - `javascript` / `typescript` → tree-sitter analyzers in `analyzers/javascript.py` / `typescript.py`
    - `java`, `kotlin`, `csharp`, `c`, `cpp`, `php` → respective tree-sitter analyzers
-   Each file is analyzed under a 30-second timeout guard (`timeout` context manager, POSIX `SIGALRM`-based,
-   no-op on Windows) so a pathological file cannot stall the whole run.
+   Each file is analyzed under a per-file timeout guard (`timeout` context manager, POSIX `SIGALRM`-based,
+   no-op on Windows) so a pathological file cannot stall the whole run. A file that times out is dropped
+   from the graph with a warning. The limit is `CODEWIKI_PARSE_TIMEOUT` seconds (default 300; large
+   generated or hand-written files can need well over 30 s).
+
+   Files are parsed in a `spawn` process pool (`_analyze_files_parallel`), largest first, and each worker's
+   per-file state is merged in the original file order, so the result equals a sequential sweep. Pool size:
+   `CODEWIKI_PARSE_WORKERS`, else one worker per usable CPU (cgroup CPU quota respected), per 8 files and per
+   400 MB of available memory (cgroup memory limits respected); `1` keeps the sequential path. Each worker
+   re-imports the parent's `__main__` (about 150 MB for the CLI), so a script that calls the analysis needs an
+   `if __name__ == "__main__":` guard. A worker that dies or fails to start aborts the analysis with a hint
+   to retry with fewer workers. Workers ignore SIGINT; on Ctrl-C the parent cancels queued files and
+   terminates the workers.
+
+   Per-file state is the set of accumulators listed in `_per_file_state`; anything else a worker writes is
+   lost. A new accumulator, written by an `_analyze_*_file` method or a helper it calls, must be added there.
+   `tests/test_parallel_parse.py` flags direct writes in those methods for every language, and any write
+   for the languages in its fixture (Python, Go, Dart, Lean, TypeScript).
 4. **Resolves call relationships** (`_resolve_call_relationships`): builds global and per-language exact/
    simple-name lookup indexes (`_build_resolution_indexes`) from `id`, `component_id`, `qualified_name`, and
    `name`, then attempts to match each unresolved `CallRelationship.callee` — preferring matches within the
@@ -200,7 +216,7 @@ It also exposes `generate_llm_format()` (a compact, LLM-friendly functions/relat
 flowchart TB
     Files["code_files (filtered by language)"] --> Route["_route_contextual_headers\n(.h -> c/cpp)"]
     Route --> PyMods["_collect_python_modules"]
-    PyMods --> Loop["For each file: _analyze_code_file\n(30s timeout guard)"]
+    PyMods --> Loop["For each file, in a process pool: _analyze_code_file\n(CODEWIKI_PARSE_TIMEOUT guard)"]
     Loop -->|python| PyA["analyzers.python"]
     Loop -->|js/ts| JsA["analyzers.javascript / typescript"]
     Loop -->|java/kotlin/csharp| JvmA["analyzers.java / kotlin / csharp"]

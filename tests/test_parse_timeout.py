@@ -6,7 +6,6 @@ import time
 
 import pytest
 
-from codewiki.src.be.dependency_analyzer.analysis import call_graph_analyzer
 from codewiki.src.be.dependency_analyzer.analysis.call_graph_analyzer import (
     CallGraphAnalyzer,
 )
@@ -31,11 +30,9 @@ def test_timeout_escapes_except_exception(tmp_path, monkeypatch):
     (tmp_path / "slow.js").write_text("f();\n", encoding="utf-8")
     monkeypatch.setattr(CallGraphAnalyzer, "_analyze_javascript_file", _swallowing_analyzer)
 
-    real_timeout = call_graph_analyzer.timeout
-    monkeypatch.setattr(call_graph_analyzer, "timeout", lambda seconds: real_timeout(1))
-
     started = time.monotonic()
-    CallGraphAnalyzer()._analyze_code_file(
-        str(tmp_path), {"path": "slow.js", "language": "javascript"}
+    completed = CallGraphAnalyzer()._analyze_code_file(
+        str(tmp_path), {"path": "slow.js", "language": "javascript"}, 1
     )
     assert time.monotonic() - started < 10
+    assert completed is False

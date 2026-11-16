@@ -316,6 +316,6 @@ Both analyzers in [JavaScript_TypeScript_Analyzers](JavaScript_TypeScript_Analyz
 
 ## Error Handling & Robustness
 
-- Parser initialization failures are caught and logged; `analyze()` becomes a no-op rather than raising, so a single bad file cannot abort the whole-repository analysis run performed by `CallGraphAnalyzer.analyze_code_files` (which itself wraps each file analysis in a try/except and a 30-second timeout — see [Dependency_Analysis_Service](Dependency_Analysis_Service.md)).
+- Parser initialization failures are caught and logged; `analyze()` becomes a no-op rather than raising, so a single bad file cannot abort the whole-repository analysis run performed by `CallGraphAnalyzer.analyze_code_files` (which itself wraps each file analysis in a try/except and a per-file timeout, `CODEWIKI_PARSE_TIMEOUT`, default 300 s — see [Dependency_Analysis_Service](Dependency_Analysis_Service.md)).
 - Every extraction/relationship helper method is wrapped in its own `try/except`, logging at `debug` level and returning `None`/skipping — a malformed or unusual AST shape in one construct never prevents extraction of the rest of the file.
 - The top-level `analyze_typescript_file_treesitter` function itself catches all exceptions and returns `([], [])` on failure, guaranteeing a well-typed (if empty) result to its caller.

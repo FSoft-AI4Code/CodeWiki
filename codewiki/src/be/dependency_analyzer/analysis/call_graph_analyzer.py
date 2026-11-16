@@ -7,12 +7,20 @@ across different programming languages in a repository.
 """
 
 import logging
+import logging.handlers
+import math
+import multiprocessing
+import os
 import re
 import signal
+import sys
 import threading
 import time
 import traceback
 from collections import defaultdict
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import process as futures_process
+from concurrent.futures.process import BrokenProcessPool
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -71,6 +79,269 @@ def timeout(seconds):
         signal.signal(signal.SIGALRM, old_handler)
 
 
+# A 30 s limit dropped the central 6-8k line TypeScript files of real
+# repositories (one took 91 s alone), leaving holes in the dependency graph.
+# A dropped file costs documentation; a slow one only costs time.
+DEFAULT_PARSE_TIMEOUT_S = 300
+# Each worker re-imports the parent's ``__main__`` (about 1.5 s and 150 MB for
+# the CLI), so a worker only pays off with several files to parse.
+FILES_PER_WORKER = 8
+# Memory to reserve per worker: the import plus parse trees (peak worker RSS
+# was ~150 MB on a 678-file TypeScript repository), with headroom.
+WORKER_MEMORY_BYTES = 400 * 1024 * 1024
+# ProcessPoolExecutor rejects more workers than this on Windows.
+_WINDOWS_MAX_WORKERS = getattr(futures_process, "_MAX_WINDOWS_WORKERS", 61)
+
+_CGROUP_ROOT = Path("/sys/fs/cgroup")
+_PROC_SELF_CGROUP = Path("/proc/self/cgroup")
+_PROC_MEMINFO = Path("/proc/meminfo")
+
+
+def _positive_int_env(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        value = 0
+    if value < 1:
+        raise ValueError(f"{name} must be a positive integer, got {raw!r}")
+    return value
+
+
+def parse_timeout_seconds() -> int:
+    """Per-file parse timeout: ``CODEWIKI_PARSE_TIMEOUT`` or 300 s."""
+    return _positive_int_env("CODEWIKI_PARSE_TIMEOUT", DEFAULT_PARSE_TIMEOUT_S)
+
+
+def _read(path: Path) -> str | None:
+    try:
+        return path.read_text().strip()
+    except OSError:
+        return None
+
+
+def _cgroup_dirs(v1_controller: str) -> list[Path]:
+    """This process's cgroup directories, innermost first up to the mount
+    root: the v2 hierarchy and the given v1 controller. In a container the
+    listed path may be a host path; walking up then reaches the mount root,
+    which is the container's own cgroup."""
+    root = _CGROUP_ROOT
+    dirs: list[Path] = []
+    for line in (_read(_PROC_SELF_CGROUP) or "").splitlines():
+        parts = line.split(":", 2)
+        if len(parts) != 3:
+            continue
+        hierarchy, controllers, path = parts
+        if hierarchy == "0" and controllers == "":
+            bases = [root]
+        elif v1_controller in controllers.split(","):
+            bases = [root / controllers, root / v1_controller]
+        else:
+            continue
+        for base in bases:
+            current = base / path.lstrip("/")
+            while True:
+                if current.is_dir() and current not in dirs:
+                    dirs.append(current)
+                if current == base or base not in current.parents:
+                    break
+                current = current.parent
+    return dirs
+
+
+def _cgroup_cpu_limit() -> int | None:
+    """Tightest CPU quota over this process's cgroups (v2 ``cpu.max`` or v1
+    CFS quota), rounded up; ``None`` when unlimited or unknown. Containers
+    report every host CPU to ``sched_getaffinity`` even under ``--cpus``."""
+    limits = []
+    for directory in _cgroup_dirs("cpu"):
+        fields = (_read(directory / "cpu.max") or "").split()
+        quota = _read(directory / "cpu.cfs_quota_us")
+        period = _read(directory / "cpu.cfs_period_us")
+        candidates = []
+        if len(fields) >= 2 and fields[0] != "max":
+            candidates.append((fields[0], fields[1]))
+        if quota is not None and period is not None:
+            candidates.append((quota, period))
+        for raw_quota, raw_period in candidates:
+            try:
+                q, p = int(raw_quota), int(raw_period)
+            except ValueError:
+                continue
+            if q > 0 and p > 0:
+                limits.append(math.ceil(q / p))
+    return max(1, min(limits)) if limits else None
+
+
+def _available_memory_bytes() -> int | None:
+    """Memory this process can still use: ``MemAvailable``, capped by the
+    remaining room of every limited cgroup (v2 or v1) it is in."""
+    available = []
+    for line in (_read(_PROC_MEMINFO) or "").splitlines():
+        if line.startswith("MemAvailable:"):
+            try:
+                available.append(int(line.split()[1]) * 1024)
+            except (IndexError, ValueError):
+                pass
+    for directory in _cgroup_dirs("memory"):
+        limit = _read(directory / "memory.max") or _read(directory / "memory.limit_in_bytes")
+        usage = _read(directory / "memory.current") or _read(directory / "memory.usage_in_bytes")
+        try:
+            limit_bytes, usage_bytes = int(limit or ""), int(usage or "")
+        except ValueError:
+            continue  # "max" (v2 unlimited) or unreadable
+        if limit_bytes >= 1 << 60:  # v1 reports "unlimited" as ~2**63
+            continue
+        # Usage includes page cache the kernel reclaims on demand (a fresh
+        # clone fills it); subtract it as docker stats and the kubelet do.
+        stat = {}
+        for line in (_read(directory / "memory.stat") or "").splitlines():
+            fields = line.split()
+            if len(fields) == 2:
+                stat[fields[0]] = fields[1]
+        # v1 ``inactive_file`` is this cgroup's own pages; ``total_`` covers the
+        # subtree that ``usage_in_bytes`` counts. v2 has only ``inactive_file``.
+        inactive = stat.get("total_inactive_file") or stat.get("inactive_file") or "0"
+        try:
+            usage_bytes -= min(usage_bytes, int(inactive))
+        except ValueError:
+            pass
+        available.append(max(0, limit_bytes - usage_bytes))
+    return min(available) if available else None
+
+
+def parse_worker_count(file_count: int) -> int:
+    """Parser processes for ``file_count`` files: ``CODEWIKI_PARSE_WORKERS``,
+    else one per usable CPU (cgroup quota respected), per ``FILES_PER_WORKER``
+    files and per ``WORKER_MEMORY_BYTES`` of available memory. 1 means the
+    sequential path."""
+    if os.environ.get("CODEWIKI_PARSE_WORKERS", "").strip():
+        workers = min(_positive_int_env("CODEWIKI_PARSE_WORKERS", 1), file_count)
+    else:
+        if hasattr(os, "sched_getaffinity"):
+            cpus = len(os.sched_getaffinity(0))
+        else:
+            cpus = os.cpu_count() or 1
+        cpu_limit = _cgroup_cpu_limit()
+        if cpu_limit is not None:
+            cpus = min(cpus, cpu_limit)
+        workers = min(cpus, file_count // FILES_PER_WORKER)
+        memory = _available_memory_bytes()
+        if memory is not None:
+            workers = min(workers, memory // WORKER_MEMORY_BYTES)
+    if _is_windows():
+        workers = min(workers, _WINDOWS_MAX_WORKERS)
+    return max(1, workers)
+
+
+def _is_windows() -> bool:
+    return sys.platform == "win32"
+
+
+def _logger_levels() -> dict[str, int]:
+    """Every level set explicitly in this process, for workers to copy."""
+    levels = {"": logging.getLogger().level}
+    # dict.copy() is atomic under the GIL; another thread may add loggers.
+    for name, candidate in logging.root.manager.loggerDict.copy().items():
+        if isinstance(candidate, logging.Logger) and candidate.level != logging.NOTSET:
+            levels[name] = candidate.level
+    return levels
+
+
+_STANDARD_RECORD_KEYS = frozenset(vars(logging.makeLogRecord({}))) | {"message"}
+_MAX_RECORDS_PER_FILE = 10_000
+
+
+class _RecordBuffer(list):
+    """``QueueHandler`` target that keeps a worker's records for the current
+    file. They go back to the parent with the file's result, so logging needs
+    no pipe, lock or thread: a SIGALRM timeout or a killed worker cannot
+    leave a half-written record behind or block the parent. Records lose
+    their ``extra`` attributes, so an unpicklable one cannot sink the file's
+    result, and a file keeps at most ``_MAX_RECORDS_PER_FILE`` of them."""
+
+    dropped = 0
+
+    def put_nowait(self, record: logging.LogRecord) -> None:
+        if len(self) >= _MAX_RECORDS_PER_FILE:
+            self.dropped += 1
+            return
+        self.append(
+            logging.makeLogRecord(
+                {k: v for k, v in vars(record).items() if k in _STANDARD_RECORD_KEYS}
+            )
+        )
+
+    def take(self) -> list[logging.LogRecord]:
+        records = list(self)
+        if self.dropped:
+            records.append(
+                logging.makeLogRecord(
+                    {
+                        "name": __name__,
+                        "levelno": logging.WARNING,
+                        "levelname": "WARNING",
+                        "msg": f"Dropped {self.dropped} further log records of this file",
+                    }
+                )
+            )
+        self.clear()
+        self.dropped = 0
+        return records
+
+
+_worker_context: dict = {}
+
+
+def _init_parse_worker(
+    levels: dict[str, int], base_dir: str, python_project_modules: set, timeout_s: int
+) -> None:
+    # Ctrl-C reaches the whole foreground process group. A worker interrupted
+    # inside the call queue's Queue.get dies holding its shared lock and the
+    # other workers block on it forever, so only the parent handles SIGINT.
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    records = _RecordBuffer()
+    root = logging.getLogger()
+    # QueueHandler.prepare() turns records into picklable ones.
+    root.handlers[:] = [logging.handlers.QueueHandler(records)]
+    for name, level in levels.items():
+        logging.getLogger(name or None).setLevel(level)
+    # Handlers live in the parent; let every record reach the buffer.
+    for candidate in logging.root.manager.loggerDict.values():
+        if isinstance(candidate, logging.Logger):
+            candidate.handlers.clear()
+            candidate.propagate = True
+    _worker_context["records"] = records
+    _worker_context["base_dir"] = base_dir
+    _worker_context["python_project_modules"] = python_project_modules
+    _worker_context["timeout_s"] = timeout_s
+
+
+def _analyze_file_in_worker(file_info: dict) -> tuple[bool, dict, list[logging.LogRecord]]:
+    records = _worker_context["records"]
+    records.take()
+    analyzer = CallGraphAnalyzer()
+    analyzer._python_project_modules = _worker_context["python_project_modules"]
+    completed = analyzer._analyze_code_file(
+        _worker_context["base_dir"], file_info, _worker_context["timeout_s"]
+    )
+    return completed, analyzer._per_file_state(), records.take()
+
+
+def _replay_worker_records(records: list[logging.LogRecord]) -> None:
+    """Hand worker records to the parent's logger of the same name, so they go
+    through the levels and handlers the caller configured."""
+    for record in records:
+        try:
+            target = logging.getLogger(record.name)
+            if target.isEnabledFor(record.levelno):
+                target.handle(record)
+        except Exception as e:  # noqa: BLE001 — logging must not change a file's outcome
+            logger.warning(f"Could not replay a worker log record: {e!s}")
+
+
 class CallGraphAnalyzer:
     def __init__(self):
         """Initialize the call graph analyzer."""
@@ -116,29 +387,19 @@ class CallGraphAnalyzer:
         self._go_index = None
         self._reset_lean_state()
 
-        files_analyzed = 0
-        files_failed = 0
+        # Read both settings before any parsing: a bad value must fail the
+        # run, not be swallowed by the per-file error handling.
+        timeout_s = parse_timeout_seconds()
+        workers = parse_worker_count(len(code_files))
         start_time = time.time()
-
-        for idx, file_info in enumerate(code_files, 1):
-            file_path = file_info["path"]
-            try:
-                # Log progress every file with elapsed time
-                if idx % max(1, len(code_files) // 10) == 0 or idx <= 5:
-                    elapsed = time.time() - start_time
-                    rate = idx / elapsed if elapsed > 0 else 0
-                    remaining = (len(code_files) - idx) / rate if rate > 0 else 0
-                    logger.info(
-                        f"  [{idx}/{len(code_files)}] {file_path} ({elapsed:.1f}s elapsed, ~{remaining:.1f}s remaining)"
-                    )
-
-                self._analyze_code_file(base_dir, file_info)
-                files_analyzed += 1
-            except Exception as e:  # noqa: BLE001 — one unparsable file must not abort the sweep
-                files_failed += 1
-                logger.warning(
-                    f"  ⚠️  [{idx}/{len(code_files)}] Failed to analyze {file_path}: {str(e)[:100]}"
-                )
+        if workers > 1:
+            files_analyzed, files_failed = self._analyze_files_parallel(
+                code_files, base_dir, workers, timeout_s
+            )
+        else:
+            files_analyzed, files_failed = self._analyze_files_sequential(
+                code_files, base_dir, timeout_s
+            )
 
         elapsed_time = time.time() - start_time
         logger.info(
@@ -166,6 +427,149 @@ class CallGraphAnalyzer:
             "relationships": [rel.model_dump() for rel in self.call_relationships],
             "visualization": viz_data,
         }
+
+    def _analyze_files_sequential(
+        self, code_files: list[dict], base_dir: str, timeout_s: int
+    ) -> tuple[int, int]:
+        files_analyzed = 0
+        files_failed = 0
+        start_time = time.time()
+
+        for idx, file_info in enumerate(code_files, 1):
+            file_path = file_info["path"]
+            # Log progress every file with elapsed time
+            if idx % max(1, len(code_files) // 10) == 0 or idx <= 5:
+                elapsed = time.time() - start_time
+                rate = idx / elapsed if elapsed > 0 else 0
+                remaining = (len(code_files) - idx) / rate if rate > 0 else 0
+                logger.info(
+                    f"  [{idx}/{len(code_files)}] {file_path} ({elapsed:.1f}s elapsed, ~{remaining:.1f}s remaining)"
+                )
+
+            # _analyze_code_file handles every per-file error itself.
+            if self._analyze_code_file(base_dir, file_info, timeout_s):
+                files_analyzed += 1
+            else:
+                files_failed += 1
+        return files_analyzed, files_failed
+
+    def _analyze_files_parallel(
+        self, code_files: list[dict], base_dir: str, workers: int, timeout_s: int
+    ) -> tuple[int, int]:
+        """Parse files in worker processes, then merge per-file state in the
+        original file order, so the result equals the sequential sweep.
+
+        Per-file analysis only adds to the accumulators of ``_per_file_state``
+        and never reads another file's results, which is what makes this
+        safe. ``spawn`` because callers may hold threads (fork is unsafe then)
+        and each worker runs tasks on its main thread, where SIGALRM works.
+        """
+        total = len(code_files)
+        logger.info(f"  Parsing with {workers} worker processes, {timeout_s}s timeout per file")
+
+        def size(file_info: dict) -> int:
+            try:
+                return (Path(base_dir) / file_info["path"]).stat().st_size
+            except OSError:
+                return 0
+
+        # Largest first, so the slow files do not start last and set the wall time.
+        schedule = sorted(range(total), key=lambda i: size(code_files[i]), reverse=True)
+        results: list[dict | None] = [None] * total
+        failed: set[int] = set()
+
+        ctx = multiprocessing.get_context("spawn")
+        start_time = time.time()
+        pool = None
+        try:
+            pool = ProcessPoolExecutor(
+                max_workers=workers,
+                mp_context=ctx,
+                initializer=_init_parse_worker,
+                initargs=(
+                    _logger_levels(),
+                    base_dir,
+                    self._python_project_modules,
+                    timeout_s,
+                ),
+            )
+            futures = {pool.submit(_analyze_file_in_worker, code_files[i]): i for i in schedule}
+            for done, future in enumerate(as_completed(futures), 1):
+                i = futures[future]
+                file_path = code_files[i]["path"]
+                try:
+                    completed, results[i], records = future.result()
+                    _replay_worker_records(records)
+                    if not completed:
+                        failed.add(i)
+                except BrokenProcessPool as e:
+                    # A worker died or could not start. Its results are lost,
+                    # so the graph cannot be completed: fail loudly.
+                    raise RuntimeError(
+                        f"A parser worker process died or failed to start ({workers} "
+                        f"workers). Likely causes: killed for memory, or a calling script "
+                        f"without an `if __name__ == '__main__':` guard (worker processes "
+                        f"are spawned and re-import it). Retry with fewer workers, e.g. "
+                        f"CODEWIKI_PARSE_WORKERS=1 for the sequential path."
+                    ) from e
+                except Exception as e:  # noqa: BLE001 — one unparsable file must not abort the sweep
+                    failed.add(i)
+                    logger.warning(
+                        f"⚠️  Failed to analyze {Path(base_dir) / file_path}: {str(e)[:200]}"
+                    )
+                if done % max(1, total // 10) == 0 or done <= 5:
+                    logger.info(
+                        f"  [{done}/{total}] {file_path} ({time.time() - start_time:.1f}s elapsed)"
+                    )
+        except BaseException:
+            # Ctrl-C or a fatal error: drop the queued files and stop the
+            # workers now instead of waiting for the files in flight (each up
+            # to the parse timeout). ``_processes`` is private but present in
+            # every CPython 3.12-3.14 (3.14 wraps it as terminate_workers()).
+            for process in list((getattr(pool, "_processes", None) or {}).values()):
+                process.terminate()
+            if pool is not None:
+                # The pool's manager thread sees the dead workers and reaps
+                # them; joining them here as well would race its waitpid.
+                pool.shutdown(wait=True, cancel_futures=True)
+            raise
+        else:
+            pool.shutdown(wait=True)
+
+        for state in results:
+            if state is not None:
+                self._merge_per_file_state(state)
+        return total - len(failed), len(failed)
+
+    def _per_file_state(self) -> dict:
+        """Everything ``_analyze_code_file`` accumulates, for a worker to return."""
+        return {
+            "functions": self.functions,
+            "call_relationships": self.call_relationships,
+            "python_external_import_roots": self._python_external_import_roots,
+            "dart_directives": self._dart_directives,
+            "go_visible": self._go_visible,
+            "lean_files": self._lean_files,
+            "lean_scopes": self._lean_scopes,
+            "lean_aliases": dict(self._lean_aliases),
+            "lean_private": self._lean_private,
+            "lean_protected": self._lean_protected,
+        }
+
+    def _merge_per_file_state(self, state: dict) -> None:
+        # dict.update keeps a key's first position and takes the last value:
+        # the same as the sequential per-key assignments.
+        self.functions.update(state["functions"])
+        self.call_relationships.extend(state["call_relationships"])
+        self._python_external_import_roots.update(state["python_external_import_roots"])
+        self._dart_directives.update(state["dart_directives"])
+        self._go_visible.update(state["go_visible"])
+        self._lean_files.update(state["lean_files"])
+        self._lean_scopes.update(state["lean_scopes"])
+        for alias, node_ids in state["lean_aliases"].items():
+            self._lean_aliases[alias].extend(node_ids)
+        self._lean_private.update(state["lean_private"])
+        self._lean_protected.update(state["lean_protected"])
 
     def extract_code_files(self, file_tree: dict) -> list[dict]:
         """
@@ -251,7 +655,7 @@ class CallGraphAnalyzer:
                 return True
         return False
 
-    def _analyze_code_file(self, repo_dir: str, file_info: dict):
+    def _analyze_code_file(self, repo_dir: str, file_info: dict, timeout_s: int) -> bool:
         """
         Analyze a single code file based on its language.
 
@@ -260,14 +664,19 @@ class CallGraphAnalyzer:
         Args:
             repo_dir: Repository directory path
             file_info: File information dictionary
+            timeout_s: Per-file timeout in seconds
+
+        Returns:
+            False when the file timed out or its analysis raised.
         """
 
-        base = Path(repo_dir)
-        file_path = base / file_info["path"]
-
+        file_path = file_info.get("path")
         try:
-            # Add timeout protection (30 seconds per file max)
-            with timeout(30):
+            # Inside the try: callers rely on every per-file error being
+            # handled here.
+            base = Path(repo_dir)
+            file_path = base / file_info["path"]
+            with timeout(timeout_s):
                 content = safe_open_text(base, file_path)
                 language = file_info["language"]
                 if language == "python":
@@ -311,9 +720,12 @@ class CallGraphAnalyzer:
 
         except TimeoutError as e:
             logger.warning(f"⏱️  Timeout analyzing {file_path}: {e!s}")
+            return False
         except Exception as e:  # noqa: BLE001 — per-file analysis is best-effort
-            logger.debug(f"Error analyzing {file_path}: {e!s}")
+            logger.warning(f"⚠️  Failed to analyze {file_path}: {str(e)[:200]}")
             logger.debug(f"Traceback: {traceback.format_exc()}")
+            return False
+        return True
 
     def _analyze_python_file(self, file_path: str, content: str, base_dir: str):
         """

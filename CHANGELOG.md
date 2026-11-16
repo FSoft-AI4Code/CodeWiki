@@ -8,6 +8,18 @@ uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Parallel source parsing.** Dependency analysis parses files in a process
+  pool, largest first, and merges the results in file order, so the graph is
+  identical to a sequential run (a 678-file TypeScript repository: 607 s to
+  106 s on 32 CPUs). `CODEWIKI_PARSE_WORKERS` sets the pool size; the default
+  is one worker per usable CPU (cgroup CPU quota respected), per 8 files and
+  per 400 MB of available memory, and `1` restores the sequential path.
+- **Configurable parse timeout.** `CODEWIKI_PARSE_TIMEOUT` sets the per-file
+  timeout. The default rises from 30 s to 300 s: large hand-written files
+  (6-8k lines of TypeScript) took 30-90 s and were dropped from the graph on
+  every run. Files that time out or whose analysis raises now count as
+  failed in the analysis summary (they used to count as analyzed), and the
+  latter are logged as warnings instead of at debug level.
 - **Backstage TechDocs output.** `codewiki generate --techdocs` (or
   `codewiki techdocs DOCS_DIR OUT_DIR` on existing docs, with no LLM calls)
   writes an MkDocs project that `techdocs-cli generate` builds as is:
