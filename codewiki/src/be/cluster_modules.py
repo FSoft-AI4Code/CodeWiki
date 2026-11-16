@@ -5,6 +5,11 @@ from collections import defaultdict
 from collections.abc import Callable
 from typing import Any
 
+from codewiki.src.be.cluster_batch_cache import (
+    ClusterBatchCache,
+    clustering_cache_scope,
+    clustering_request_fingerprint,
+)
 from codewiki.src.be.dependency_analyzer.models.core import Node
 from codewiki.src.be.llm_services import call_llm
 from codewiki.src.be.module_naming import resolve_unique_name, sanitize_module_name
@@ -170,16 +175,19 @@ def _cluster_via_llm(
     current_module_name: str | None,
     module_label: str,
     completer: Completer | None,
+    *,
+    prompt: str | None = None,
 ) -> dict[str, Any]:
     """Run one clustering LLM call over these nodes.
 
     Returns {} for any empty, malformed, or non-dict response instead of
     raising, so callers can fall back gracefully.
     """
-    potential_core_components, _ = format_potential_core_components(leaf_nodes, components)
-    prompt = format_cluster_prompt(
-        potential_core_components, current_module_tree, current_module_name
-    )
+    if prompt is None:
+        potential_core_components, _ = format_potential_core_components(leaf_nodes, components)
+        prompt = format_cluster_prompt(
+            potential_core_components, current_module_tree, current_module_name
+        )
     if completer is not None:
         response = completer(prompt)
     else:
@@ -428,9 +436,37 @@ def cluster_modules(
             module_label,
             len(batches),
         )
+        batch_cache: ClusterBatchCache | None = None
+        cache_scope = clustering_cache_scope(current_module_path)
+        if getattr(config, "cluster_batch_cache", True) and config.docs_dir:
+            batch_cache = ClusterBatchCache(config.docs_dir)
         module_tree = {}
+        cache_hits = 0
+        if batch_cache is not None:
+            logger.info(
+                "Clustering batch cache for %r: %d on-disk entries (%d for this scope), %d batches to run.",
+                cache_scope,
+                batch_cache.entry_count(),
+                batch_cache.scope_entry_count(cache_scope),
+                len(batches),
+            )
         for i, batch in enumerate(batches, 1):
             batch_label = f"{module_label} (batch {i}/{len(batches)})"
+            potential_core_components, _ = format_potential_core_components(batch, components)
+            prompt = format_cluster_prompt(
+                potential_core_components, current_module_tree, current_module_name
+            )
+            request_fingerprint = (
+                clustering_request_fingerprint(config, prompt) if batch_cache is not None else ""
+            )
+            if batch_cache is not None:
+                cached = batch_cache.lookup(
+                    cache_scope, i, batch, request_fingerprint=request_fingerprint
+                )
+                if cached is not None:
+                    cache_hits += 1
+                    _merge_module_trees(module_tree, cached)
+                    continue
             # Each batch gets the *unmodified* current_module_tree: passing the
             # accumulating merge would flip format_cluster_prompt into its
             # module-level variant mid-partition.
@@ -442,7 +478,14 @@ def cluster_modules(
                 current_module_name,
                 batch_label,
                 completer,
+                prompt=prompt,
             )
+            # Only validated LLM responses are resumable. A structural fallback
+            # keeps this pass usable but must be retried after a later failure.
+            if batch_cache is not None and partial:
+                batch_cache.store(
+                    cache_scope, i, batch, partial, request_fingerprint=request_fingerprint
+                )
             if not partial:
                 name = _batch_fallback_name(batch, components, module_tree)
                 partial = {
@@ -460,6 +503,14 @@ def cluster_modules(
                     name,
                 )
             _merge_module_trees(module_tree, partial)
+        if batch_cache is not None:
+            logger.info(
+                "Clustering batch cache for %r: %d/%d batches from cache, %d LLM batch call(s) this pass.",
+                cache_scope,
+                cache_hits,
+                len(batches),
+                len(batches) - cache_hits,
+            )
 
     module_tree = normalize_module_partition(module_tree, candidates, components)
     if len(module_tree) <= 1:

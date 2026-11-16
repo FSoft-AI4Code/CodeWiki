@@ -52,7 +52,10 @@ def _config(**overrides) -> Config:
         cluster_model="m",
         min_token_per_module=1,
     )
-    return Config.from_cli(**kwargs, **overrides)
+    config = Config.from_cli(**kwargs, **overrides)
+    # Persistent reuse is covered separately with isolated tmp_path directories.
+    config.cluster_batch_cache = False
+    return config
 
 
 def _max_count_fits(limit: int):
