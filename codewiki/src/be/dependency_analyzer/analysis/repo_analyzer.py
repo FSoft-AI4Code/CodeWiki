@@ -5,6 +5,7 @@ This module provides functionality to analyze repository structures and generate
 detailed file tree representations with filtering capabilities.
 """
 
+import configparser
 import fnmatch
 import logging
 import os
@@ -23,6 +24,93 @@ from codewiki.src.be.dependency_analyzer.utils.patterns import (
 logger = logging.getLogger(__name__)
 
 
+class RepositoryBoundaryFilter:
+    """Keep declared submodules, but do not descend into unrelated checkouts."""
+
+    def __init__(self, repo_dir: Path) -> None:
+        self.root = repo_dir.resolve()
+        self.owner = next(
+            (path for path in (self.root, *self.root.parents) if (path / ".git").exists()),
+            self.root,
+        )
+        self._submodules: dict[Path, set[Path]] = {}
+
+    @staticmethod
+    def _config_path(value: str) -> str:
+        """Decode Git config quoting, escapes and trailing comments without Git."""
+        result = []
+        quoted = False
+        escaped = False
+        end = 0
+        escapes = {"n": "\n", "t": "\t", "b": "\b", '"': '"', "\\": "\\"}
+        for char in value:
+            if escaped:
+                if char not in escapes:
+                    raise ValueError("Invalid escape in submodule path")
+                result.append(escapes[char])
+                end = len(result)
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                quoted = not quoted
+            elif char in "#;" and not quoted:
+                break
+            else:
+                result.append(char)
+                if quoted or not char.isspace():
+                    end = len(result)
+        if quoted or escaped:
+            raise ValueError("Unterminated submodule path")
+        return "".join(result[:end])
+
+    def _declared_submodules(self, owner: Path) -> set[Path]:
+        if owner in self._submodules:
+            return self._submodules[owner]
+        paths: set[Path] = set()
+        config_path = owner / ".gitmodules"
+        try:
+            # Never follow a declaration file outside its owning repository.
+            if config_path.is_symlink() or not config_path.exists():
+                self._submodules[owner] = paths
+                return paths
+            config = configparser.RawConfigParser(strict=False)
+            config.read_string(config_path.read_text(encoding="utf-8"))
+            for section in config.sections():
+                if not section.lower().startswith('submodule "') or not section.endswith('"'):
+                    continue
+                value = self._config_path(config.get(section, "path", fallback=""))
+                if not value:
+                    continue
+                relative = Path(value)
+                path = (owner / relative).resolve()
+                if relative.is_absolute() or path == owner or not path.is_relative_to(owner):
+                    logger.warning("Skipping escaping submodule path in %s: %s", config_path, value)
+                    continue
+                paths.add(path)
+        except (OSError, UnicodeError, ValueError, configparser.Error) as exc:
+            logger.warning("Could not read submodule declarations at %s: %s", config_path, exc)
+            paths.clear()
+        self._submodules[owner] = paths
+        return paths
+
+    def should_skip(self, path: Path) -> bool:
+        path = path.resolve()
+        if path == self.root or not (path / ".git").exists():
+            return False
+        owner = self.owner
+        for parent in path.parents:
+            if parent == self.root:
+                break
+            if (parent / ".git").exists():
+                owner = parent
+                break
+        if path in self._declared_submodules(owner):
+            return False
+        logger.debug("Skipping nested Git checkout: %s", path)
+        return True
+
+
 class GitIgnoreFilter:
     """Evaluate Git ignore rules once per repository analysis.
 
@@ -31,8 +119,9 @@ class GitIgnoreFilter:
     Plain directories fall back to pathspec-backed ``.gitignore`` evaluation.
     """
 
-    def __init__(self, repo_dir: Path) -> None:
+    def __init__(self, repo_dir: Path, boundaries: RepositoryBoundaryFilter | None = None) -> None:
         self.repo_dir = repo_dir.resolve()
+        self._boundaries = boundaries or RepositoryBoundaryFilter(self.repo_dir)
         self._ignored_files: set[str] = set()
         self._ignored_dirs: set[str] = set()
         self._ignore_all_untracked = False
@@ -116,12 +205,20 @@ class GitIgnoreFilter:
 
     def _load_fallback_specs(self) -> None:
         try:
-            candidates = sorted(
-                (
-                    path
-                    for path in self.repo_dir.rglob(".gitignore")
-                    if path.is_file() and not path.is_symlink()
-                ),
+            candidates = []
+            for directory, dirs, files in os.walk(self.repo_dir, followlinks=False):
+                base = Path(directory)
+                dirs[:] = [
+                    name
+                    for name in dirs
+                    if name != ".git"
+                    and not (base / name).is_symlink()
+                    and not self._boundaries.should_skip(base / name)
+                ]
+                gitignore = base / ".gitignore"
+                if ".gitignore" in files and not gitignore.is_symlink():
+                    candidates.append(gitignore)
+            candidates.sort(
                 key=lambda path: (len(path.relative_to(self.repo_dir).parts), path.as_posix()),
             )
         except OSError as exc:
@@ -194,9 +291,13 @@ class RepoAnalyzer:
         self.exclude_patterns = self.default_exclude_patterns + self.user_exclude_patterns
         self.use_gitignore = use_gitignore
         self._gitignore_filter: GitIgnoreFilter | None = None
+        self._boundaries: RepositoryBoundaryFilter | None = None
 
     def analyze_repository_structure(self, repo_dir: str) -> dict:
-        self._gitignore_filter = GitIgnoreFilter(Path(repo_dir)) if self.use_gitignore else None
+        self._boundaries = RepositoryBoundaryFilter(Path(repo_dir))
+        self._gitignore_filter = (
+            GitIgnoreFilter(Path(repo_dir), self._boundaries) if self.use_gitignore else None
+        )
         file_tree = self._build_file_tree(repo_dir)
         return {
             "file_tree": file_tree,
@@ -240,6 +341,8 @@ class RepoAnalyzer:
                 }
 
             elif path.is_dir():
+                if self._boundaries and self._boundaries.should_skip(path):
+                    return None
                 children = []
                 try:
                     for child in sorted(path.iterdir()):

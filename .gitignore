@@ -99,6 +99,7 @@ Thumbs.db
 !tests/test_generation_metadata.py
 !tests/test_pricing.py
 !tests/smoke_test_costs.py
+!tests/smoke_test_nested_checkouts.py
 
 # Mermaid regression tests and development-only parser harness
 !tests/test_mermaid_validation.py

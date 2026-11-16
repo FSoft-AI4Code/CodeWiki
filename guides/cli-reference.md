@@ -60,6 +60,17 @@ Pattern rules:
 - Git ignore rules apply before the dependency analysis. Tracked files stay
   in, as in Git. Built-in and `--exclude` patterns still apply when Git
   includes a path.
+- Nested Git checkouts (including worktrees and clones) are skipped, even with
+  `--no-gitignore` or when Git is unavailable. Submodules declared in the owning
+  repository's `.gitmodules` remain included unless excluded by other filters.
+  To document a nested checkout itself, run generation from that checkout.
+  Ordinary untracked source files remain included.
+
+For an opt-in live boundary check, run
+`.venv/bin/python tests/smoke_test_nested_checkouts.py --provider codex --model gpt-6-luna`
+from the project root with an authenticated Codex CLI. It generates a temporary
+repository's documentation, checks the saved graph, and retains logs and artifacts
+without changing your stored CodeWiki settings.
 
 ### Output language
 
