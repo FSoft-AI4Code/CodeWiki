@@ -10,12 +10,12 @@ import tempfile
 from copy import deepcopy
 from typing import Any
 
-from codewiki.src.config import CLUSTERING_BATCH_CACHE_FILENAME
+from codewiki.src.config import CLUSTERING_BATCH_CACHE_FILENAME, Config
 from codewiki.src.utils import file_manager
 
 logger = logging.getLogger(__name__)
 
-CACHE_VERSION = 3
+CACHE_VERSION = 4
 
 
 def clustering_cache_scope(module_path: list[str]) -> str:
@@ -25,11 +25,46 @@ def clustering_cache_scope(module_path: list[str]) -> str:
     return "/".join(module_path)
 
 
-def batch_entry_key(scope: str, batch_index: int, node_ids: list[str]) -> str:
-    """Scope, 1-based batch index, and a fingerprint of the batch's component IDs."""
-    canonical = "\n".join(sorted(node_ids))
+def clustering_request_fingerprint(config: Config, prompt: str) -> str:
+    """Identify the rendered request and configured routing without persisting secrets."""
+    routing = {
+        name: getattr(config, name, None)
+        for name in (
+            "provider",
+            "cluster_model",
+            "main_model",
+            "llm_base_url",
+            "azure_deployment",
+            "api_version",
+            "aws_region",
+            "google_project",
+            "google_location",
+            "max_tokens",
+        )
+    }
+    if routing["provider"] == "google-vertex":
+        routing["google_project"] = routing["google_project"] or os.getenv(
+            "GOOGLE_CLOUD_PROJECT", ""
+        )
+        routing["google_location"] = (
+            routing["google_location"] or os.getenv("GOOGLE_CLOUD_LOCATION") or "global"
+        )
+    context = {
+        "repo": os.path.realpath(config.repo_path),
+        "routing": routing,
+        "prompt": prompt,
+    }
+    canonical = json.dumps(context, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def batch_entry_key(
+    scope: str, batch_index: int, node_ids: list[str], request_fingerprint: str
+) -> str:
+    """Scope, batch index, component set, and exact request identity."""
+    canonical = json.dumps(sorted(node_ids), ensure_ascii=False, separators=(",", ":"))
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
-    return f"{scope}|{batch_index}|{digest}"
+    return f"{scope}|{batch_index}|{digest}|{request_fingerprint}"
 
 
 def clustering_batch_cache_path(docs_dir: str) -> str:
@@ -58,6 +93,8 @@ def _valid_entry(entry: Any) -> bool:
     partial = entry.get("partial_tree")
     return (
         isinstance(entry.get("scope"), str)
+        and isinstance(entry.get("request_fingerprint"), str)
+        and bool(entry["request_fingerprint"])
         and isinstance(entry.get("batch_index"), int)
         and not isinstance(entry["batch_index"], bool)
         and entry["batch_index"] > 0
@@ -141,15 +178,22 @@ class ClusterBatchCache:
             return 0
         return sum(1 for entry in entries.values() if entry.get("scope") == scope)
 
-    def lookup(self, scope: str, batch_index: int, node_ids: list[str]) -> dict[str, Any] | None:
+    def lookup(
+        self, scope: str, batch_index: int, node_ids: list[str], *, request_fingerprint: str
+    ) -> dict[str, Any] | None:
         if not self._enabled:
             return None
-        key = batch_entry_key(scope, batch_index, node_ids)
+        key = batch_entry_key(scope, batch_index, node_ids, request_fingerprint)
         entry = self._data["entries"].get(key)
         if not _valid_entry(entry):
             return None
         stored_ids = entry.get("node_ids")
-        if stored_ids != sorted(node_ids):
+        if (
+            stored_ids != sorted(node_ids)
+            or entry["scope"] != scope
+            or entry["batch_index"] != batch_index
+            or entry["request_fingerprint"] != request_fingerprint
+        ):
             return None
         partial = entry.get("partial_tree")
         if not isinstance(partial, dict) or not partial:
@@ -168,14 +212,17 @@ class ClusterBatchCache:
         batch_index: int,
         node_ids: list[str],
         partial_tree: dict[str, Any],
+        *,
+        request_fingerprint: str,
     ) -> None:
         if not self._enabled or not partial_tree:
             return
-        key = batch_entry_key(scope, batch_index, node_ids)
+        key = batch_entry_key(scope, batch_index, node_ids, request_fingerprint)
         entry = {
             "scope": scope,
             "batch_index": batch_index,
             "node_ids": sorted(node_ids),
+            "request_fingerprint": request_fingerprint,
             "partial_tree": deepcopy(partial_tree),
         }
         if not _valid_entry(entry):
