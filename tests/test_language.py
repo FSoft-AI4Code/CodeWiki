@@ -302,7 +302,6 @@ def test_incomplete_run_records_language_and_layout(tmp_path, monkeypatch):
 
     out = tmp_path / "docs"
     out.mkdir()
-    (out / "module_tree.json").write_text("{}")
 
     monkeypatch.setattr(CLIDocumentationGenerator, "_configure_backend_logging", lambda self: None)
 
@@ -321,6 +320,7 @@ def test_incomplete_run_records_language_and_layout(tmp_path, monkeypatch):
 
     async def fail(cfg):
         instance._usage_ledger = UsageLedger()
+        (out / "module_tree.json").write_text("{}")
         raise APIError("module failed")
 
     monkeypatch.setattr(instance, "_run_backend_generation", fail)

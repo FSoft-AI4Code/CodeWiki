@@ -20,6 +20,7 @@ from codewiki.cli.utils.progress import ProgressTracker
 # Import backend modules
 from codewiki.src.be.documentation_generator import DocumentationGenerator
 from codewiki.src.be.doc_layout import list_doc_files
+from codewiki.src.be.generation_metadata import GenerationArtifacts, save_metadata
 from codewiki.src.config import DEFAULT_LAYOUT, DEFAULT_MAX_TOKEN_PER_LEAF_MODULE
 from codewiki.src.config import Config as BackendConfig
 from codewiki.src.config import set_cli_context
@@ -138,6 +139,7 @@ class CLIDocumentationGenerator:
         Raises:
             APIError: If LLM API call fails
         """
+        self._generation_artifacts = GenerationArtifacts(self.output_dir)
         self.job.start()
 
         try:
@@ -176,6 +178,8 @@ class CLIDocumentationGenerator:
                 with_prose=self.config.get("with_prose", False),
                 layout=self.config.get("layout", DEFAULT_LAYOUT),
             )
+
+            self._backend_config = backend_config
 
             # Run backend documentation generation
             asyncio.run(self._run_backend_generation(backend_config))
@@ -520,6 +524,7 @@ class CLIDocumentationGenerator:
             n += 1
         shutil.move(str(self.output_dir), str(target))
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self._generation_artifacts = GenerationArtifacts(self.output_dir)
         self._preserved_docs_dir = str(target)
         record = getattr(self, "_last_update_record", None)
         if record is not None:
@@ -664,18 +669,10 @@ class CLIDocumentationGenerator:
                 metadata = {}
             if not isinstance(metadata, dict):
                 metadata = {}
-            if "generation_info" not in metadata and (
-                (self.output_dir / "module_tree.json").exists()
-                or list_doc_files(str(self.output_dir))
-            ):
-                from codewiki.src.be.doc_layout import normalize_layout
-                from codewiki.src.language import normalize_language
-
-                instructions = self.config.get("agent_instructions") or {}
-                metadata["generation_info"] = {
-                    "language": normalize_language(instructions.get("language")),
-                    "layout": normalize_layout(self.config.get("layout")),
-                }
+            artifacts = getattr(self, "_generation_artifacts", None)
+            backend_config = getattr(self, "_backend_config", None)
+            if artifacts is not None and backend_config is not None:
+                artifacts.add_generation_info(metadata, backend_config)
             metadata["usage"] = report
             record = getattr(self, "_last_update_record", None)
             if record is not None:
@@ -692,9 +689,7 @@ class CLIDocumentationGenerator:
                 else:
                     history.append(summary)
                 metadata.update(last_update=summary, update_history=history)
-            from codewiki.cli.utils.fs import safe_write
-
-            safe_write(path, json.dumps(metadata, indent=2, ensure_ascii=False))
+            save_metadata(path, metadata)
         except Exception:
             logging.getLogger(__name__).warning("Could not save the run usage report")
         if incomplete:

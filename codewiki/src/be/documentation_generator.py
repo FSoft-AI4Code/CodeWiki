@@ -23,6 +23,7 @@ from codewiki.src.be.doc_layout import (
     organize_docs,
     relative_link,
 )
+from codewiki.src.be.generation_metadata import GenerationArtifacts, save_metadata
 from codewiki.src.be.utils import validate_mermaid_content
 from codewiki.src.be.overview_support import (
     bounded_overview_prompt,
@@ -477,6 +478,7 @@ class DocumentationGenerator:
 
     async def run(self) -> None:
         """Run the complete documentation generation process using dynamic programming."""
+        artifacts = GenerationArtifacts(self.config.docs_dir)
         try:
             # Build dependency graph
             components, leaf_nodes = self.graph_builder.build_dependency_graph()
@@ -587,17 +589,10 @@ class DocumentationGenerator:
                 metadata = file_manager.load_json(path) if os.path.exists(path) else {}
                 if not isinstance(metadata, dict):
                     metadata = {}
-                if "generation_info" not in metadata and (
-                    os.path.exists(os.path.join(self.config.docs_dir, MODULE_TREE_FILENAME))
-                    or list_doc_files(self.config.docs_dir)
-                ):
-                    metadata["generation_info"] = {
-                        "language": getattr(self.config, "language", None),
-                        "layout": config_layout(self.config),
-                    }
+                artifacts.add_generation_info(metadata, self.config)
                 metadata["usage"] = self.usage_ledger.summary()
                 file_manager.ensure_directory(self.config.docs_dir)
-                file_manager.save_json(metadata, path)
+                save_metadata(path, metadata)
             except Exception:
                 logger.warning("Could not save the incomplete run usage report")
             raise
