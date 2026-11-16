@@ -281,9 +281,7 @@ def test_generate_update_language_handling(tmp_path, monkeypatch):
 
     # Explicit English metadata still rejects --update --language es
     (out / "metadata.json").write_text(json.dumps({"generation_info": {"language": None}}))
-    res = CliRunner().invoke(
-        gen.generate_command, ["--update", "--language", "es", "-o", str(out)]
-    )
+    res = CliRunner().invoke(gen.generate_command, ["--update", "--language", "es", "-o", str(out)])
     assert res.exit_code != 0
     assert "generated in English, but --language asks for Spanish" in res.output
 
@@ -292,9 +290,7 @@ def test_generate_update_language_handling(tmp_path, monkeypatch):
     CliRunner().invoke(gen.generate_command, ["--update", "--language", "es", "-o", str(out)])
     assert seen["agent_instructions"]["language"] == "Spanish"
 
-    res = CliRunner().invoke(
-        gen.generate_command, ["--update", "--language", "fr", "-o", str(out)]
-    )
+    res = CliRunner().invoke(gen.generate_command, ["--update", "--language", "fr", "-o", str(out)])
     assert res.exit_code != 0
     assert "generated in Spanish, but --language asks for French" in res.output
 
@@ -307,6 +303,8 @@ def test_incomplete_run_records_language_and_layout(tmp_path, monkeypatch):
     out = tmp_path / "docs"
     out.mkdir()
     (out / "module_tree.json").write_text("{}")
+
+    monkeypatch.setattr(CLIDocumentationGenerator, "_configure_backend_logging", lambda self: None)
 
     instance = CLIDocumentationGenerator(
         tmp_path,
