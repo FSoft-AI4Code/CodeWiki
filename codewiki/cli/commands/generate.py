@@ -828,9 +828,7 @@ def generate_command(
                 agent_instructions_dict["language"] = update_language
             if verbose:
                 source = "metadata.json" if stored_language_known else "--language"
-                logger.debug(
-                    f"Output language (from {source}): {update_language or 'English'}"
-                )
+                logger.debug(f"Output language (from {source}): {update_language or 'English'}")
 
         # Create generator
         # Get commit_id early so it can be stored in metadata.json for --update support
