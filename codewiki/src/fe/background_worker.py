@@ -6,13 +6,13 @@ Background worker for processing documentation generation jobs.
 import os
 import time
 import threading
-import subprocess
 import asyncio
 from datetime import datetime
 from pathlib import Path
 from queue import Queue
 from typing import Dict
 
+from codewiki.src.be.dependency_analyzer.analysis.cloning import cleanup_repo_directory
 from codewiki.src.be.documentation_generator import DocumentationGenerator
 from codewiki.src.config import Config, MAIN_MODEL
 from .models import JobStatus
@@ -260,6 +260,6 @@ class BackgroundWorker:
             # Cleanup temporary repository
             if "temp_repo_dir" in locals() and os.path.exists(temp_repo_dir):
                 try:
-                    subprocess.run(["rm", "-rf", temp_repo_dir], check=True)
+                    cleanup_repo_directory(temp_repo_dir)
                 except Exception as e:
                     print(f"Failed to cleanup temp directory: {e}")

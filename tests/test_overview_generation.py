@@ -44,7 +44,7 @@ def generator(tmp_path, replies, layout="flat"):
             },
         }
     }
-    (tmp_path / "module_tree.json").write_text(json.dumps(tree))
+    (tmp_path / "module_tree.json").write_text(json.dumps(tree), encoding="utf-8")
     gen = DocumentationGenerator.__new__(DocumentationGenerator)
     gen.config = SimpleNamespace(
         layout=layout, repo_path="/tmp/example", get_prompt_addition=lambda: "Write in Portuguese."
@@ -58,8 +58,12 @@ def test_parent_receives_child_contents_and_relative_links(tmp_path, layout):
     gen = generator(tmp_path, [VALID], layout)
     child_dir = tmp_path if layout == "flat" else tmp_path / "parent"
     child_dir.mkdir(exist_ok=True)
-    (child_dir / "build_and_deployment.md").write_text("# Build\n\nCHILD_CONTENT_SENTINEL")
-    (child_dir / "bootstrap.md").write_text("# Bootstrap\n\nInitialize the plugin.")
+    (child_dir / "build_and_deployment.md").write_text(
+        "# Build\n\nCHILD_CONTENT_SENTINEL", encoding="utf-8"
+    )
+    (child_dir / "bootstrap.md").write_text(
+        "# Bootstrap\n\nInitialize the plugin.", encoding="utf-8"
+    )
     asyncio.run(gen.generate_parent_module_docs(["parent"], str(tmp_path)))
     prompt, system = gen.backend.calls[0]
     assert "CHILD_CONTENT_SENTINEL" in prompt
@@ -67,7 +71,7 @@ def test_parent_receives_child_contents_and_relative_links(tmp_path, layout):
     assert '"link": "' + ("parent/" if layout == "hierarchical" else "") + "bootstrap.md" in prompt
     assert "read those files with your" not in prompt
     assert "Portuguese" in system
-    assert (tmp_path / "parent.md").read_text() == VALID.strip()
+    assert (tmp_path / "parent.md").read_text(encoding="utf-8") == VALID.strip()
 
 
 @pytest.mark.parametrize(
@@ -86,7 +90,7 @@ def test_parent_receives_child_contents_and_relative_links(tmp_path, layout):
 def test_invalid_output_is_corrected_once(tmp_path, response):
     gen = generator(tmp_path, [response, "<OVERVIEW>" + VALID + "</OVERVIEW>"])
     asyncio.run(gen.generate_parent_module_docs(["parent"], str(tmp_path)))
-    assert (tmp_path / "parent.md").read_text() == VALID.strip()
+    assert (tmp_path / "parent.md").read_text(encoding="utf-8") == VALID.strip()
     assert len(gen.backend.calls) == 2
     assert "Validation failure" in gen.backend.calls[1][0]
     assert gen.backend.usage_ledger.summary()["n_calls"] == 2
@@ -97,11 +101,11 @@ def test_exhausted_correction_never_overwrites_old_page(tmp_path, original):
     gen = generator(tmp_path, [PREAMBLE, PREAMBLE])
     path = tmp_path / "parent.md"
     if original is not None:
-        path.write_text(original)
+        path.write_text(original, encoding="utf-8")
     with pytest.raises(RuntimeError, match="after one correction attempt"):
         asyncio.run(gen.generate_parent_module_docs(["parent"], str(tmp_path)))
     assert len(gen.backend.calls) == 2
-    assert path.read_text() == original if original is not None else not path.exists()
+    assert path.read_text(encoding="utf-8") == original if original is not None else not path.exists()
 
 
 @pytest.mark.parametrize("original", ["", PREAMBLE, PREAMBLE.replace("I'll", "I’ll")])
@@ -109,9 +113,9 @@ def test_exhausted_correction_never_overwrites_old_page(tmp_path, original):
 def test_recognized_old_pages_are_repaired(tmp_path, original, module_path, filename):
     gen = generator(tmp_path, [VALID])
     path = tmp_path / filename
-    path.write_text(original)
+    path.write_text(original, encoding="utf-8")
     asyncio.run(gen.generate_parent_module_docs(module_path, str(tmp_path)))
-    assert path.read_text() == VALID.strip()
+    assert path.read_text(encoding="utf-8") == VALID.strip()
 
 
 @pytest.mark.parametrize(
@@ -124,16 +128,16 @@ def test_recognized_old_pages_are_repaired(tmp_path, original, module_path, file
 )
 def test_other_existing_prose_is_preserved(tmp_path, original):
     gen = generator(tmp_path, [])
-    (tmp_path / "parent.md").write_text(original)
+    (tmp_path / "parent.md").write_text(original, encoding="utf-8")
     asyncio.run(gen.generate_parent_module_docs(["parent"], str(tmp_path)))
     assert not gen.backend.calls
-    assert (tmp_path / "parent.md").read_text() == original
+    assert (tmp_path / "parent.md").read_text(encoding="utf-8") == original
 
 
 def test_missing_and_unreadable_children_warn_without_fabrication(tmp_path, monkeypatch, caplog):
     gen = generator(tmp_path, [VALID])
     path = tmp_path / "bootstrap.md"
-    path.write_text("unreadable secret")
+    path.write_text("unreadable secret", encoding="utf-8")
     original = Path.read_text
 
     def read(path, *args, **kwargs):
@@ -152,12 +156,14 @@ def test_missing_and_unreadable_children_warn_without_fabrication(tmp_path, monk
 def test_sanitized_child_filename_is_read(tmp_path):
     gen = generator(tmp_path, [VALID])
     path = tmp_path / "module_tree.json"
-    tree = json.loads(path.read_text())
+    tree = json.loads(path.read_text(encoding="utf-8"))
     tree["parent"]["children"]["Build Deployment"] = tree["parent"]["children"].pop(
         "build_and_deployment"
     )
-    path.write_text(json.dumps(tree))
-    (tmp_path / "build_deployment.md").write_text("# Build\n\nSANITIZED_CONTENT")
+    path.write_text(json.dumps(tree), encoding="utf-8")
+    (tmp_path / "build_deployment.md").write_text(
+        "# Build\n\nSANITIZED_CONTENT", encoding="utf-8"
+    )
     asyncio.run(gen.generate_parent_module_docs(["parent"], str(tmp_path)))
     assert "SANITIZED_CONTENT" in gen.backend.calls[0][0]
 
@@ -205,7 +211,7 @@ def test_valid_prose_in_non_latin_script():
 
 def test_failed_atomic_replacement_preserves_existing_file(tmp_path, monkeypatch):
     path = tmp_path / "overview.md"
-    path.write_text(PREAMBLE)
+    path.write_text(PREAMBLE, encoding="utf-8")
 
     def fail(*args):
         raise OSError("disk unavailable")
@@ -213,40 +219,40 @@ def test_failed_atomic_replacement_preserves_existing_file(tmp_path, monkeypatch
     monkeypatch.setattr(support.os, "replace", fail)
     with pytest.raises(OSError, match="disk unavailable"):
         support.save_overview(VALID, str(path))
-    assert path.read_text() == PREAMBLE
+    assert path.read_text(encoding="utf-8") == PREAMBLE
     assert list(tmp_path.iterdir()) == [path]
 
 
 def test_whole_repo_recovery_restores_old_page_on_failure(tmp_path):
     path = tmp_path / "overview.md"
-    path.write_text(PREAMBLE)
+    path.write_text(PREAMBLE, encoding="utf-8")
     with pytest.raises(RuntimeError), support.preserve_incomplete_overviews([str(path)]):
-        path.write_text("partial edit")
+        path.write_text("partial edit", encoding="utf-8")
         raise RuntimeError("agent failed")
-    assert path.read_text() == PREAMBLE
+    assert path.read_text(encoding="utf-8") == PREAMBLE
 
 
 def test_parent_failure_does_not_skip_independent_modules_or_pass_silently(tmp_path):
     gen = generator(tmp_path, [])
     gen.config.docs_dir = str(tmp_path)
     tree_path = tmp_path / "module_tree.json"
-    tree = json.loads(tree_path.read_text())
+    tree = json.loads(tree_path.read_text(encoding="utf-8"))
     tree["independent"] = {"components": [], "children": {}}
-    tree_path.write_text(json.dumps(tree))
-    (tmp_path / "parent.md").write_text(PREAMBLE)
+    tree_path.write_text(json.dumps(tree), encoding="utf-8")
+    (tmp_path / "parent.md").write_text(PREAMBLE, encoding="utf-8")
 
     async def module(module_name, **kwargs):
-        (tmp_path / f"{module_name}.md").write_text(VALID)
+        (tmp_path / f"{module_name}.md").write_text(VALID, encoding="utf-8")
         return tree
 
     async def overview(module_path, working_dir, components=None):
         if module_path == ["parent"]:
             raise RuntimeError("invalid parent response")
-        (tmp_path / "overview.md").write_text(VALID)
+        (tmp_path / "overview.md").write_text(VALID, encoding="utf-8")
         return tree
 
     gen.backend.run_module_agent = module
     gen.generate_parent_module_docs = overview
     with pytest.raises(RuntimeError, match="parent: invalid parent response"):
         asyncio.run(gen.generate_module_documentation({}, []))
-    assert (tmp_path / "independent.md").read_text() == VALID
+    assert (tmp_path / "independent.md").read_text(encoding="utf-8") == VALID

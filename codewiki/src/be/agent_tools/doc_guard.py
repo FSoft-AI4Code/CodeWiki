@@ -105,6 +105,13 @@ def summarize_tool_activity(messages: list[Any]) -> str:
                 if isinstance(part, ToolReturnPart) and part.tool_call_id in writes:
                     lines = str(part.content).strip().splitlines()
                     results[part.tool_call_id] = _excerpt(lines[0] if lines else "")
+                    if isinstance(part.content, list) and any(
+                        isinstance(item, dict) and item.get("type") == "missing"
+                        for item in part.content
+                    ):
+                        rejected.append(
+                            f"{getattr(part, 'tool_name', 'unknown')}: {_excerpt(part.content)}"
+                        )
                 elif isinstance(part, RetryPromptPart) and part.tool_name:
                     rejected.append(f"{part.tool_name}: {_excerpt(part.model_response())}")
 
