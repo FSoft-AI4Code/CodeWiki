@@ -201,6 +201,10 @@ class CLIDocumentationGenerator:
 
             return self.job
 
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            self.job.fail("Generation interrupted")
+            self._finish_usage(incomplete=True)
+            raise
         except APIError as e:
             self.job.fail(str(e))
             self._finish_usage(incomplete=True)

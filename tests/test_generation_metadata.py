@@ -14,7 +14,9 @@ from codewiki.src.be.documentation_generator import DocumentationGenerator
 from codewiki.src.language import resolve_update_language
 
 
-def _fail_generation(tmp_path, monkeypatch, entrypoint, produce, language=None):
+def _fail_generation(
+    tmp_path, monkeypatch, entrypoint, produce, language=None, error_type=APIError, read_report=True
+):
     """Fail through the real entrypoint and its metadata/usage cleanup."""
     if entrypoint == "cli":
         monkeypatch.setattr(
@@ -36,10 +38,10 @@ def _fail_generation(tmp_path, monkeypatch, entrypoint, produce, language=None):
         async def fail(config):
             generator._usage_ledger = UsageLedger()
             produce(config)
-            raise APIError("injected generation failure")
+            raise error_type("injected generation failure")
 
         monkeypatch.setattr(generator, "_run_backend_generation", fail)
-        with pytest.raises(APIError, match="injected generation failure"):
+        with pytest.raises(error_type, match="injected generation failure"):
             generator.generate()
     else:
         generator = object.__new__(DocumentationGenerator)
@@ -49,12 +51,13 @@ def _fail_generation(tmp_path, monkeypatch, entrypoint, produce, language=None):
 
         def fail():
             produce(generator.config)
-            raise APIError("injected generation failure")
+            raise error_type("injected generation failure")
 
         generator.graph_builder = SimpleNamespace(build_dependency_graph=fail)
-        with pytest.raises(APIError, match="injected generation failure"):
+        with pytest.raises(error_type, match="injected generation failure"):
             asyncio.run(generator.run())
-    return json.loads((tmp_path / "metadata.json").read_text())
+    if read_report:
+        return json.loads((tmp_path / "metadata.json").read_text())
 
 
 @pytest.mark.parametrize("entrypoint", ["cli", "backend"])
@@ -168,6 +171,84 @@ def test_early_failure_preserves_partial_info_as_unknown(tmp_path, monkeypatch, 
     metadata = _fail_generation(tmp_path, monkeypatch, entrypoint, lambda config: None, "Spanish")
     assert metadata["generation_info"] == info
     assert _read_stored_language_state(tmp_path) == (False, None)
+
+
+@pytest.mark.parametrize("entrypoint", ["cli", "backend"])
+@pytest.mark.parametrize("error_type", [KeyboardInterrupt, asyncio.CancelledError])
+@pytest.mark.parametrize("artifact", [None, "module_tree.json", "overview.md"])
+def test_interruption_saves_only_established_context(
+    tmp_path, monkeypatch, entrypoint, error_type, artifact
+):
+    def produce(config):
+        if artifact:
+            (tmp_path / artifact).write_text("{}" if artifact.endswith(".json") else "# Resumen\n")
+
+    metadata = _fail_generation(
+        tmp_path, monkeypatch, entrypoint, produce, "Spanish", error_type=error_type
+    )
+    assert metadata["usage"]["incomplete"] is True
+    if artifact:
+        assert metadata["generation_info"] == {"language": "Spanish", "layout": "hierarchical"}
+        assert resolve_update_language(_read_stored_language_state(tmp_path)[1], "es") == "Spanish"
+    else:
+        assert _read_stored_language_state(tmp_path) == (False, None)
+
+
+@pytest.mark.parametrize("entrypoint", ["cli", "backend"])
+def test_metadata_write_failure_does_not_replace_interruption(tmp_path, monkeypatch, entrypoint):
+    from codewiki.cli.adapters import doc_generator
+    from codewiki.src.be import documentation_generator
+
+    def cannot_save(*args):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(doc_generator, "save_metadata", cannot_save)
+    monkeypatch.setattr(documentation_generator, "save_metadata", cannot_save)
+    _fail_generation(
+        tmp_path,
+        monkeypatch,
+        entrypoint,
+        lambda config: None,
+        error_type=KeyboardInterrupt,
+        read_report=False,
+    )
+
+
+def test_cli_interrupt_exits_130_and_preserves_context(tmp_path, monkeypatch):
+    from click.testing import CliRunner
+    from codewiki.cli.commands import generate
+    from codewiki.cli.models.config import Configuration
+
+    class Manager:
+        def load(self):
+            return True
+
+        def is_configured(self):
+            return True
+
+        def get_config(self):
+            return Configuration(base_url="", provider="codex", main_model="m", cluster_model="m")
+
+        def get_api_key(self):
+            return ""
+
+    out = tmp_path / "docs"
+    (tmp_path / "example.py").write_text("def f():\n    return 1\n")
+
+    async def interrupt(self, config):
+        self._usage_ledger = UsageLedger()
+        out.mkdir()
+        (out / "module_tree.json").write_text("{}")
+        raise KeyboardInterrupt()
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(generate, "ConfigManager", Manager)
+    monkeypatch.setattr(CLIDocumentationGenerator, "_configure_backend_logging", lambda self: None)
+    monkeypatch.setattr(CLIDocumentationGenerator, "_run_backend_generation", interrupt)
+    result = CliRunner().invoke(generate.generate_command, ["-o", str(out), "--language", "es"])
+    assert result.exit_code == 130, result.output
+    assert "Interrupted by user" in result.output
+    assert _read_stored_language_state(out) == (True, "Spanish")
 
 
 def test_failed_atomic_metadata_write_preserves_previous_file(tmp_path, monkeypatch):

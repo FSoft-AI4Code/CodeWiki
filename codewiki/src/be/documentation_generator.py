@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -580,7 +581,7 @@ class DocumentationGenerator:
             logger.debug("Processing order: leaf modules → parent modules → repository overview")
             logger.debug(f"Documentation saved to: {working_dir}")
 
-        except Exception as e:
+        except (Exception, KeyboardInterrupt, asyncio.CancelledError) as e:
             logger.error(f"Documentation generation failed: {e!s}")
             logger.error(f"Traceback: {traceback.format_exc()}")
             self.usage_ledger.incomplete = True
