@@ -43,11 +43,15 @@ class GenerationArtifacts:
         )
 
     def add_generation_info(self, metadata: dict[str, Any], config: Any) -> None:
-        if "generation_info" not in metadata and self.produced_artifacts():
-            metadata["generation_info"] = {
-                "language": getattr(config, "language", None),
-                "layout": config_layout(config),
-            }
+        if not self.produced_artifacts():
+            return
+        info = metadata.get("generation_info")
+        if not isinstance(info, dict):
+            info = {}
+        # A recorded null language means English; only absent keys are unknown.
+        info.setdefault("language", getattr(config, "language", None))
+        info.setdefault("layout", config_layout(config))
+        metadata["generation_info"] = info
 
 
 def save_metadata(path: str | Path, metadata: dict[str, Any]) -> None:

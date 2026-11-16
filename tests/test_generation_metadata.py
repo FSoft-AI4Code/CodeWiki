@@ -124,6 +124,52 @@ def test_rewriting_identical_old_page_does_not_establish_language(
     assert "generation_info" not in metadata
 
 
+@pytest.mark.parametrize("entrypoint", ["cli", "backend"])
+@pytest.mark.parametrize(
+    "info, expected",
+    [
+        (None, {"language": "Spanish", "layout": "hierarchical"}),
+        ({}, {"language": "Spanish", "layout": "hierarchical"}),
+        (
+            {"commit_id": "abc"},
+            {"commit_id": "abc", "language": "Spanish", "layout": "hierarchical"},
+        ),
+        ({"language": None}, {"language": None, "layout": "hierarchical"}),
+        ({"layout": "flat"}, {"language": "Spanish", "layout": "flat"}),
+        (
+            {"language": "Japanese", "layout": "flat"},
+            {"language": "Japanese", "layout": "flat"},
+        ),
+    ],
+)
+def test_partial_info_is_backfilled_without_overwriting_recorded_fields(
+    tmp_path, monkeypatch, entrypoint, info, expected
+):
+    (tmp_path / "metadata.json").write_text(
+        json.dumps({"generation_info": info, "update_history": [{"run_id": "old"}], "custom": 42})
+    )
+    (tmp_path / "module_tree.json").write_text("{}")
+
+    def produce(config):
+        (tmp_path / "overview.md").write_text("# Resumen\nTexto español.\n")
+
+    metadata = _fail_generation(tmp_path, monkeypatch, entrypoint, produce, "Spanish")
+    assert metadata["generation_info"] == expected
+    assert metadata["update_history"] == [{"run_id": "old"}]
+    assert metadata["custom"] == 42
+    assert metadata["usage"]["incomplete"] is True
+
+
+@pytest.mark.parametrize("entrypoint", ["cli", "backend"])
+def test_early_failure_preserves_partial_info_as_unknown(tmp_path, monkeypatch, entrypoint):
+    info = {"commit_id": "abc", "layout": "hierarchical"}
+    (tmp_path / "metadata.json").write_text(json.dumps({"generation_info": info}))
+    (tmp_path / "overview.md").write_text("# Resumen\n")
+    metadata = _fail_generation(tmp_path, monkeypatch, entrypoint, lambda config: None, "Spanish")
+    assert metadata["generation_info"] == info
+    assert _read_stored_language_state(tmp_path) == (False, None)
+
+
 def test_failed_atomic_metadata_write_preserves_previous_file(tmp_path, monkeypatch):
     from codewiki.src.be import generation_metadata
 
