@@ -8,6 +8,7 @@ Exit Codes:
   3: Repository error (not a git repo, no code files)
   4: LLM API error (including rate limits)
   5: File system error (permissions, disk space)
+  6: Incomplete generation (module docs missing; re-run to resume)
 """
 
 import sys
@@ -21,6 +22,7 @@ EXIT_CONFIG_ERROR = 2
 EXIT_REPOSITORY_ERROR = 3
 EXIT_API_ERROR = 4
 EXIT_FILESYSTEM_ERROR = 5
+EXIT_INCOMPLETE_GENERATION = 6
 
 
 class CodeWikiError(Exception):
@@ -65,7 +67,7 @@ class IncompleteGenerationError(CodeWikiError):
 
     def __init__(self, message: str, missing_modules: list = None):
         self.missing_modules = missing_modules or []
-        super().__init__(message, EXIT_GENERAL_ERROR)
+        super().__init__(message, EXIT_INCOMPLETE_GENERATION)
 
 
 def handle_error(error: Exception, verbose: bool = False) -> int:
