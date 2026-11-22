@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -23,6 +24,7 @@ from codewiki.src.be.doc_layout import (
     organize_docs,
     relative_link,
 )
+from codewiki.src.be.generation_metadata import GenerationArtifacts, save_metadata
 from codewiki.src.be.utils import validate_mermaid_content
 from codewiki.src.be.overview_support import (
     bounded_overview_prompt,
@@ -477,6 +479,7 @@ class DocumentationGenerator:
 
     async def run(self) -> None:
         """Run the complete documentation generation process using dynamic programming."""
+        artifacts = GenerationArtifacts(self.config.docs_dir)
         try:
             # Build dependency graph
             components, leaf_nodes = self.graph_builder.build_dependency_graph()
@@ -545,6 +548,9 @@ class DocumentationGenerator:
                 validate_module_file_coverage(module_tree, components)
                 file_manager.save_json(module_tree, first_module_tree_path)
                 file_manager.save_json(module_tree, module_tree_path)
+                from codewiki.src.be.cluster_batch_cache import delete_clustering_batch_cache
+
+                delete_clustering_batch_cache(working_dir)
 
             if len(module_tree) == 0:
                 logger.info(
@@ -578,7 +584,7 @@ class DocumentationGenerator:
             logger.debug("Processing order: leaf modules → parent modules → repository overview")
             logger.debug(f"Documentation saved to: {working_dir}")
 
-        except Exception as e:
+        except (Exception, KeyboardInterrupt, asyncio.CancelledError) as e:
             logger.error(f"Documentation generation failed: {e!s}")
             logger.error(f"Traceback: {traceback.format_exc()}")
             self.usage_ledger.incomplete = True
@@ -587,9 +593,10 @@ class DocumentationGenerator:
                 metadata = file_manager.load_json(path) if os.path.exists(path) else {}
                 if not isinstance(metadata, dict):
                     metadata = {}
+                artifacts.add_generation_info(metadata, self.config)
                 metadata["usage"] = self.usage_ledger.summary()
                 file_manager.ensure_directory(self.config.docs_dir)
-                file_manager.save_json(metadata, path)
+                save_metadata(path, metadata)
             except Exception:
                 logger.warning("Could not save the incomplete run usage report")
             raise

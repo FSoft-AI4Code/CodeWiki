@@ -15,6 +15,7 @@ DEPENDENCY_GRAPHS_DIR = "dependency_graphs"
 DOCS_DIR = "docs"
 FIRST_MODULE_TREE_FILENAME = "first_module_tree.json"
 MODULE_TREE_FILENAME = "module_tree.json"
+CLUSTERING_BATCH_CACHE_FILENAME = "clustering_batch_cache.json"
 OVERVIEW_FILENAME = "overview.md"
 # Docs layout: "hierarchical" mirrors the module tree in nested folders
 # (``auth.md`` + ``auth/login.md``); "flat" keeps every page in the docs root
@@ -136,6 +137,8 @@ class Config:
     with_prose: bool = False
     # Docs layout (LAYOUT_HIERARCHICAL or LAYOUT_FLAT)
     layout: str = DEFAULT_LAYOUT
+    # Persist each successful LLM clustering batch under docs/temp for resume after failures.
+    cluster_batch_cache: bool = True
 
     def __post_init__(self):
         validate_min_module_tokens(self.min_token_per_module)

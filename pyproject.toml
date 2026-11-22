@@ -64,7 +64,7 @@ dependencies = [
     "colorama>=0.4.6",
     "logfire>=5.6.0",
     "coding-agent-wrapper @ git+https://github.com/anhnh2002/caw@main",
-    "mcp>=1.30.0",
+    "mcp>=1.30.0,<2",
     # Transitive minimums matching the patched pins in requirements.txt, so a
     # plain `pip install codewiki` cannot resolve to the vulnerable versions.
     "aiohttp>=3.14.4",
