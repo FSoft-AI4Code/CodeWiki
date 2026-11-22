@@ -105,7 +105,10 @@ uses [Semantic Versioning](https://semver.org/).
 
 - **Dependency security updates.** The pinned Python dependencies and the
   Mermaid frontend asset were refreshed to versions that address known
-  advisories. `pip-audit -r requirements.txt` and `npm audit` in
+  advisories. `pyproject.toml` also declares the patched minimum versions of
+  the affected transitive dependencies (`aiohttp`, `urllib3`, `tornado`,
+  etc.) so a regular package install cannot resolve to the vulnerable
+  versions. `pip-audit -r requirements.txt` and `npm audit` in
   `tests/mermaid` now report no findings, and the Mermaid parser fixtures
   still pass after the upgrade.
 
