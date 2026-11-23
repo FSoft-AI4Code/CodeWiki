@@ -1,1 +1,1 @@
-"""CodeWiki backend and frontend modules."""
+"""CodeWiki configuration, analysis, and documentation generation modules."""

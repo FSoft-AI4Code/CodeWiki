@@ -6,6 +6,20 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed
+
+- **Unsupported hosted web application.** Removed the FastAPI app, its
+  background jobs and cache, the HTTP documentation server, and the web-app
+  launcher. Use the CLI or MCP server to generate documentation; the static
+  HTML viewer, GitHub Pages output, landing page, and TechDocs export remain
+  supported. Docker now runs one-shot CLI commands with a mounted repository
+  and persistent CLI configuration instead of an HTTP service. See the
+  [Docker guide](guides/docker.md) for the new workflow.
+- **Stale generated self-documentation.** Removed the checked-in `docs/`
+  snapshot and its saved analysis artifacts. Hand-written documentation
+  remains in `guides/`; generate a fresh wiki locally with
+  `codewiki generate --github-pages`.
+
 ### Added
 
 - **Backstage TechDocs output.** `codewiki generate --techdocs` (or

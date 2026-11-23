@@ -1,435 +1,113 @@
-# Docker setup (web app)
+# Run the CLI with Docker
 
-This guide explains how to run the **CodeWiki web application** with Docker
-and Docker Compose. The web app takes a GitHub URL and generates
-documentation through a browser. It is not needed for the CLI or the MCP
-server, which you install with `pip` (see the [README](../README.md)).
+The Docker image runs CodeWiki CLI commands against a mounted Git repository.
+The hosted web application and HTTP documentation server have been removed.
+Generate documentation with the CLI, then publish its static HTML viewer with
+GitHub Pages or export it to Backstage TechDocs.
 
-## File Structure
+## Build
 
-All Docker-related files are located in the `docker/` directory:
-
-```
-docker/
-├── Dockerfile           # Container image definition
-├── docker-compose.yml   # Service orchestration
-└── env.example          # Environment variables template
-```
-
-The Dockerfile builds from the project root context to include all necessary application code.
-
----
-
-## Quick Start
-
-### 1. Clone the Repository
+From the CodeWiki checkout:
 
 ```bash
-git clone https://github.com/FSoft-AI4Code/CodeWiki.git
-cd CodeWiki
+docker compose -f docker/docker-compose.yml build
+docker compose -f docker/docker-compose.yml run --rm codewiki
 ```
 
-### 2. Set Up Environment Variables
+The second command prints CLI help. The image includes Python 3.12, Git,
+Node.js/npm for dependency installation, the CodeWiki package, and predownloaded
+tree-sitter grammars. Its entry point is `python -m codewiki`; arguments passed
+to the container are CodeWiki arguments.
+
+## Mount the target repository
+
+Copy the example and set `CODEWIKI_REPO` to the absolute path of the Git
+repository you want to document:
 
 ```bash
-# Copy the example environment file
 cp docker/env.example .env
-
-# Edit .env file with your configuration
-nano .env  # or use your preferred editor
+# Edit CODEWIKI_REPO in .env, for example:
+# CODEWIKI_REPO=/home/me/projects/my-project
 ```
 
-Required configuration in `.env`:
+Without an override, Compose mounts the CodeWiki checkout itself. The target
+is mounted read/write at `/workspace`, which is the container's working
+directory. Generated `docs/` and other output therefore appear directly in
+the target repository on your host.
+
+Compose uses `.env` for path interpolation. It does not inject the old web
+app's `LLM_*` settings into CLI configuration.
+
+## Configure a provider
+
+Configure an API-backed provider once, using the same CLI options as a local
+installation. Substitute your endpoint, API key, and model names:
 
 ```bash
-# LLM API Configuration
-MAIN_MODEL=claude-sonnet-4
-FALLBACK_MODEL_1=glm-4p5
-CLUSTER_MODEL=claude-sonnet-4
-LLM_BASE_URL=https://api.anthropic.com  # or your LiteLLM proxy
-LLM_API_KEY=your-api-key-here
-
-# Application Port
-APP_PORT=8000
-
-# Optional: Logfire Configuration (for monitoring)
-LOGFIRE_TOKEN=
-LOGFIRE_PROJECT_NAME=codewiki
-LOGFIRE_SERVICE_NAME=codewiki
+docker compose -f docker/docker-compose.yml run --rm codewiki config set \
+  --provider openai-compatible \
+  --base-url https://api.example.com/v1 \
+  --api-key YOUR_API_KEY \
+  --main-model YOUR_MODEL \
+  --cluster-model YOUR_MODEL
 ```
 
-### 3. Create Docker Network
+Settings persist in the Compose `codewiki-config` volume, mounted at
+`/root/.codewiki`. `CODEWIKI_NO_KEYRING=1` selects file-based credential storage
+inside that volume. Treat it as private and do not commit credentials.
+See [Providers and models](providers.md) for other API providers.
+
+Claude Code and Codex executables and their subscription authentication are
+not bundled in this image. Use a local installation for subscription mode,
+or extend the image and provide the corresponding CLI authentication.
+
+## Generate documentation
 
 ```bash
-docker network create codewiki-network
+docker compose -f docker/docker-compose.yml run --rm codewiki generate
+docker compose -f docker/docker-compose.yml run --rm codewiki generate --github-pages
+docker compose -f docker/docker-compose.yml run --rm codewiki generate --update
+docker compose -f docker/docker-compose.yml run --rm codewiki generate --techdocs
 ```
 
-### 4. Start the Services
+Commands exit when the job finishes. There is no listening HTTP port, health
+check, daemon restart policy, or external Docker network to create. For private
+repositories, mount a local checkout; Git credentials and SSH keys are not
+mounted by default.
 
-**Option A: From project root**
-```bash
-docker-compose -f docker/docker-compose.yml up -d
-```
-
-### 5. Access the Application
-
-- Web Application: http://localhost:8000
-
-The application will be available at the port specified in your `.env` file (default: 8000).
-
----
-
-## Docker Compose Configuration
-
-The `docker-compose.yml` file defines the CodeWiki service with the following features:
-
-### Service Configuration
-
-- **Image**: `codewiki:0.0.1`
-- **Build Context**: Parent directory (`.` relative to docker/)
-- **Container Name**: `codewiki`
-- **Port Mapping**: `${APP_PORT:-8000}:8000`
-- **Network**: `codewiki-network` (external)
-
-### Environment Variables
-
-The container uses environment variables from the `.env` file:
-- `PYTHONPATH=/app/src` - Set Python module path
-- `PYTHONUNBUFFERED=1` - Enable real-time logging
-- All variables from `.env` file
-
-### Volume Mounts
-
-The following directories are mounted as volumes:
-
-```yaml
-volumes:
-  - ./output:/app/output        # Persistent storage for generated docs
-  - ~/.ssh:/root/.ssh:ro        # SSH keys for private repos (read-only)
-```
-
-**Note**: Git credentials can be mounted if needed for private repositories:
-```yaml
-  # Uncomment in docker-compose.yml if needed
-  - ~/.gitconfig:/root/.gitconfig:ro
-```
-
-### Health Check
-
-The service includes a health check that:
-- Runs every 30 seconds
-- Times out after 10 seconds
-- Retries 3 times on failure
-- Starts checking after 20 seconds
-
-### Restart Policy
-
-The container is set to restart automatically unless explicitly stopped (`restart: unless-stopped`).
-
----
-
-## Dockerfile Details
-
-The Dockerfile (`docker/Dockerfile`) builds the CodeWiki image with:
-
-### Base Image
-- Python 3.12 slim image for smaller size
-
-### System Dependencies
-- `git` - For repository cloning
-- `curl` - For health checks
-- `nodejs` and `npm` - For mermaid diagram validation
-
-### Application Setup
-1. Copies `requirements.txt` first (for better caching)
-2. Installs Python dependencies
-3. Copies entire application code
-4. Creates output directories:
-   - `output/cache`
-   - `output/temp`
-   - `output/docs`
-   - `output/dependency_graphs`
-
-### Runtime Configuration
-- **Working Directory**: `/app`
-- **Exposed Port**: `8000`
-- **Entry Point**: `python codewiki/run_web_app.py --host 0.0.0.0 --port 8000`
-
----
-
-## Common Operations
-
-### View Logs
+The equivalent direct Docker workflow is:
 
 ```bash
-# From project root
-docker-compose -f docker/docker-compose.yml logs -f
-
-# From docker directory
-cd docker
-docker-compose logs -f
-
-# View specific service
-docker logs codewiki -f
+docker build -f docker/Dockerfile -t codewiki:local .
+docker run --rm codewiki:local --version
+docker run --rm \
+  --mount type=bind,src=/absolute/path/to/project,dst=/workspace \
+  --mount type=volume,src=codewiki-cli-config,dst=/root/.codewiki \
+  codewiki:local config set --provider openai-compatible \
+  --base-url https://api.example.com/v1 --api-key YOUR_API_KEY \
+  --main-model YOUR_MODEL --cluster-model YOUR_MODEL
+docker run --rm \
+  --mount type=bind,src=/absolute/path/to/project,dst=/workspace \
+  --mount type=volume,src=codewiki-cli-config,dst=/root/.codewiki \
+  codewiki:local generate --github-pages
 ```
 
-### Stop Services
-
-```bash
-# From project root
-docker-compose -f docker/docker-compose.yml stop
-
-# From docker directory
-cd docker
-docker-compose stop
-```
-
-### Stop and Remove Containers
-
-```bash
-# From project root
-docker-compose -f docker/docker-compose.yml down
-
-# From docker directory
-cd docker
-docker-compose down
-
-# Remove volumes as well
-docker-compose down -v
-```
-
-### Rebuild Image
-
-If you've made changes to the code or Dockerfile:
-
-```bash
-# From project root
-docker-compose -f docker/docker-compose.yml build --no-cache
-
-# From docker directory
-cd docker
-docker-compose build --no-cache
-
-# Rebuild and restart
-docker-compose up -d --build
-```
-
-### Access Container Shell
-
-```bash
-docker exec -it codewiki /bin/bash
-```
-
----
-
-## Persistent Storage
-
-### Output Directory
-
-The `output/` directory is mounted as a volume, ensuring generated documentation persists across container restarts:
-
-```
-output/
-├── cache/                    # Cached dependency graphs and jobs
-├── docs/                     # Generated documentation
-├── dependency_graphs/        # JSON dependency graphs
-└── temp/                     # Temporary files
-```
-
-### SSH Keys
-
-If you need to clone private repositories, ensure your SSH keys are available:
-
-```bash
-# Verify SSH keys are accessible
-ls -la ~/.ssh/
-
-# The docker-compose.yml mounts ~/.ssh as read-only
-```
-
----
-
-## Troubleshooting
-
-### Port Already in Use
-
-If port 8000 is already in use:
-
-```bash
-# Change APP_PORT in .env file
-echo "APP_PORT=8001" >> .env
-
-# Restart services
-docker-compose -f docker/docker-compose.yml down
-docker-compose -f docker/docker-compose.yml up -d
-```
-
-### Container Won't Start
-
-Check logs for errors:
-
-```bash
-docker logs codewiki
-```
-
-Common issues:
-- **Invalid API key**: Verify `LLM_API_KEY` in `.env`
-- **Network not found**: Create network with `docker network create codewiki-network`
-- **Port conflict**: Change `APP_PORT` in `.env`
-
-### Health Check Failing
-
-```bash
-# Check if the application is responding
-curl http://localhost:8000/
-
-# Check container health status
-docker inspect codewiki --format='{{.State.Health.Status}}'
-
-# View health check logs
-docker inspect codewiki --format='{{range .State.Health.Log}}{{.Output}}{{end}}'
-```
-
-### Permission Issues with Volumes
-
-If you encounter permission issues with mounted volumes:
-
-```bash
-# On Linux, ensure proper ownership
-sudo chown -R $(id -u):$(id -g) output/
-
-# Or run container with user mapping
-docker-compose -f docker/docker-compose.yml down
-# Add to docker-compose.yml under 'codewiki' service:
-# user: "${UID}:${GID}"
-```
-
-### Private Repository Access
-
-For private repositories:
-
-1. Ensure SSH keys are properly mounted:
-   ```yaml
-   volumes:
-     - ~/.ssh:/root/.ssh:ro
-   ```
-
-2. Verify key permissions:
-   ```bash
-   chmod 600 ~/.ssh/id_rsa
-   chmod 644 ~/.ssh/id_rsa.pub
-   ```
-
-3. Add GitHub to known_hosts:
-   ```bash
-   docker exec -it codewiki ssh-keyscan github.com >> /root/.ssh/known_hosts
-   ```
-
----
-
-## Production Deployment
-
-### Security Considerations
-
-1. **Environment Variables**: Never commit `.env` file to version control
-2. **API Keys**: Use secrets management in production
-3. **Network**: Use isolated Docker networks
-4. **Volumes**: Set appropriate permissions on mounted volumes
-5. **Updates**: Regularly update base image and dependencies
-
-### Recommended Production Setup
-
-```yaml
-# Use secrets instead of .env file
-services:
-  codewiki:
-    secrets:
-      - llm_api_key
-    environment:
-      - LLM_API_KEY_FILE=/run/secrets/llm_api_key
-
-secrets:
-  llm_api_key:
-    external: true
-```
-
-### Resource Limits
-
-Add resource limits in production:
-
-```yaml
-services:
-  codewiki:
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 4G
-        reservations:
-          cpus: '1'
-          memory: 2G
-```
-
-### Reverse Proxy
-
-Use nginx or traefik as a reverse proxy:
-
-```yaml
-services:
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./certs:/etc/nginx/certs:ro
-```
-
----
-
-## Integration with External Services
-
-### Using LiteLLM Proxy
-
-If using a LiteLLM proxy for LLM API management:
-
-```bash
-# In .env file
-LLM_BASE_URL=http://litellm:4000/
-LLM_API_KEY=sk-your-proxy-key
-
-# Add LiteLLM service to docker-compose.yml
-services:
-  litellm:
-    image: ghcr.io/berriai/litellm:latest
-    ports:
-      - "4000:4000"
-    environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-    networks:
-      - codewiki-network
-```
-
----
-
-## More Information
-
-- [README](../README.md): features and quick start
-- [CLI reference](cli-reference.md): command-line generation without Docker
-- [MCP / IDE-driven mode](mcp-ide-mode.md): run inside an AI IDE
-
----
-
-## Support
-
-For issues related to Docker deployment:
-1. Check logs: `docker logs codewiki`
-2. Verify configuration: `docker exec codewiki env | grep -E '(LLM|APP)'`
-3. Test connectivity: `docker exec codewiki curl -I http://localhost:8000`
-4. Report issues: https://github.com/FSoft-AI4Code/CodeWiki/issues
-
----
-
-**Happy documenting with Docker! 🐳📚**
+Direct Docker uses a separate configuration volume in this example. Reuse
+the same volume across configuration and generation commands.
+
+## Updating and troubleshooting
+
+- Rebuild the image after updating CodeWiki: `docker compose -f docker/docker-compose.yml build`.
+- A configuration error usually means the provider has not been configured in
+  the container's volume. Host keychain credentials are not available there.
+- If output is not writable, check ownership of the mounted repository.
+  Linux containers run as root by default, so generated files may need their
+  ownership adjusted on the host.
+- Stop any old web-app containers before switching to this workflow. The
+  former browser submission queue and cache are not migrated into CLI state;
+  keep any documentation you want from the old output mount.
+- `docker compose -f docker/docker-compose.yml down` preserves configuration.
+  Adding `--volumes` deletes the saved settings and credentials.
+
+See the [CLI reference](cli-reference.md), [MCP guide](mcp-ide-mode.md), and
+[Backstage TechDocs guide](backstage-techdocs.md) for supported workflows.

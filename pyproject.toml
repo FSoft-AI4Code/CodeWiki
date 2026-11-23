@@ -58,7 +58,6 @@ dependencies = [
     "PyYAML>=6.0.2",
     "mermaid-parser-py>=0.0.2",
     "mermaid-py>=0.8.0",
-    "fastapi>=0.140.0",
     "starlette>=1.3.1",
     "uvicorn>=0.35.0",
     "python-multipart>=0.0.31",
@@ -107,7 +106,7 @@ codewiki = "codewiki.cli.main:cli"
 
 [project.urls]
 Homepage = "https://github.com/FSoft-AI4Code/CodeWiki"
-Documentation = "https://fsoft-ai4code.github.io/CodeWiki/docs/index.html"
+Documentation = "https://github.com/FSoft-AI4Code/CodeWiki/blob/main/guides/README.md"
 Repository = "https://github.com/FSoft-AI4Code/CodeWiki"
 Issues = "https://github.com/FSoft-AI4Code/CodeWiki/issues"
 
@@ -128,7 +127,6 @@ packages = [
     "codewiki.src.be.dependency_analyzer.models",
     "codewiki.src.be.dependency_analyzer.utils",
     "codewiki.src.be.updater",
-    "codewiki.src.fe",
     "codewiki.mcp",
     "codewiki.mcp.tools"
 ]

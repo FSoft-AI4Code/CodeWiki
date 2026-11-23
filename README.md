@@ -30,11 +30,6 @@
 https://github.com/user-attachments/assets/951d5d3c-fd6e-4734-8b16-445d880f95d3
 
 <p align="center">
-  📚 <strong>CodeWiki documents itself.</strong> Browse the documentation it generated for this repository at
-  <a href="https://fsoft-ai4code.github.io/CodeWiki/docs/index.html">CodeWiki docs</a>.
-</p>
-
-<p align="center">
   <img src="./img/framework-overview.png" alt="CodeWiki framework" width="600" style="border: 2px solid #e1e4e8; border-radius: 12px; padding: 20px;"/>
 </p>
 
@@ -45,6 +40,9 @@ a hierarchy of modules, and has agents write one page per module plus an
 overview, with Mermaid diagrams. It works on codebases from a few thousand to
 over a million lines, in 11 languages. It needs an LLM API key, or a Claude or
 Codex subscription, or an AI IDE that speaks MCP.
+
+The hosted web app is retired; use the CLI, MCP server, or
+[Docker CLI jobs](./guides/docker.md).
 
 ## Quick start
 
@@ -188,8 +186,6 @@ its sub-modules (`auth.md`, `auth/login.md`). `--flat` puts every page in
 `index.md` and the module tree as the navigation. See
 [Backstage TechDocs](./guides/backstage-techdocs.md).
 
-This repository's own output is checked in under [`./docs/`](./docs/).
-
 ## Benchmark results
 
 Evaluated on [CodeWikiBench](https://github.com/FSoft-AI4Code/CodeWikiBench):
@@ -253,7 +249,7 @@ JavaScript, TypeScript). Artifacts lift the build and testing topics, which
 | [MCP / IDE-driven mode](./guides/mcp-ide-mode.md) | Cursor, Claude Desktop, Claude Code, CodeBuddy |
 | [Backstage TechDocs](./guides/backstage-techdocs.md) | publish the docs in a Backstage developer portal |
 | [Development guide](./guides/development.md) | layout, pipeline, adding a language, tests, releasing |
-| [Docker setup](./guides/docker.md) | the web application in a container |
+| [Docker setup](./guides/docker.md) | run CLI jobs in a container |
 | [CodeWikiBench](https://github.com/FSoft-AI4Code/CodeWikiBench) | the benchmark |
 | [Live demo](https://fsoft-ai4code.github.io/codewiki-demo/) | generated documentation examples |
 

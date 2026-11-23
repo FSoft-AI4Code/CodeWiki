@@ -37,29 +37,26 @@ codewiki/
 │   └── tools/                  # analysis, code_reader, doc_writer, module_tree, prompt_server
 ├── src/
 │   ├── config.py               # backend Config
-│   ├── be/                     # generation pipeline
-│   │   ├── dependency_analyzer/
-│   │   │   ├── analyzers/      # one tree-sitter analyzer per language + artifact.py
-│   │   │   ├── analysis/       # repo walk, call-graph analysis, analysis service
-│   │   │   ├── models/         # Node, CallRelationship, ...
-│   │   │   ├── utils/          # patterns.py (extensions, ignore lists), external_symbols.py
-│   │   │   ├── ast_parser.py, dependency_graphs_builder.py
-│   │   │   ├── leaf_selection.py, topo_sort.py
-│   │   ├── cluster_modules.py  # hierarchical clustering, super-grouping, guaranteed artifact module
-│   │   ├── documentation_generator.py   # bottom-up page generation, overview, metadata
-│   │   ├── updater/            # component-level incremental updater (2.0)
-│   │   ├── agent_tools/        # read_code_components, str_replace_editor, sub-module delegation
-│   │   ├── backend.py          # LLMBackend abstraction + factory
-│   │   ├── pydantic_ai_backend.py       # API-key providers
-│   │   ├── google_provider.py  # google / google-vertex (Gemini API, Vertex AI)
-│   │   ├── caw_backend.py, caw_toolkit.py   # claude-code / codex subscription providers
-│   │   ├── prompt_template.py, llm_services.py, module_naming.py
-│   └── fe/                     # FastAPI web app (used by the Docker image)
-├── templates/                  # HTML templates for the viewer and web app
-└── run_web_app.py
-docker/                         # Dockerfile, docker-compose.yml, env.example
+│   └── be/                     # generation pipeline
+│       ├── dependency_analyzer/
+│       │   ├── analyzers/      # one tree-sitter analyzer per language + artifact.py
+│       │   ├── analysis/       # repo walk, call-graph analysis, analysis service
+│       │   ├── models/         # Node, CallRelationship, ...
+│       │   ├── utils/          # patterns.py (extensions, ignore lists), external_symbols.py
+│       │   ├── ast_parser.py, dependency_graphs_builder.py
+│       │   ├── leaf_selection.py, topo_sort.py
+│       ├── cluster_modules.py  # hierarchical clustering, super-grouping, guaranteed artifact module
+│       ├── documentation_generator.py   # bottom-up page generation, overview, metadata
+│       ├── updater/            # component-level incremental updater (2.0)
+│       ├── agent_tools/        # read_code_components, str_replace_editor, sub-module delegation
+│       ├── backend.py          # LLMBackend abstraction + factory
+│       ├── pydantic_ai_backend.py       # API-key providers
+│       ├── google_provider.py  # google / google-vertex (Gemini API, Vertex AI)
+│       ├── caw_backend.py, caw_toolkit.py   # claude-code / codex subscription providers
+│       ├── prompt_template.py, llm_services.py, module_naming.py
+└── templates/                  # static GitHub Pages viewer and assets
+docker/                         # CLI image, Compose jobs, env.example
 guides/                         # these guides
-docs/                           # CodeWiki's own generated documentation (do not hand-edit)
 skills/                         # Claude skill for MCP-driven generation
 tests/
 ```
