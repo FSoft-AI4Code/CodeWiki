@@ -46,6 +46,10 @@ overview, with Mermaid diagrams. It works on codebases from a few thousand to
 over a million lines, in 11 languages. It needs an LLM API key, or a Claude or
 Codex subscription, or an AI IDE that speaks MCP.
 
+The hosted web app is retired; use the CLI, MCP server, or
+[Docker CLI jobs](./guides/docker.md). The checked-in
+[self-documentation](./docs/) predates this removal.
+
 ## Quick start
 
 **1. Install**
