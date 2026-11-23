@@ -253,7 +253,7 @@ JavaScript, TypeScript). Artifacts lift the build and testing topics, which
 | [MCP / IDE-driven mode](./guides/mcp-ide-mode.md) | Cursor, Claude Desktop, Claude Code, CodeBuddy |
 | [Backstage TechDocs](./guides/backstage-techdocs.md) | publish the docs in a Backstage developer portal |
 | [Development guide](./guides/development.md) | layout, pipeline, adding a language, tests, releasing |
-| [Docker setup](./guides/docker.md) | the web application in a container |
+| [Docker setup](./guides/docker.md) | run CLI jobs in a container |
 | [CodeWikiBench](https://github.com/FSoft-AI4Code/CodeWikiBench) | the benchmark |
 | [Live demo](https://fsoft-ai4code.github.io/codewiki-demo/) | generated documentation examples |
 

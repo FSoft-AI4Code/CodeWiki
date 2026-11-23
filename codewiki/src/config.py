@@ -54,7 +54,7 @@ _CLI_CONTEXT = False
 
 
 def set_cli_context(enabled: bool = True):
-    """Set whether we're running in CLI context (vs web app)."""
+    """Set whether we're running through the CLI configuration adapter."""
     global _CLI_CONTEXT
     _CLI_CONTEXT = enabled
 
@@ -66,7 +66,7 @@ def is_cli_context() -> bool:
 
 # LLM services
 # In CLI mode, these will be loaded from ~/.codewiki/config.json + keyring
-# In web app mode, use environment variables
+# The standalone backend entry point uses environment variables.
 MAIN_MODEL = os.getenv("MAIN_MODEL", "claude-sonnet-4")
 FALLBACK_MODEL_1 = os.getenv("FALLBACK_MODEL_1", "glm-4p5")
 CLUSTER_MODEL = os.getenv("CLUSTER_MODEL", MAIN_MODEL)

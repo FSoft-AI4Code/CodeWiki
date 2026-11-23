@@ -16,7 +16,7 @@ CodeWiki's own generated documentation and is not edited by hand.
 | [MCP / IDE-driven mode](mcp-ide-mode.md) | Run CodeWiki as an MCP server inside Cursor, Claude Desktop, Claude Code, or CodeBuddy, with no LLM configuration |
 | [Backstage TechDocs](backstage-techdocs.md) | Publish the generated docs in Backstage with `--techdocs` or `codewiki techdocs` |
 | [Development guide](development.md) | Change CodeWiki: project layout, pipeline, adding a language, tests, releasing |
-| [Docker setup](docker.md) | Run the web application in a container |
+| [Docker setup](docker.md) | Run CLI jobs in a container |
 
 Also at the top level: [CHANGELOG](../CHANGELOG.md), [SECURITY](../SECURITY.md),
 [LICENSE](../LICENSE).
