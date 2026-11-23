@@ -15,6 +15,10 @@ uses [Semantic Versioning](https://semver.org/).
   supported. Docker now runs one-shot CLI commands with a mounted repository
   and persistent CLI configuration instead of an HTTP service. See the
   [Docker guide](guides/docker.md) for the new workflow.
+- **Stale generated self-documentation.** Removed the checked-in `docs/`
+  snapshot and its saved analysis artifacts. Hand-written documentation
+  remains in `guides/`; generate a fresh wiki locally with
+  `codewiki generate --github-pages`.
 
 ### Added
 

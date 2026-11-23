@@ -106,7 +106,7 @@ codewiki = "codewiki.cli.main:cli"
 
 [project.urls]
 Homepage = "https://github.com/FSoft-AI4Code/CodeWiki"
-Documentation = "https://fsoft-ai4code.github.io/CodeWiki/docs/index.html"
+Documentation = "https://github.com/FSoft-AI4Code/CodeWiki/blob/main/guides/README.md"
 Repository = "https://github.com/FSoft-AI4Code/CodeWiki"
 Issues = "https://github.com/FSoft-AI4Code/CodeWiki/issues"
 

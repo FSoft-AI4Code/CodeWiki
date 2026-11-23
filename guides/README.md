@@ -4,8 +4,7 @@
 
 # Guides
 
-Hand-written guides for CodeWiki 2.0. The `docs/` folder next to this one is
-CodeWiki's own generated documentation and is not edited by hand.
+Hand-written guides for CodeWiki 2.0.
 
 | Guide | Read it when you want to |
 | --- | --- |

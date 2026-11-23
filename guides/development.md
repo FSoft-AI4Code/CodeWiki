@@ -57,7 +57,6 @@ codewiki/
 └── templates/                  # static GitHub Pages viewer and assets
 docker/                         # CLI image, Compose jobs, env.example
 guides/                         # these guides
-docs/                           # CodeWiki's own generated documentation (do not hand-edit)
 skills/                         # Claude skill for MCP-driven generation
 tests/
 ```
