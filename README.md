@@ -26,9 +26,6 @@
   <a href="./guides/README.md"><strong>Guides</strong></a> •
   <a href="https://aclanthology.org/2026.findings-acl.288/"><strong>Paper</strong></a>
 </p>
-
-https://github.com/user-attachments/assets/951d5d3c-fd6e-4734-8b16-445d880f95d3
-
 <p align="center">
   <img src="./img/framework-overview.png" alt="CodeWiki framework" width="600" style="border: 2px solid #e1e4e8; border-radius: 12px; padding: 20px;"/>
 </p>
